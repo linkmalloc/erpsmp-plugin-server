@@ -33,3 +33,24 @@ commands:
   rtp:
     description: Random teleport to Overworld, Nether, or End
     usage: /rtp
+  tpa:
+    description: Send a teleport request to another player
+    usage: /tpa <player>
+  tpaccept:
+    description: Accept a pending teleport request
+    usage: /tpaccept
+  pay:
+    description: Pay Erpies to another player
+    usage: /pay <amount> <player>
+  stash:
+    description: Spawn a shulker with elytra (OP only)
+    usage: /stash
+    permission: op
+  erpies:
+    description: Manage a player's Erpies (OP only)
+    usage: /erpies <player> <reset|remove|add> <amount>
+    permission: op
+  adminroom:
+    description: Teleport to the admin room (OP only)
+    usage: /adminroom
+    permission: op

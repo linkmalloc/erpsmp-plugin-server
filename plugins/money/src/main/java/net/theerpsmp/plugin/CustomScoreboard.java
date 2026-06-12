@@ -6,6 +6,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.WorldCreator;
+import org.bukkit.WorldType;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -21,6 +23,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.inventory.Inventory;
@@ -54,11 +57,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     // Auction variables
     private final List<AuctionListing> listings = new ArrayList<>();
     private final HashMap<UUID, PendingSignInput> pendingSigns = new HashMap<>();
+    private final HashMap<UUID, ItemStack> pendingListItems = new HashMap<>();
 
     // Duel match tracking
     private final HashMap<UUID, UUID> pendingInvites = new HashMap<>();
     private final HashMap<UUID, DuelMatch> activeMatches = new HashMap<>();
     private final boolean[] occupiedArenas = new boolean[10];
+
+    // TPA tracking (requester UUID -> target UUID)
+    private final HashMap<UUID, UUID> tpaRequests = new HashMap<>();
 
     private final Random random = new Random();
 
@@ -127,6 +134,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("dual") != null) getCommand("dual").setExecutor(this);
         if (getCommand("bh") != null) getCommand("bh").setExecutor(this);
         if (getCommand("rtp") != null) getCommand("rtp").setExecutor(this);
+        if (getCommand("tpa") != null) getCommand("tpa").setExecutor(this);
+        if (getCommand("tpaccept") != null) getCommand("tpaccept").setExecutor(this);
+        if (getCommand("pay") != null) getCommand("pay").setExecutor(this);
+        if (getCommand("stash") != null) getCommand("stash").setExecutor(this);
+        if (getCommand("erpies") != null) getCommand("erpies").setExecutor(this);
+        if (getCommand("adminroom") != null) getCommand("adminroom").setExecutor(this);
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -309,6 +322,159 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
+        // --- /tpa <player> ---
+        if (command.getName().equalsIgnoreCase("tpa")) {
+            if (args.length == 0) {
+                player.sendMessage(Component.text("❌ Usage: /tpa <player>", NamedTextColor.RED));
+                return true;
+            }
+            Player target = Bukkit.getPlayer(args[0]);
+            if (target == null) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+            if (target.equals(player)) {
+                player.sendMessage(Component.text("❌ You cannot teleport to yourself!", NamedTextColor.RED));
+                return true;
+            }
+            tpaRequests.put(player.getUniqueId(), target.getUniqueId());
+            player.sendMessage(Component.text("📨 Teleport request sent to " + target.getName() + "!", NamedTextColor.GREEN));
+            target.sendMessage(Component.text("📨 " + player.getName() + " wants to teleport to you!", NamedTextColor.YELLOW)
+                    .append(Component.text("\nType ", NamedTextColor.GOLD))
+                    .append(Component.text("/tpaccept", NamedTextColor.GREEN))
+                    .append(Component.text(" to accept!", NamedTextColor.GOLD)));
+            return true;
+        }
+
+        // --- /tpaccept ---
+        if (command.getName().equalsIgnoreCase("tpaccept")) {
+            UUID accepterUUID = player.getUniqueId();
+            UUID requesterUUID = null;
+            for (var entry : tpaRequests.entrySet()) {
+                if (entry.getValue().equals(accepterUUID)) {
+                    requesterUUID = entry.getKey();
+                    break;
+                }
+            }
+            if (requesterUUID == null) {
+                player.sendMessage(Component.text("❌ You have no pending teleport requests!", NamedTextColor.RED));
+                return true;
+            }
+            Player requester = Bukkit.getPlayer(requesterUUID);
+            if (requester == null) {
+                tpaRequests.remove(requesterUUID);
+                player.sendMessage(Component.text("❌ The requester is no longer online!", NamedTextColor.RED));
+                return true;
+            }
+            tpaRequests.remove(requesterUUID);
+            player.sendMessage(Component.text("✅ Teleport request accepted! " + requester.getName() + " will arrive in 5 seconds.", NamedTextColor.GREEN));
+            requester.sendMessage(Component.text("✅ " + player.getName() + " accepted your request! Teleporting in 5 seconds...", NamedTextColor.GREEN));
+            performTpaCountdown(requester, player);
+            return true;
+        }
+
+        // --- /pay <amount> <player> ---
+        if (command.getName().equalsIgnoreCase("pay")) {
+            if (args.length < 2) {
+                player.sendMessage(Component.text("❌ Usage: /pay <amount> <player>", NamedTextColor.RED));
+                return true;
+            }
+            int amount;
+            try {
+                amount = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                player.sendMessage(Component.text("❌ Invalid amount!", NamedTextColor.RED));
+                return true;
+            }
+            if (amount <= 0) {
+                player.sendMessage(Component.text("❌ Amount must be greater than 0!", NamedTextColor.RED));
+                return true;
+            }
+            Player target = Bukkit.getPlayer(args[1]);
+            if (target == null) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+            if (target.equals(player)) {
+                player.sendMessage(Component.text("❌ You cannot pay yourself!", NamedTextColor.RED));
+                return true;
+            }
+            UUID uuid = player.getUniqueId();
+            int balance = erpiesMap.getOrDefault(uuid, 0);
+            if (balance < amount) {
+                player.sendMessage(Component.text("❌ You don't have enough Erpies! Balance: " + balance, NamedTextColor.RED));
+                return true;
+            }
+            erpiesMap.put(uuid, balance - amount);
+            erpiesMap.put(target.getUniqueId(), erpiesMap.getOrDefault(target.getUniqueId(), 0) + amount);
+            player.sendMessage(Component.text("💸 Paid " + amount + " Erpies to " + target.getName() + "!", NamedTextColor.GREEN));
+            target.sendMessage(Component.text("💰 " + player.getName() + " paid you " + amount + " Erpies!", NamedTextColor.GREEN));
+            return true;
+        }
+
+        // --- /stash (OP) ---
+        if (command.getName().equalsIgnoreCase("stash")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            spawnStash(player);
+            return true;
+        }
+
+        // --- /erpies <player> <reset|remove|add> <amount> (OP) ---
+        if (command.getName().equalsIgnoreCase("erpies")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 3) {
+                player.sendMessage(Component.text("❌ Usage: /erpies <player> <reset|remove|add> <amount>", NamedTextColor.RED));
+                return true;
+            }
+            Player target = Bukkit.getPlayer(args[0]);
+            if (target == null) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+            String action = args[1].toLowerCase();
+            int amount;
+            try {
+                amount = Integer.parseInt(args[2]);
+            } catch (NumberFormatException e) {
+                player.sendMessage(Component.text("❌ Invalid amount!", NamedTextColor.RED));
+                return true;
+            }
+            UUID targetUUID = target.getUniqueId();
+            int current = erpiesMap.getOrDefault(targetUUID, 0);
+            switch (action) {
+                case "reset" -> {
+                    erpiesMap.put(targetUUID, amount);
+                    player.sendMessage(Component.text("✅ Set " + target.getName() + "'s Erpies to " + amount, NamedTextColor.GREEN));
+                }
+                case "remove" -> {
+                    erpiesMap.put(targetUUID, Math.max(0, current - amount));
+                    player.sendMessage(Component.text("✅ Removed " + amount + " Erpies from " + target.getName() + ". New balance: " + erpiesMap.get(targetUUID), NamedTextColor.GREEN));
+                }
+                case "add" -> {
+                    erpiesMap.put(targetUUID, current + amount);
+                    player.sendMessage(Component.text("✅ Added " + amount + " Erpies to " + target.getName() + ". New balance: " + erpiesMap.get(targetUUID), NamedTextColor.GREEN));
+                }
+                default -> player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
+            }
+            return true;
+        }
+
+        // --- /adminroom (OP) ---
+        if (command.getName().equalsIgnoreCase("adminroom")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            teleportToAdminRoom(player);
+            return true;
+        }
+
         return false;
     }
 
@@ -462,9 +628,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGuiClick(InventoryClickEvent event) {
         String title = event.getView().getTitle();
-        if (!title.contains("Shop") && !title.contains("Auction") && !title.contains("Bounty") && !title.equals("Random Teleport")) return;
+        if (!title.contains("Shop") && !title.contains("Auction") && !title.contains("Bounty") && !title.equals("Random Teleport") && !title.equals("List an Item")) return;
 
-        event.setCancelled(true);
+        // Do not cancel clicks in "List an Item" GUI because players need to place/take items.
+        if (!title.equals("List an Item")) {
+            event.setCancelled(true);
+        }
         
         Player player = (Player) event.getWhoClicked();
         UUID uuid = player.getUniqueId();
@@ -566,13 +735,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return;
             }
             if (rawSlot == 47) {
-                ItemStack cursorItem = event.getCursor();
-                if (cursorItem != null && cursorItem.getType() != Material.AIR) {
-                    event.setCursor(new ItemStack(Material.AIR));
-                    openSignInput(player, SignAction.LIST_PRICE, cursorItem.clone(), "list the price");
-                } else {
-                    openMyListings(player);
-                }
+                openMyListings(player);
+                return;
+            }
+            if (rawSlot == 48) {
+                player.closeInventory();
+                Inventory hopper = Bukkit.createInventory(null, org.bukkit.event.inventory.InventoryType.HOPPER, Component.text("List an Item"));
+                player.openInventory(hopper);
                 return;
             }
 
@@ -622,6 +791,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (title.equals("Auction House - Your Listings")) {
             if (event.getRawSlot() == 49) {
                 openAuctionGui(player, null);
+                return;
+            }
+            if (event.getRawSlot() == 48) {
+                player.closeInventory();
+                Inventory listChest = Bukkit.createInventory(null, 9, Component.text("List an Item"));
+                player.openInventory(listChest);
                 return;
             }
             if (event.getRawSlot() < 45) {
@@ -750,7 +925,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         inv.setItem(45, createGuiItem(Material.DIAMOND, "Refresh", NamedTextColor.AQUA, "Click to refresh page"));
         inv.setItem(46, createGuiItem(Material.OAK_SIGN, "Search", NamedTextColor.YELLOW, "Click to search items"));
-        inv.setItem(47, createGuiItem(Material.CHEST, "Your listed items", NamedTextColor.GREEN, "Place cursor item here to list it"));
+        inv.setItem(47, createGuiItem(Material.CHEST, "Your listed items", NamedTextColor.GREEN, "Click to view your listings"));
+        inv.setItem(48, createGuiItem(Material.HOPPER, "List", NamedTextColor.GOLD, "Click to list an item for sale"));
 
         player.openInventory(inv);
     }
@@ -775,6 +951,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (slot >= 45) break;
             }
         }
+        inv.setItem(48, createGuiItem(Material.CHEST, "List", NamedTextColor.GOLD, "Click to list an item"));
         inv.setItem(49, createGuiItem(Material.BARRIER, "Back to Auction", NamedTextColor.RED, "Return to main page"));
         player.openInventory(inv);
     }
@@ -956,6 +1133,111 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }.runTask(CustomScoreboard.this);
             }
         }.runTaskAsynchronously(this);
+    }
+
+    // --- TPA System ---
+    private void performTpaCountdown(Player requester, Player target) {
+        new BukkitRunnable() {
+            int countdown = 5;
+
+            @Override
+            public void run() {
+                if (!requester.isOnline() || !target.isOnline()) {
+                    cancel();
+                    if (requester.isOnline()) requester.sendMessage(Component.text("❌ Teleport cancelled!", NamedTextColor.RED));
+                    return;
+                }
+                if (countdown > 0) {
+                    requester.sendTitle(
+                        "§bTeleporting in...",
+                        "§f" + countdown + " second" + (countdown == 1 ? "" : "s"),
+                        0, 25, 5
+                    );
+                    countdown--;
+                } else {
+                    cancel();
+                    requester.teleport(target.getLocation());
+                    requester.sendTitle("§aTeleported!", "", 0, 20, 10);
+                    requester.sendMessage(Component.text("✅ Teleported to " + target.getName() + "!", NamedTextColor.GREEN));
+                }
+            }
+        }.runTaskTimer(this, 0L, 20L);
+    }
+
+    // --- Stash (OP) ---
+    private void spawnStash(Player player) {
+        Location loc = player.getLocation().getBlock().getLocation();
+        loc.getBlock().setType(Material.SHULKER_BOX);
+        org.bukkit.block.ShulkerBox box = (org.bukkit.block.ShulkerBox) loc.getBlock().getState();
+        box.getInventory().addItem(new ItemStack(Material.ELYTRA));
+        box.update();
+        player.sendMessage(Component.text("📦 Spawned a shulker with elytra at your location!", NamedTextColor.GREEN));
+    }
+
+    // --- Admin Room (OP) ---
+    private void teleportToAdminRoom(Player player) {
+        World adminWorld = Bukkit.getWorld("admin_room");
+        if (adminWorld == null) {
+            WorldCreator creator = new WorldCreator("admin_room");
+            creator.type(WorldType.FLAT);
+            creator.generateStructures(false);
+            adminWorld = Bukkit.createWorld(creator);
+        }
+        if (adminWorld != null) {
+            Location spawn = new Location(adminWorld, 0.5, adminWorld.getHighestBlockYAt(0, 0) + 1, 0.5);
+            player.teleport(spawn);
+            player.sendMessage(Component.text("🏠 Welcome to the Admin Room!", NamedTextColor.GOLD));
+        } else {
+            player.sendMessage(Component.text("❌ Failed to create admin room!", NamedTextColor.RED));
+        }
+    }
+
+    // --- Hopper Listing Close Handler ---
+    @EventHandler
+    public void onListHopperClose(InventoryCloseEvent event) {
+        if (!event.getView().getTitle().equals("List an Item")) return;
+        Player player = (Player) event.getPlayer();
+        Inventory inv = event.getInventory();
+
+        ItemStack toList = null;
+        for (ItemStack item : inv.getContents()) {
+            if (item != null && item.getType() != Material.AIR) {
+                if (toList == null) {
+                    toList = item.clone();
+                } else {
+                    // Return extra items
+                    player.getInventory().addItem(item.clone());
+                }
+            }
+        }
+        inv.clear();
+
+        if (toList != null) {
+            pendingListItems.put(player.getUniqueId(), toList);
+            final ItemStack listItem = toList;
+            Bukkit.getScheduler().runTask(this, () -> openSignInput(player, SignAction.LIST_PRICE, listItem, "list the price"));
+        }
+    }
+
+    @EventHandler
+    public void onGuiClose(InventoryCloseEvent event) {
+        String title = event.getView().getTitle();
+        if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") || title.equals("Random Teleport")) {
+            Player player = (Player) event.getPlayer();
+            player.setItemOnCursor(null);
+            player.updateInventory();
+        }
+    }
+
+    @EventHandler
+    public void onPlayerDropItem(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
+        String title = player.getOpenInventory().getTitle();
+        if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") || title.equals("Random Teleport")) {
+            event.setCancelled(true);
+            event.getItemDrop().remove();
+            player.sendMessage(Component.text("❌ You cannot drop items while in a menu!", NamedTextColor.RED));
+        }
     }
 
     // --- Bounty Hunter ---
