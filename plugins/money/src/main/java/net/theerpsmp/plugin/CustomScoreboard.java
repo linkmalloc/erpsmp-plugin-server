@@ -26,6 +26,18 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.event.entity.EntityShootBowEvent;
+import org.bukkit.entity.Arrow;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.Block;
+import org.bukkit.NamespacedKey;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.Particle;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -58,6 +70,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final List<AuctionListing> listings = new ArrayList<>();
     private final HashMap<UUID, PendingSignInput> pendingSigns = new HashMap<>();
     private final HashMap<UUID, ItemStack> pendingListItems = new HashMap<>();
+    private boolean breakingCustom = false;
 
     // Duel match tracking
     private final HashMap<UUID, UUID> pendingInvites = new HashMap<>();
@@ -141,6 +154,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("stash") != null) getCommand("stash").setExecutor(this);
         if (getCommand("erpies") != null) getCommand("erpies").setExecutor(this);
         if (getCommand("adminroom") != null) getCommand("adminroom").setExecutor(this);
+        if (getCommand("erpitem") != null) getCommand("erpitem").setExecutor(this);
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -287,9 +301,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (command.getName().equalsIgnoreCase("spawn")) {
             Location spawnLoc = getSpawnLocation();
-            buildCabinIfNeeded(spawnLoc);
             player.teleport(spawnLoc);
-            player.sendMessage(Component.text("🚀 Teleported to spawn protection cabin!", NamedTextColor.GREEN));
+            player.sendMessage(Component.text("🚀 Teleported to spawn protection area!", NamedTextColor.GREEN));
             return true;
         }
 
@@ -507,52 +520,54 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
+        // --- /erpitem (OP Only) ---
+        if (command.getName().equalsIgnoreCase("erpitem")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 1) {
+                player.sendMessage(Component.text("❌ Usage: /erpitem <pickaxe|axe|bow|stick> [player]", NamedTextColor.RED));
+                return true;
+            }
+
+            Player targetPlayer = player;
+            if (args.length >= 2) {
+                targetPlayer = Bukkit.getPlayer(args[1]);
+                if (targetPlayer == null) {
+                    player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                    return true;
+                }
+            }
+
+            String itemType = args[0].toLowerCase();
+            ItemStack item = null;
+
+            switch (itemType) {
+                case "pickaxe" -> item = createEchoPickaxe();
+                case "axe" -> item = createEchoAxe();
+                case "bow" -> item = createEchoBow();
+                case "stick" -> item = createKnockbackStick();
+                default -> {
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick", NamedTextColor.RED));
+                    return true;
+                }
+            }
+
+            if (item != null) {
+                targetPlayer.getInventory().addItem(item);
+                player.sendMessage(Component.text("✅ Gave " + itemType + " to " + targetPlayer.getName(), NamedTextColor.GREEN));
+            }
+            return true;
+        }
+
         return false;
     }
 
     // --- Spawn Protection & Cabin Generator ---
     private Location getSpawnLocation() {
         World world = Bukkit.getWorlds().get(0);
-        return new Location(world, 0.5, 100, 0.5);
-    }
-
-    private void buildCabinIfNeeded(Location center) {
-        Location check = center.clone().add(0, 1, 0);
-        if (check.getBlock().getType() != Material.AIR) return;
-
-        World world = center.getWorld();
-        int cx = center.getBlockX();
-        int cy = center.getBlockY() - 1;
-        int cz = center.getBlockZ();
-
-        for (int x = -3; x <= 3; x++) {
-            for (int z = -3; z <= 3; z++) {
-                world.getBlockAt(cx + x, cy, cz + z).setType(Material.OAK_PLANKS);
-            }
-        }
-
-        for (int y = 0; y < 4; y++) {
-            for (int x = -3; x <= 3; x++) {
-                for (int z = -3; z <= 3; z++) {
-                    if (Math.abs(x) == 3 || Math.abs(z) == 3) {
-                        Material wallMat = (x == -3 && z == 0) ? Material.AIR : Material.OAK_PLANKS;
-                        if (y == 3) wallMat = Material.OAK_PLANKS;
-                        world.getBlockAt(cx + x, cy + 1 + y, cz + z).setType(wallMat);
-                    } else {
-                        world.getBlockAt(cx + x, cy + 1 + y, cz + z).setType(Material.AIR);
-                    }
-                }
-            }
-        }
-
-        for (int x = -4; x <= 4; x++) {
-            for (int z = -4; z <= 4; z++) {
-                world.getBlockAt(cx + x, cy + 5, cz + z).setType(Material.SPRUCE_SLAB);
-            }
-        }
-
-        world.getBlockAt(cx - 2, cy + 1, cz - 2).setType(Material.CAMPFIRE);
-        world.getBlockAt(cx + 2, cy + 1, cz - 2).setType(Material.CAMPFIRE);
+        return new Location(world, 18.5, 97, 9.5);
     }
 
     private boolean isInSpawnRadius(Location loc) {
@@ -563,10 +578,93 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        if (event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
+        if (event.isCancelled()) return;
+        Player player = event.getPlayer();
+        if (player.getGameMode() == GameMode.SURVIVAL) {
             if (isInSpawnRadius(event.getBlock().getLocation())) {
                 event.setCancelled(true);
-                event.getPlayer().sendMessage(Component.text("❌ You cannot break blocks at spawn!", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ You cannot break blocks at spawn!", NamedTextColor.RED));
+                return;
+            }
+        }
+
+        if (breakingCustom) return;
+
+        ItemStack tool = player.getInventory().getItemInMainHand();
+        if (tool == null || !tool.hasItemMeta()) return;
+
+        ItemMeta meta = tool.getItemMeta();
+        String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+        if (customItem == null) return;
+
+        if (customItem.equals("echo_pickaxe")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
+                event.setCancelled(true);
+                return;
+            }
+            event.setCancelled(true);
+            breakingCustom = true;
+            try {
+                handleEchoPickaxeBreak(player, event.getBlock(), tool);
+            } finally {
+                breakingCustom = false;
+            }
+        } else if (customItem.equals("echo_axe")) {
+            Material type = event.getBlock().getType();
+            String name = type.name();
+            if (name.contains("LOG") || name.contains("WOOD")) {
+                if (!player.isOp()) {
+                    player.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
+                    event.setCancelled(true);
+                    return;
+                }
+                event.setCancelled(true);
+                breakingCustom = true;
+                try {
+                    handleEchoAxeBreak(player, event.getBlock(), tool);
+                } finally {
+                    breakingCustom = false;
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onBowShoot(EntityShootBowEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        ItemStack bow = event.getBow();
+        if (bow == null || !bow.hasItemMeta()) return;
+
+        ItemMeta meta = bow.getItemMeta();
+        String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+        if (customItem != null && customItem.equals("echo_bow") && event.getProjectile() instanceof Arrow arrow) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
+                event.setCancelled(true);
+                return;
+            }
+            arrow.getPersistentDataContainer().set(new NamespacedKey(this, "echo_arrow"), PersistentDataType.STRING, "true");
+            
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (!arrow.isValid() || arrow.isOnGround() || arrow.isDead()) {
+                        cancel();
+                        return;
+                    }
+                    arrow.getWorld().spawnParticle(Particle.SONIC_BOOM, arrow.getLocation(), 1, 0, 0, 0, 0);
+                }
+            }.runTaskTimer(this, 0L, 1L);
+        }
+    }
+
+    @EventHandler
+    public void onArrowHit(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Arrow arrow && event.getEntity() instanceof org.bukkit.entity.LivingEntity victim) {
+            if (arrow.getPersistentDataContainer().has(new NamespacedKey(this, "echo_arrow"), PersistentDataType.STRING)) {
+                victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 100, 0));
+                victim.getWorld().spawnParticle(Particle.SONIC_BOOM, victim.getLocation().add(0, 1, 0), 3, 0.2, 0.2, 0.2, 0);
             }
         }
     }
@@ -591,6 +689,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                     event.setCancelled(true);
                     attacker.sendMessage(Component.text("❌ PvP and damage are disabled at spawn!", NamedTextColor.RED));
+                    return;
+                }
+            }
+
+            ItemStack hand = attacker.getInventory().getItemInMainHand();
+            if (hand != null && hand.hasItemMeta()) {
+                ItemMeta meta = hand.getItemMeta();
+                String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && !attacker.isOp()) {
+                    attacker.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
+                    event.setCancelled(true);
                 }
             }
         }
@@ -1453,5 +1562,150 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         Score score = obj.getScore(placeholderId);
         score.setScore(scoreIndex);
+    }
+
+    private ItemStack createEchoPickaxe() {
+        ItemStack pick = new ItemStack(Material.NETHERITE_PICKAXE);
+        ItemMeta meta = pick.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Echo Pickaxe", NamedTextColor.AQUA));
+            meta.lore(List.of(
+                Component.text("Mined blocks burst with sonic echoes.", NamedTextColor.GRAY),
+                Component.text("Mines a 3x3 hole forward,", NamedTextColor.GRAY),
+                Component.text("or a 1x3 hole downwards.", NamedTextColor.GRAY)
+            ));
+            meta.addEnchant(Enchantment.EFFICIENCY, 5, true);
+            meta.addEnchant(Enchantment.UNBREAKING, 3, true);
+            meta.addEnchant(Enchantment.MENDING, 1, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_pickaxe");
+            pick.setItemMeta(meta);
+        }
+        return pick;
+    }
+
+    private ItemStack createEchoAxe() {
+        ItemStack axe = new ItemStack(Material.NETHERITE_AXE);
+        ItemMeta meta = axe.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Echo Axe", NamedTextColor.AQUA));
+            meta.lore(List.of(
+                Component.text("Cuts down entire trees with a single chop.", NamedTextColor.GRAY)
+            ));
+            meta.addEnchant(Enchantment.EFFICIENCY, 5, true);
+            meta.addEnchant(Enchantment.UNBREAKING, 3, true);
+            meta.addEnchant(Enchantment.MENDING, 1, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_axe");
+            axe.setItemMeta(meta);
+        }
+        return axe;
+    }
+
+    private ItemStack createEchoBow() {
+        ItemStack bow = new ItemStack(Material.BOW);
+        ItemMeta meta = bow.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Echo Bow", NamedTextColor.AQUA));
+            meta.lore(List.of(
+                Component.text("Arrows trail sonic explosions and blind targets.", NamedTextColor.GRAY)
+            ));
+            meta.addEnchant(Enchantment.UNBREAKING, 3, true);
+            meta.addEnchant(Enchantment.MENDING, 1, true);
+            meta.addEnchant(Enchantment.INFINITY, 1, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_bow");
+            bow.setItemMeta(meta);
+        }
+        return bow;
+    }
+
+    private ItemStack createKnockbackStick() {
+        ItemStack stick = new ItemStack(Material.STICK);
+        ItemMeta meta = stick.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Knockback Stick", NamedTextColor.RED));
+            meta.lore(List.of(
+                Component.text("Sends targets into orbit.", NamedTextColor.GRAY)
+            ));
+            meta.addEnchant(Enchantment.KNOCKBACK, 100, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "knockback_stick");
+            stick.setItemMeta(meta);
+        }
+        return stick;
+    }
+
+    private void handleEchoPickaxeBreak(Player player, Block centerBlock, ItemStack tool) {
+        Location centerLoc = centerBlock.getLocation();
+        if (isInSpawnRadius(centerLoc)) return;
+
+        BlockFace face = player.getTargetBlockFace(6);
+        float pitch = player.getLocation().getPitch();
+        
+        List<Block> blocksToBreak = new ArrayList<>();
+        blocksToBreak.add(centerBlock);
+
+        if (pitch > 55 || pitch < -55 || face == BlockFace.UP || face == BlockFace.DOWN) {
+            BlockFace playerDirection = player.getFacing();
+            blocksToBreak.add(centerBlock.getRelative(playerDirection));
+            blocksToBreak.add(centerBlock.getRelative(playerDirection.getOppositeFace()));
+        } else {
+            int dx1 = 0, dz1 = 0;
+            int dx2 = 0, dz2 = 0;
+            int dy1 = 0, dy2 = 0;
+
+            if (face == BlockFace.NORTH || face == BlockFace.SOUTH) {
+                dx1 = 1; dy2 = 1;
+            } else if (face == BlockFace.EAST || face == BlockFace.WEST) {
+                dz1 = 1; dy2 = 1;
+            } else {
+                dx1 = 1; dy2 = 1;
+            }
+
+            for (int h = -1; h <= 1; h++) {
+                for (int v = -1; v <= 1; v++) {
+                    if (h == 0 && v == 0) continue;
+                    Block b = centerBlock.getRelative(h * dx1 + v * dx2, h * dy1 + v * dy2, h * dz1 + v * dz2);
+                    blocksToBreak.add(b);
+                }
+            }
+        }
+
+        for (Block b : blocksToBreak) {
+            if (b.getType() == Material.AIR || b.getType() == Material.BEDROCK || b.getType() == Material.BARRIER) continue;
+            if (isInSpawnRadius(b.getLocation())) continue;
+            b.breakNaturally(tool);
+            b.getWorld().spawnParticle(Particle.SONIC_BOOM, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
+        }
+    }
+
+    private void handleEchoAxeBreak(Player player, Block startBlock, ItemStack tool) {
+        Material startType = startBlock.getType();
+        List<Block> logsToBreak = new ArrayList<>();
+        List<Block> queue = new ArrayList<>();
+        queue.add(startBlock);
+        logsToBreak.add(startBlock);
+
+        int maxLogs = 256;
+        int index = 0;
+
+        while (index < queue.size() && logsToBreak.size() < maxLogs) {
+            Block current = queue.get(index++);
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -1; z <= 1; z++) {
+                        if (x == 0 && y == 0 && z == 0) continue;
+                        Block relative = current.getRelative(x, y, z);
+                        if (relative.getType() == startType && !logsToBreak.contains(relative)) {
+                            if (isInSpawnRadius(relative.getLocation())) continue;
+                            logsToBreak.add(relative);
+                            queue.add(relative);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (Block b : logsToBreak) {
+            b.breakNaturally(tool);
+            b.getWorld().spawnParticle(Particle.GUST, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
+        }
     }
 }
