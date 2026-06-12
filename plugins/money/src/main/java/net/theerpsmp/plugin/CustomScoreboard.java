@@ -785,12 +785,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         loc.getBlock().setType(Material.OAK_SIGN);
         org.bukkit.block.Sign sign = (org.bukkit.block.Sign) loc.getBlock().getState();
-        sign.getSide(org.bukkit.block.side.Side.FRONT).line(0, Component.text(promptText));
+        sign.getSide(org.bukkit.block.sign.Side.FRONT).line(0, Component.text(promptText));
         sign.update();
 
         pendingSigns.put(player.getUniqueId(), new PendingSignInput(loc, original, action, item));
         player.closeInventory();
-        player.openSign(sign, org.bukkit.block.side.Side.FRONT);
+        player.openSign(sign, org.bukkit.block.sign.Side.FRONT);
     }
 
     @EventHandler
@@ -873,16 +873,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
                 if (countdown > 0) {
                     player.sendTitle(
-                        net.kyori.adventure.text.Component.text("Teleporting in...", net.kyori.adventure.text.format.NamedTextColor.AQUA),
-                        net.kyori.adventure.text.Component.text(countdown + " second" + (countdown == 1 ? "" : "s"), net.kyori.adventure.text.format.NamedTextColor.WHITE),
+                        "§b Teleporting in...",
+                        "§f" + countdown + " second" + (countdown == 1 ? "" : "s"),
                         0, 25, 5
                     );
                     countdown--;
                 } else {
                     cancel();
                     player.sendTitle(
-                        net.kyori.adventure.text.Component.text("Teleporting!", net.kyori.adventure.text.format.NamedTextColor.GREEN),
-                        net.kyori.adventure.text.Component.text("", net.kyori.adventure.text.format.NamedTextColor.WHITE),
+                        "§a Teleporting!",
+                        "",
                         0, 20, 10
                     );
                     doRtpTeleport(player, dimension);
@@ -1037,8 +1037,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         p1.teleport(spawn1);
         p2.teleport(spawn2);
 
-        p1.setHealth(p1.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue());
-        p2.setHealth(p2.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue());
+        p1.setHealth(p1.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
+        p2.setHealth(p2.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
         p1.setFoodLevel(20);
         p2.setFoodLevel(20);
 
@@ -1079,14 +1079,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (p1 != null) {
                 p1.teleport(match.p1Restore);
                 p1.getInventory().setContents(match.p1Inv);
-                p1.setHealth(p1.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue());
+                p1.setHealth(p1.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
                 p1.setFoodLevel(20);
                 p1.setFireTicks(0);
             }
             if (p2 != null) {
                 p2.teleport(match.p2Restore);
                 p2.getInventory().setContents(match.p2Inv);
-                p2.setHealth(p2.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue());
+                p2.setHealth(p2.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue());
                 p2.setFoodLevel(20);
                 p2.setFireTicks(0);
             }
