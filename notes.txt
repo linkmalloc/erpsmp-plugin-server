@@ -1,0 +1,8 @@
+notes:
+https://piston-data.mojang.com/v1/objects/97ccd4c0ed3f81bbb7bfacddd1090b0c56f9bc51/server.jar
+
+server: 18.206.179.9
+port: 25565
+bedrock port: 19132
+
+https://cdn.modrinth.com/data/fALzjamp/versions/4Eotm6ov/Chunky-Fabric-1.5.3.jar
