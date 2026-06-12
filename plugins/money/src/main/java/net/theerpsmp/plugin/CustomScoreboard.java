@@ -123,6 +123,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @Override
     public void onEnable() {
+        saveDefaultConfig();
         getServer().getPluginManager().registerEvents(this, this);
         
         if (getCommand("sell") != null) getCommand("sell").setExecutor(this);
@@ -158,22 +159,51 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }, 72000L, 72000L);
     }
 
+    @Override
+    public void onDisable() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            savePlayerData(player);
+        }
+    }
+
+    private void loadPlayerData(Player player) {
+        UUID uuid = player.getUniqueId();
+        String path = "players." + uuid.toString() + ".";
+        
+        hoursPlayedMap.put(uuid, getConfig().getInt(path + "hoursPlayed", 0));
+        erpiesMap.put(uuid, getConfig().getInt(path + "erpies", 100));
+        derpiesMap.put(uuid, getConfig().getInt(path + "derpies", 10));
+        keysMap.put(uuid, getConfig().getInt(path + "keys", 0));
+        killsMap.put(uuid, getConfig().getInt(path + "kills", 0));
+        deathsMap.put(uuid, getConfig().getInt(path + "deaths", 0));
+        
+        regularKeysMap.put(uuid, getConfig().getInt(path + "regularKeys", 0));
+        crimsonKeysMap.put(uuid, getConfig().getInt(path + "crimsonKeys", 0));
+        echoKeysMap.put(uuid, getConfig().getInt(path + "echoKeys", 0));
+    }
+
+    private void savePlayerData(Player player) {
+        UUID uuid = player.getUniqueId();
+        String path = "players." + uuid.toString() + ".";
+        
+        getConfig().set(path + "hoursPlayed", hoursPlayedMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 100));
+        getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 10));
+        getConfig().set(path + "keys", keysMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "kills", killsMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "deaths", deathsMap.getOrDefault(uuid, 0));
+        
+        getConfig().set(path + "regularKeys", regularKeysMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "crimsonKeys", crimsonKeysMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "echoKeys", echoKeysMap.getOrDefault(uuid, 0));
+        
+        saveConfig();
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        UUID uuid = player.getUniqueId();
-
-        hoursPlayedMap.putIfAbsent(uuid, 0);
-        erpiesMap.putIfAbsent(uuid, 100);
-        derpiesMap.putIfAbsent(uuid, 10);
-        keysMap.putIfAbsent(uuid, 0);
-        killsMap.putIfAbsent(uuid, 0);
-        deathsMap.putIfAbsent(uuid, 0);
-
-        regularKeysMap.putIfAbsent(uuid, 0);
-        crimsonKeysMap.putIfAbsent(uuid, 0);
-        echoKeysMap.putIfAbsent(uuid, 0);
-
+        loadPlayerData(player);
         updateScoreboard(player);
     }
 
@@ -187,6 +217,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             Player winner = (match.p1.equals(uuid)) ? Bukkit.getPlayer(match.p2) : Bukkit.getPlayer(match.p1);
             endDuel(match, winner, player);
         }
+
+        savePlayerData(player);
 
         hoursPlayedMap.remove(uuid);
         erpiesMap.remove(uuid);
