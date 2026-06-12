@@ -1,0 +1,35 @@
+name: ErpScoreboard
+version: '1.0'
+main: net.theerpsmp.plugin.CustomScoreboard
+api-version: '1.21'
+author: ErpieDev
+description: Custom scoreboard system for play.theerpsmp.net
+
+commands:
+  sell:
+    description: Open the sell inventory
+    usage: /sell
+  shop:
+    description: Open the shop GUI
+    usage: /shop
+  derpshop:
+    description: Open the derpshop GUI
+    usage: /derpshop
+  spawn:
+    description: Teleport to spawn protection area
+    usage: /spawn
+  auction:
+    description: Open the auction GUI
+    usage: /auction
+  duel:
+    description: Challenge a player to a 1v1 duel
+    usage: /duel <player>
+  dual:
+    description: Challenge a player to a 1v1 duel
+    usage: /dual <player>
+  bh:
+    description: Open the Bounty Hunter trading menu
+    usage: /bh
+  rtp:
+    description: Random teleport to Overworld, Nether, or End
+    usage: /rtp
