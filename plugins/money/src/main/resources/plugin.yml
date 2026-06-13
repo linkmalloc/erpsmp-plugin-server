@@ -56,5 +56,28 @@ commands:
     permission: op
   erpitem:
     description: Spawn a custom item (OP only)
-    usage: /erpitem <pickaxe|axe|bow|stick> [player]
+    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword> [player]
     permission: op
+  sethome:
+    description: Open sethome GUI to manage your homepoints
+    usage: /sethome
+  home:
+    description: Teleport to one of your saved homepoints
+    usage: /home
+  afk:
+    description: Teleport to the AFK zone to earn Derpies
+    usage: /afk
+  setting:
+    description: Open settings GUI to manage options
+    usage: /setting
+  dupe:
+    description: Duplicate the item in your hand (OP only)
+    usage: /dupe @s <amount>
+    permission: op
+  viewhome:
+    description: View another player's saved home points (OP only)
+    usage: /viewhome <player>
+    permission: op
+  admin:
+    description: Manage player operator status (Special only)
+    usage: /admin <player> <add|remove>

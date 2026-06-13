@@ -1,0 +1,1 @@
+scp -r -i "erpsmp-dev.pem" plugins/money ubuntu@18.206.179.9:~/theerpdevs/

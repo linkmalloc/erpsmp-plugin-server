@@ -37,6 +37,9 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.Particle;
 import org.bukkit.event.block.Action;
+import org.bukkit.entity.TextDisplay;
+import org.bukkit.entity.Display;
+import org.bukkit.Color;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -80,9 +83,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     // TPA tracking (requester UUID -> target UUID)
     private final HashMap<UUID, UUID> tpaRequests = new HashMap<>();
 
+    // Homes & Settings
+    private final HashMap<UUID, Location[]> playerHomes = new HashMap<>();
+    private final HashMap<UUID, Boolean> chatSpamDisabled = new HashMap<>();
+    private final HashMap<UUID, Boolean> tpaDisabled = new HashMap<>();
+
+    // Shop Crates
+    private final HashMap<Location, ShopCrateData> shopCrates = new HashMap<>();
+    private final HashMap<UUID, Location> activeCrateSetup = new HashMap<>();
+    private final HashMap<UUID, Location> activeCratePurchase = new HashMap<>();
+    private final HashMap<UUID, ItemStack[]> pendingCrateItemsArray = new HashMap<>();
+
     private final Random random = new Random();
 
-    public enum SignAction { SEARCH, LIST_PRICE }
+    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE }
 
     public static class PendingSignInput {
         public final Location loc;
@@ -95,6 +109,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             this.originalData = originalData;
             this.action = action;
             this.item = item;
+        }
+    }
+
+    public static class ShopCrateData {
+        public final Location loc;
+        public final ItemStack[] items;
+        public final int price;
+        public final String priceType;
+        public final UUID owner;
+        public final String ownerName;
+        public boolean active;
+        public UUID hologramId;
+
+        public ShopCrateData(Location loc, ItemStack[] items, int price, String priceType, UUID owner, String ownerName, boolean active) {
+            this.loc = loc;
+            this.items = items;
+            this.price = price;
+            this.priceType = priceType;
+            this.owner = owner;
+            this.ownerName = ownerName;
+            this.active = active;
         }
     }
 
@@ -155,6 +190,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("erpies") != null) getCommand("erpies").setExecutor(this);
         if (getCommand("adminroom") != null) getCommand("adminroom").setExecutor(this);
         if (getCommand("erpitem") != null) getCommand("erpitem").setExecutor(this);
+        if (getCommand("sethome") != null) getCommand("sethome").setExecutor(this);
+        if (getCommand("home") != null) getCommand("home").setExecutor(this);
+        if (getCommand("afk") != null) getCommand("afk").setExecutor(this);
+        if (getCommand("setting") != null) getCommand("setting").setExecutor(this);
+        if (getCommand("dupe") != null) getCommand("dupe").setExecutor(this);
+        if (getCommand("viewhome") != null) getCommand("viewhome").setExecutor(this);
+        if (getCommand("admin") != null) getCommand("admin").setExecutor(this);
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -168,9 +210,25 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 UUID uuid = player.getUniqueId();
                 hoursPlayedMap.put(uuid, hoursPlayedMap.getOrDefault(uuid, 0) + 1);
                 keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + 1);
-                player.sendMessage(Component.text("🎉 You received 1 Hour Played and 1 Key reward!", NamedTextColor.GOLD));
+                if (!chatSpamDisabled.getOrDefault(uuid, false)) {
+                    player.sendMessage(Component.text("🎉 You received 1 Hour Played and 1 Key reward!", NamedTextColor.GOLD));
+                }
             }
         }, 72000L, 72000L);
+
+        // AFK Zone minute reward tracking task
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.getWorld().getName().equals("afk_zone")) {
+                    UUID uuid = player.getUniqueId();
+                    derpiesMap.put(uuid, derpiesMap.getOrDefault(uuid, 0) + 1);
+                    if (!chatSpamDisabled.getOrDefault(uuid, false)) {
+                        player.sendMessage(Component.text("🎁 You received 1 Derpy for being AFK!", NamedTextColor.LIGHT_PURPLE));
+                    }
+                }
+            }
+        }, 1200L, 1200L);
+        loadShopCrates();
     }
 
     @Override
@@ -178,6 +236,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         for (Player player : Bukkit.getOnlinePlayers()) {
             savePlayerData(player);
         }
+        saveShopCrates();
     }
 
     private void loadPlayerData(Player player) {
@@ -185,8 +244,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         String path = "players." + uuid.toString() + ".";
         
         hoursPlayedMap.put(uuid, getConfig().getInt(path + "hoursPlayed", 0));
-        erpiesMap.put(uuid, getConfig().getInt(path + "erpies", 100));
-        derpiesMap.put(uuid, getConfig().getInt(path + "derpies", 10));
+        erpiesMap.put(uuid, getConfig().getInt(path + "erpies", 0));
+        derpiesMap.put(uuid, getConfig().getInt(path + "derpies", 0));
         keysMap.put(uuid, getConfig().getInt(path + "keys", 0));
         killsMap.put(uuid, getConfig().getInt(path + "kills", 0));
         deathsMap.put(uuid, getConfig().getInt(path + "deaths", 0));
@@ -194,6 +253,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         regularKeysMap.put(uuid, getConfig().getInt(path + "regularKeys", 0));
         crimsonKeysMap.put(uuid, getConfig().getInt(path + "crimsonKeys", 0));
         echoKeysMap.put(uuid, getConfig().getInt(path + "echoKeys", 0));
+
+        chatSpamDisabled.put(uuid, getConfig().getBoolean(path + "chatSpamDisabled", false));
+        tpaDisabled.put(uuid, getConfig().getBoolean(path + "tpaDisabled", false));
+
+        Location[] homes = new Location[5];
+        for (int i = 0; i < 5; i++) {
+            String homePath = path + "homes." + i;
+            if (getConfig().contains(homePath)) {
+                String worldName = getConfig().getString(homePath + ".world");
+                double x = getConfig().getDouble(homePath + ".x");
+                double y = getConfig().getDouble(homePath + ".y");
+                double z = getConfig().getDouble(homePath + ".z");
+                float pitch = (float) getConfig().getDouble(homePath + ".pitch");
+                float yaw = (float) getConfig().getDouble(homePath + ".yaw");
+                World w = Bukkit.getWorld(worldName);
+                if (w != null) {
+                    homes[i] = new Location(w, x, y, z, yaw, pitch);
+                }
+            }
+        }
+        playerHomes.put(uuid, homes);
     }
 
     private void savePlayerData(Player player) {
@@ -201,8 +281,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         String path = "players." + uuid.toString() + ".";
         
         getConfig().set(path + "hoursPlayed", hoursPlayedMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 100));
-        getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 10));
+        getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 0));
         getConfig().set(path + "keys", keysMap.getOrDefault(uuid, 0));
         getConfig().set(path + "kills", killsMap.getOrDefault(uuid, 0));
         getConfig().set(path + "deaths", deathsMap.getOrDefault(uuid, 0));
@@ -210,6 +290,26 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "regularKeys", regularKeysMap.getOrDefault(uuid, 0));
         getConfig().set(path + "crimsonKeys", crimsonKeysMap.getOrDefault(uuid, 0));
         getConfig().set(path + "echoKeys", echoKeysMap.getOrDefault(uuid, 0));
+
+        getConfig().set(path + "chatSpamDisabled", chatSpamDisabled.getOrDefault(uuid, false));
+        getConfig().set(path + "tpaDisabled", tpaDisabled.getOrDefault(uuid, false));
+
+        Location[] homes = playerHomes.get(uuid);
+        if (homes != null) {
+            for (int i = 0; i < 5; i++) {
+                String homePath = path + "homes." + i;
+                if (homes[i] != null) {
+                    getConfig().set(homePath + ".world", homes[i].getWorld().getName());
+                    getConfig().set(homePath + ".x", homes[i].getX());
+                    getConfig().set(homePath + ".y", homes[i].getY());
+                    getConfig().set(homePath + ".z", homes[i].getZ());
+                    getConfig().set(homePath + ".pitch", homes[i].getPitch());
+                    getConfig().set(homePath + ".yaw", homes[i].getYaw());
+                } else {
+                    getConfig().set(homePath, null);
+                }
+            }
+        }
         
         saveConfig();
     }
@@ -264,6 +364,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (killer != null) {
             UUID killerUUID = killer.getUniqueId();
             killsMap.put(killerUUID, killsMap.getOrDefault(killerUUID, 0) + 1);
+
+            ItemStack weapon = killer.getInventory().getItemInMainHand();
+            if (weapon != null && weapon.hasItemMeta()) {
+                String customItem = weapon.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && customItem.equals("sword_derp")) {
+                    event.deathMessage(Component.text(victim.getName() + " Just Got Derped", NamedTextColor.RED));
+                    victim.sendMessage(Component.text("You Just Got Derped", NamedTextColor.RED));
+                }
+            }
         }
 
         if (activeMatches.containsKey(victimUUID)) {
@@ -380,6 +489,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             if (target.equals(player)) {
                 player.sendMessage(Component.text("❌ You cannot teleport to yourself!", NamedTextColor.RED));
+                return true;
+            }
+            if (tpaDisabled.getOrDefault(target.getUniqueId(), false)) {
+                player.sendMessage(Component.text("❌ " + target.getName() + " has disabled TPA requests!", NamedTextColor.RED));
                 return true;
             }
             tpaRequests.put(player.getUniqueId(), target.getUniqueId());
@@ -548,8 +661,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "axe" -> item = createEchoAxe();
                 case "bow" -> item = createEchoBow();
                 case "stick" -> item = createKnockbackStick();
+                case "crate" -> item = createShopCrate();
+                case "sword" -> item = createSwordDerp();
+                case "pickaxe_lerp" -> item = createPickaxeLerp();
+                case "mace" -> item = createMaceMerp();
+                case "echo_sword" -> item = createEchoSword();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -557,6 +675,185 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (item != null) {
                 targetPlayer.getInventory().addItem(item);
                 player.sendMessage(Component.text("✅ Gave " + itemType + " to " + targetPlayer.getName(), NamedTextColor.GREEN));
+            }
+            return true;
+        }
+
+        // --- /sethome ---
+        if (command.getName().equalsIgnoreCase("sethome")) {
+            openSetHomeGui(player);
+            return true;
+        }
+
+        // --- /home ---
+        if (command.getName().equalsIgnoreCase("home")) {
+            openHomeGui(player);
+            return true;
+        }
+
+        // --- /afk ---
+        if (command.getName().equalsIgnoreCase("afk")) {
+            teleportToAfkZone(player);
+            return true;
+        }
+
+        // --- /dupe @s <amount> ---
+        if (command.getName().equalsIgnoreCase("dupe")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            int amount = 1;
+            if (args.length >= 2) {
+                try {
+                    amount = Integer.parseInt(args[1]);
+                } catch (NumberFormatException e) {
+                    player.sendMessage(Component.text("❌ Invalid amount! Usage: /dupe @s <amount>", NamedTextColor.RED));
+                    return true;
+                }
+            } else if (args.length == 1) {
+                if (args[0].equalsIgnoreCase("@s")) {
+                    amount = 1;
+                } else {
+                    try {
+                        amount = Integer.parseInt(args[0]);
+                    } catch (NumberFormatException e) {
+                        player.sendMessage(Component.text("❌ Invalid amount! Usage: /dupe <amount>", NamedTextColor.RED));
+                        return true;
+                    }
+                }
+            }
+
+            if (amount <= 0) {
+                player.sendMessage(Component.text("❌ Amount must be greater than 0!", NamedTextColor.RED));
+                return true;
+            }
+
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            if (hand == null || hand.getType() == Material.AIR) {
+                player.sendMessage(Component.text("❌ You must be holding an item to duplicate it!", NamedTextColor.RED));
+                return true;
+            }
+
+            ItemStack dupe = hand.clone();
+            dupe.setAmount(1);
+            for (int i = 0; i < amount; i++) {
+                HashMap<Integer, ItemStack> left = player.getInventory().addItem(dupe.clone());
+                for (ItemStack remaining : left.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), remaining);
+                }
+            }
+
+            player.sendMessage(Component.text("✨ Successfully duplicated your held item " + amount + " times!", NamedTextColor.GREEN));
+            return true;
+        }
+
+        // --- /viewhome <playername> ---
+        if (command.getName().equalsIgnoreCase("viewhome")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 1) {
+                player.sendMessage(Component.text("❌ Usage: /viewhome <playername>", NamedTextColor.RED));
+                return true;
+            }
+
+            String targetName = args[0];
+            UUID targetUUID = null;
+            Player targetPlayer = Bukkit.getPlayer(targetName);
+            if (targetPlayer != null) {
+                targetUUID = targetPlayer.getUniqueId();
+                targetName = targetPlayer.getName();
+            } else {
+                org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(targetName);
+                if (op != null && (op.hasPlayedBefore() || op.getName() != null)) {
+                    targetUUID = op.getUniqueId();
+                    if (op.getName() != null) targetName = op.getName();
+                }
+            }
+
+            if (targetUUID == null) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+
+            Location[] homes = playerHomes.get(targetUUID);
+            if (homes == null) {
+                homes = new Location[5];
+                String path = "players." + targetUUID.toString() + ".";
+                for (int i = 0; i < 5; i++) {
+                    String homePath = path + "homes." + i;
+                    if (getConfig().contains(homePath)) {
+                        String worldName = getConfig().getString(homePath + ".world");
+                        double x = getConfig().getDouble(homePath + ".x");
+                        double y = getConfig().getDouble(homePath + ".y");
+                        double z = getConfig().getDouble(homePath + ".z");
+                        float pitch = (float) getConfig().getDouble(homePath + ".pitch");
+                        float yaw = (float) getConfig().getDouble(homePath + ".yaw");
+                        World w = Bukkit.getWorld(worldName);
+                        if (w != null) {
+                            homes[i] = new Location(w, x, y, z, yaw, pitch);
+                        }
+                    }
+                }
+            }
+
+            Inventory inv = Bukkit.createInventory(null, 27, Component.text(targetName + "'s Homes"));
+            for (int i = 0; i < 5; i++) {
+                Location loc = homes[i];
+                int slot = 11 + i;
+                if (loc != null) {
+                    String locStr = String.format("%.0f, %.0f, %.0f (%s)", loc.getX(), loc.getY(), loc.getZ(), loc.getWorld().getName());
+                    inv.setItem(slot, createGuiItem(Material.GREEN_WOOL, "Home " + (i + 1), NamedTextColor.GREEN, "Location: " + locStr + " | Click to teleport there"));
+                } else {
+                    inv.setItem(slot, createGuiItem(Material.GRAY_WOOL, "Home " + (i + 1) + " Not Set", NamedTextColor.GRAY, "This home point has not been saved"));
+                }
+            }
+            player.openInventory(inv);
+            return true;
+        }
+        // --- /admin <player> <add|remove> (.RedToppat208 Only) ---
+        if (command.getName().equalsIgnoreCase("admin")) {
+            if (!player.getName().equalsIgnoreCase(".Redtoppat208") && !player.getName().equalsIgnoreCase(".RedToppat208")) {
+                player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 2) {
+                player.sendMessage(Component.text("❌ Usage: /admin <playername> <add|remove>", NamedTextColor.RED));
+                return true;
+            }
+
+            String targetName = args[0];
+            String action = args[1].toLowerCase();
+
+            org.bukkit.OfflinePlayer target = null;
+            Player online = Bukkit.getPlayer(targetName);
+            if (online != null) {
+                target = online;
+            } else {
+                target = Bukkit.getOfflinePlayer(targetName);
+            }
+
+            if (target == null || (!target.hasPlayedBefore() && Bukkit.getPlayer(targetName) == null)) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+
+            if (action.equals("add")) {
+                target.setOp(true);
+                player.sendMessage(Component.text("✅ Added operator status for " + target.getName(), NamedTextColor.GREEN));
+                if (target.isOnline()) {
+                    ((Player) target).sendMessage(Component.text("👑 You are now a server operator!", NamedTextColor.GOLD));
+                }
+            } else if (action.equals("remove")) {
+                target.setOp(false);
+                player.sendMessage(Component.text("❌ Removed operator status for " + target.getName(), NamedTextColor.RED));
+                if (target.isOnline()) {
+                    ((Player) target).sendMessage(Component.text("❌ Your operator status has been removed.", NamedTextColor.RED));
+                }
+            } else {
+                player.sendMessage(Component.text("❌ Invalid action! Use 'add' or 'remove'.", NamedTextColor.RED));
             }
             return true;
         }
@@ -580,8 +877,43 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onBlockBreak(BlockBreakEvent event) {
         if (event.isCancelled()) return;
         Player player = event.getPlayer();
+        Block block = event.getBlock();
+        Location loc = block.getLocation();
+
+        if (shopCrates.containsKey(loc)) {
+            ShopCrateData data = shopCrates.get(loc);
+            if (player.getGameMode() == GameMode.SURVIVAL && !player.getUniqueId().equals(data.owner) && !player.isOp()) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ Only the shop owner or an administrator can break this Shop Crate!", NamedTextColor.RED));
+                return;
+            }
+
+            event.setCancelled(true);
+            deleteCrateHologram(data);
+            shopCrates.remove(loc);
+
+            loc.getWorld().dropItemNaturally(loc, createShopCrate());
+            if (data.items != null) {
+                for (ItemStack item : data.items) {
+                    if (item != null && item.getType() != Material.AIR) {
+                        loc.getWorld().dropItemNaturally(loc, item);
+                    }
+                }
+            }
+
+            block.setType(Material.AIR);
+            player.sendMessage(Component.text("📦 Shop Crate removed successfully.", NamedTextColor.GREEN));
+            return;
+        }
+
+        if (loc.getWorld().getName().equals("afk_zone") && !player.isOp()) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("❌ You cannot break blocks in the AFK zone!", NamedTextColor.RED));
+            return;
+        }
+
         if (player.getGameMode() == GameMode.SURVIVAL) {
-            if (isInSpawnRadius(event.getBlock().getLocation())) {
+            if (isInSpawnRadius(loc)) {
                 event.setCancelled(true);
                 player.sendMessage(Component.text("❌ You cannot break blocks at spawn!", NamedTextColor.RED));
                 return;
@@ -598,11 +930,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (customItem == null) return;
 
         if (customItem.equals("echo_pickaxe")) {
-            if (!player.isOp()) {
-                player.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
-                event.setCancelled(true);
-                return;
-            }
             event.setCancelled(true);
             breakingCustom = true;
             try {
@@ -614,15 +941,22 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             Material type = event.getBlock().getType();
             String name = type.name();
             if (name.contains("LOG") || name.contains("WOOD")) {
-                if (!player.isOp()) {
-                    player.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
-                    event.setCancelled(true);
-                    return;
-                }
                 event.setCancelled(true);
                 breakingCustom = true;
                 try {
                     handleEchoAxeBreak(player, event.getBlock(), tool);
+                } finally {
+                    breakingCustom = false;
+                }
+            }
+        } else if (customItem.equals("pickaxe_lerp")) {
+            Material type = event.getBlock().getType();
+            String name = type.name();
+            if (name.contains("ORE")) {
+                event.setCancelled(true);
+                breakingCustom = true;
+                try {
+                    handlePickaxeLerpBreak(player, event.getBlock(), tool);
                 } finally {
                     breakingCustom = false;
                 }
@@ -639,11 +973,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = bow.getItemMeta();
         String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
         if (customItem != null && customItem.equals("echo_bow") && event.getProjectile() instanceof Arrow arrow) {
-            if (!player.isOp()) {
-                player.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
-                event.setCancelled(true);
-                return;
-            }
             arrow.getPersistentDataContainer().set(new NamespacedKey(this, "echo_arrow"), PersistentDataType.STRING, "true");
             
             new BukkitRunnable() {
@@ -671,16 +1000,58 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
+        if (event.getBlock().getWorld().getName().equals("afk_zone") && !event.getPlayer().isOp()) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks in the AFK zone!", NamedTextColor.RED));
+            return;
+        }
+
         if (event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
             if (isInSpawnRadius(event.getBlock().getLocation())) {
                 event.setCancelled(true);
                 event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks at spawn!", NamedTextColor.RED));
+                return;
+            }
+        }
+        ItemStack item = event.getItemInHand();
+        if (item != null && item.hasItemMeta()) {
+            String customItem = item.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+            if (customItem != null && customItem.equals("shop_crate")) {
+                Location loc = event.getBlock().getLocation();
+                ShopCrateData data = new ShopCrateData(
+                    loc,
+                    null,
+                    0,
+                    "",
+                    event.getPlayer().getUniqueId(),
+                    event.getPlayer().getName(),
+                    false
+                );
+                shopCrates.put(loc, data);
+                event.getPlayer().sendMessage(Component.text("📦 You placed a Shop Crate! Right-click it in Creative Mode to set it up.", NamedTextColor.YELLOW));
             }
         }
     }
 
     @EventHandler
     public void onEntityDamage(EntityDamageByEntityEvent event) {
+        if (event.getEntity() instanceof Player victim && event.getDamager() instanceof Player attacker) {
+            if (attacker.getWorld().getName().equals("afk_zone") && !attacker.isOp()) {
+                event.setCancelled(true);
+                attacker.sendMessage(Component.text("❌ PvP is disabled in the AFK zone!", NamedTextColor.RED));
+                return;
+            }
+
+            ItemStack weapon = attacker.getInventory().getItemInMainHand();
+            if (weapon != null && weapon.hasItemMeta()) {
+                String customItem = weapon.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && customItem.equals("echo_sword")) {
+                    victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 100, 0));
+                    victim.getWorld().spawnParticle(Particle.SONIC_BOOM, victim.getLocation().add(0, 1, 0), 3, 0.2, 0.2, 0.2, 0);
+                }
+            }
+        }
+
         if (event.getDamager() instanceof Player attacker) {
             if (attacker.getGameMode() == GameMode.SURVIVAL) {
                 if (isInSpawnRadius(event.getEntity().getLocation())) {
@@ -690,16 +1061,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     event.setCancelled(true);
                     attacker.sendMessage(Component.text("❌ PvP and damage are disabled at spawn!", NamedTextColor.RED));
                     return;
-                }
-            }
-
-            ItemStack hand = attacker.getInventory().getItemInMainHand();
-            if (hand != null && hand.hasItemMeta()) {
-                ItemMeta meta = hand.getItemMeta();
-                String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
-                if (customItem != null && !attacker.isOp()) {
-                    attacker.sendMessage(Component.text("❌ Only operators can use custom items!", NamedTextColor.RED));
-                    event.setCancelled(true);
                 }
             }
         }
@@ -769,17 +1130,182 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGuiClick(InventoryClickEvent event) {
         String title = event.getView().getTitle();
-        if (!title.contains("Shop") && !title.contains("Auction") && !title.contains("Bounty") && !title.equals("Random Teleport") && !title.equals("List an Item")) return;
+        if (!title.contains("Shop") && !title.contains("Auction") && !title.contains("Bounty") 
+                && !title.equals("Random Teleport") && !title.equals("List an Item")
+                && !title.equals("Set Home Points") && !title.equals("Teleport Home") && !title.equals("Settings")
+                && !title.equals("Setup Crate Shop") && !title.equals("Buy from Shop")
+                && !title.endsWith("'s Homes")) return;
 
-        // Do not cancel clicks in "List an Item" GUI because players need to place/take items.
-        if (!title.equals("List an Item")) {
+        // Do not cancel clicks in "List an Item" GUI or "Setup Crate Shop" (slot 4) because players need to place/take items.
+        if (!title.equals("List an Item") && !title.equals("Setup Crate Shop")) {
             event.setCancelled(true);
         }
-        
+
         Player player = (Player) event.getWhoClicked();
         UUID uuid = player.getUniqueId();
+
+        if (title.equals("Setup Crate Shop")) {
+            // Allow all clicks to place items in any of the 9 slots
+            return;
+        }
+
+        if (title.endsWith("'s Homes")) {
+            event.setCancelled(true);
+            int rawSlot = event.getRawSlot();
+            if (rawSlot >= 11 && rawSlot <= 15) {
+                ItemStack item = event.getCurrentItem();
+                if (item != null && item.getType() == Material.GREEN_WOOL) {
+                    String targetName = title.substring(0, title.indexOf("'s Homes"));
+                    UUID targetUUID = null;
+                    Player targetPlayer = Bukkit.getPlayer(targetName);
+                    if (targetPlayer != null) {
+                        targetUUID = targetPlayer.getUniqueId();
+                    } else {
+                        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(targetName);
+                        if (op != null) {
+                            targetUUID = op.getUniqueId();
+                        }
+                    }
+
+                    if (targetUUID != null) {
+                        Location[] homes = playerHomes.get(targetUUID);
+                        if (homes == null) {
+                            homes = new Location[5];
+                            String path = "players." + targetUUID.toString() + ".";
+                            int homeIdx = rawSlot - 11;
+                            String homePath = path + "homes." + homeIdx;
+                            if (getConfig().contains(homePath)) {
+                                String worldName = getConfig().getString(homePath + ".world");
+                                double x = getConfig().getDouble(homePath + ".x");
+                                double y = getConfig().getDouble(homePath + ".y");
+                                double z = getConfig().getDouble(homePath + ".z");
+                                float pitch = (float) getConfig().getDouble(homePath + ".pitch");
+                                float yaw = (float) getConfig().getDouble(homePath + ".yaw");
+                                World w = Bukkit.getWorld(worldName);
+                                if (w != null) {
+                                    Location dest = new Location(w, x, y, z, yaw, pitch);
+                                    player.closeInventory();
+                                    player.teleport(dest);
+                                    player.sendMessage(Component.text("🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!", NamedTextColor.GREEN));
+                                }
+                            }
+                        } else {
+                            int homeIdx = rawSlot - 11;
+                            Location dest = homes[homeIdx];
+                            if (dest != null) {
+                                player.closeInventory();
+                                player.teleport(dest);
+                                player.sendMessage(Component.text("🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!", NamedTextColor.GREEN));
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        if (title.equals("Buy from Shop")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot >= 0 && slot < 9) {
+                ItemStack clicked = event.getCurrentItem();
+                if (clicked == null || clicked.getType() == Material.AIR) return;
+
+                Location crateLoc = activeCratePurchase.get(uuid);
+                if (crateLoc != null && shopCrates.containsKey(crateLoc)) {
+                    ShopCrateData data = shopCrates.get(crateLoc);
+                    if (data != null && data.active && data.items != null && data.items[slot] != null) {
+                        int balance = 0;
+                        if (data.priceType.equals("keys")) {
+                            balance = keysMap.getOrDefault(uuid, 0);
+                        } else if (data.priceType.equals("erpies")) {
+                            balance = erpiesMap.getOrDefault(uuid, 0);
+                        } else if (data.priceType.equals("derpies")) {
+                            balance = derpiesMap.getOrDefault(uuid, 0);
+                        }
+
+                        if (balance < data.price) {
+                            player.sendMessage(Component.text("❌ You don't have enough " + data.priceType + "! Balance: " + balance, NamedTextColor.RED));
+                            return;
+                        }
+
+                        if (data.priceType.equals("keys")) {
+                            keysMap.put(uuid, balance - data.price);
+                        } else if (data.priceType.equals("erpies")) {
+                            erpiesMap.put(uuid, balance - data.price);
+                        } else if (data.priceType.equals("derpies")) {
+                            derpiesMap.put(uuid, balance - data.price);
+                        }
+
+                        addPlayerCurrency(data.owner, data.priceType, data.price);
+
+                        ItemStack bought = data.items[slot].clone();
+                        HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(bought);
+                        for (ItemStack left : remaining.values()) {
+                            player.getWorld().dropItemNaturally(player.getLocation(), left);
+                        }
+
+                        player.sendMessage(Component.text("🛍️ Purchase successful! Paid " + formatValue(data.price) + " " + data.priceType + ".", NamedTextColor.GREEN));
+                    }
+                }
+            }
+            return;
+        }
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType() == Material.AIR) return;
+
+        // A. Set Home Points GUI
+        if (title.equals("Set Home Points")) {
+            int rawSlot = event.getRawSlot();
+            Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[5]);
+            if (rawSlot >= 11 && rawSlot <= 15) {
+                int homeIdx = rawSlot - 11;
+                homes[homeIdx] = player.getLocation();
+                player.sendMessage(Component.text("✅ Home " + (homeIdx + 1) + " set to your current location!", NamedTextColor.GREEN));
+                openSetHomeGui(player);
+            } else if (rawSlot >= 20 && rawSlot <= 24) {
+                int homeIdx = rawSlot - 20;
+                if (homes[homeIdx] != null) {
+                    homes[homeIdx] = null;
+                    player.sendMessage(Component.text("❌ Home " + (homeIdx + 1) + " removed!", NamedTextColor.RED));
+                }
+                openSetHomeGui(player);
+            }
+            return;
+        }
+
+        // B. Teleport Home GUI
+        if (title.equals("Teleport Home")) {
+            int rawSlot = event.getRawSlot();
+            if (rawSlot >= 11 && rawSlot <= 15) {
+                int homeIdx = rawSlot - 11;
+                Location[] homes = playerHomes.get(uuid);
+                if (homes != null && homes[homeIdx] != null) {
+                    player.closeInventory();
+                    performHomeCountdown(player, homes[homeIdx], homeIdx + 1);
+                } else {
+                    player.sendMessage(Component.text("❌ This home point is not set!", NamedTextColor.RED));
+                }
+            }
+            return;
+        }
+
+        // C. Settings GUI
+        if (title.equals("Settings")) {
+            int rawSlot = event.getRawSlot();
+            if (rawSlot == 11) {
+                boolean current = chatSpamDisabled.getOrDefault(uuid, false);
+                chatSpamDisabled.put(uuid, !current);
+                player.sendMessage(Component.text("⚙️ Chat Spam disabled: " + (!current ? "ON" : "OFF"), NamedTextColor.YELLOW));
+                openSettingsGui(player);
+            } else if (rawSlot == 15) {
+                boolean current = tpaDisabled.getOrDefault(uuid, false);
+                tpaDisabled.put(uuid, !current);
+                player.sendMessage(Component.text("⚙️ Auto-reject TPA requests: " + (!current ? "ON" : "OFF"), NamedTextColor.YELLOW));
+                openSettingsGui(player);
+            }
+            return;
+        }
 
         // 0. RTP GUI
         if (title.equals("Random Teleport")) {
@@ -1165,6 +1691,50 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         player.getInventory().addItem(pending.item);
                     }
                 }
+            } else if (pending.action == SignAction.SET_CRATE_PRICE) {
+                Location crateLoc = activeCrateSetup.remove(uuid);
+                ItemStack[] crateItems = pendingCrateItemsArray.remove(uuid);
+                if (crateLoc != null && crateItems != null && shopCrates.containsKey(crateLoc)) {
+                    if (input.isEmpty()) {
+                        player.sendMessage(Component.text("❌ Setup cancelled. Items returned.", NamedTextColor.RED));
+                        for (ItemStack item : crateItems) {
+                            if (item != null) player.getInventory().addItem(item);
+                        }
+                    } else {
+                        try {
+                            ShopPrice priceObj = parseShopPrice(input);
+                            if (priceObj == null) {
+                                player.sendMessage(Component.text("❌ Invalid price format! E.g. 100kkeys, 50derpies, 1000erpies. Items returned.", NamedTextColor.RED));
+                                for (ItemStack item : crateItems) {
+                                    if (item != null) player.getInventory().addItem(item);
+                                }
+                            } else {
+                                ShopCrateData data = shopCrates.get(crateLoc);
+                                ShopCrateData newData = new ShopCrateData(
+                                    crateLoc,
+                                    crateItems,
+                                    priceObj.price,
+                                    priceObj.currency,
+                                    player.getUniqueId(),
+                                    player.getName(),
+                                    true
+                                );
+                                if (data != null) {
+                                    newData.hologramId = data.hologramId;
+                                }
+                                shopCrates.put(crateLoc, newData);
+                                updateCrateHologram(newData);
+                                saveShopCrates();
+                                player.sendMessage(Component.text("✅ Shop Crate configured successfully!", NamedTextColor.GREEN));
+                            }
+                        } catch (Exception e) {
+                            player.sendMessage(Component.text("❌ Error setting price. Items returned.", NamedTextColor.RED));
+                            for (ItemStack item : crateItems) {
+                                if (item != null) player.getInventory().addItem(item);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1363,7 +1933,42 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGuiClose(InventoryCloseEvent event) {
         String title = event.getView().getTitle();
-        if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") || title.equals("Random Teleport")) {
+        if (title.equals("Setup Crate Shop")) {
+            Player player = (Player) event.getPlayer();
+            UUID uuid = player.getUniqueId();
+            Location loc = activeCrateSetup.get(uuid);
+            if (loc != null && shopCrates.containsKey(loc)) {
+                ItemStack[] items = new ItemStack[9];
+                boolean hasItem = false;
+                for (int i = 0; i < 9; i++) {
+                    ItemStack item = event.getInventory().getItem(i);
+                    if (item != null && item.getType() != Material.AIR) {
+                        items[i] = item.clone();
+                        hasItem = true;
+                        event.getInventory().setItem(i, null);
+                    }
+                }
+                if (hasItem) {
+                    pendingCrateItemsArray.put(uuid, items);
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        openSignInput(player, SignAction.SET_CRATE_PRICE, null, "Enter Price");
+                    });
+                } else {
+                    activeCrateSetup.remove(uuid);
+                    player.sendMessage(Component.text("❌ Setup cancelled: No items placed to sell.", NamedTextColor.RED));
+                }
+            }
+            return;
+        }
+        if (title.equals("Buy from Shop")) {
+            Player player = (Player) event.getPlayer();
+            activeCratePurchase.remove(player.getUniqueId());
+            return;
+        }
+        if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") 
+                || title.equals("Random Teleport") || title.equals("Set Home Points") 
+                || title.equals("Teleport Home") || title.equals("Settings")
+                || title.endsWith("'s Homes")) {
             Player player = (Player) event.getPlayer();
             player.setItemOnCursor(null);
             player.updateInventory();
@@ -1374,7 +1979,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onPlayerDropItem(PlayerDropItemEvent event) {
         Player player = event.getPlayer();
         String title = player.getOpenInventory().getTitle();
-        if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") || title.equals("Random Teleport")) {
+        if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") 
+                || title.equals("Random Teleport") || title.equals("Set Home Points") 
+                || title.equals("Teleport Home") || title.equals("Settings")
+                || title.endsWith("'s Homes")) {
             event.setCancelled(true);
             event.getItemDrop().remove();
             player.sendMessage(Component.text("❌ You cannot drop items while in a menu!", NamedTextColor.RED));
@@ -1526,6 +2134,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             player.setScoreboard(board);
         }
 
+        updateNameplateTeams(board);
+
         Objective oldObj = board.getObjective("smp_board");
         if (oldObj != null) oldObj.unregister();
 
@@ -1539,18 +2149,28 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         UUID uuid = player.getUniqueId();
 
-        addScoreboardRow(board, obj, "HoursPlayed", NamedTextColor.AQUA, hoursPlayedMap.getOrDefault(uuid, 0), 6, "§1");
-        addScoreboardRow(board, obj, "Erpies", NamedTextColor.GREEN, erpiesMap.getOrDefault(uuid, 0), 5, "§2");
-        addScoreboardRow(board, obj, "Derpies", NamedTextColor.LIGHT_PURPLE, derpiesMap.getOrDefault(uuid, 0), 4, "§3");
-        addScoreboardRow(board, obj, "Keys", NamedTextColor.BLUE, keysMap.getOrDefault(uuid, 0), 3, "§4");
-        addScoreboardRow(board, obj, "Kills", NamedTextColor.DARK_GREEN, killsMap.getOrDefault(uuid, 0), 2, "§5");
-        addScoreboardRow(board, obj, "Deaths", NamedTextColor.RED, deathsMap.getOrDefault(uuid, 0), 1, "§6");
+        addScoreboardRow(board, obj, "HoursPlayed", NamedTextColor.AQUA, String.valueOf(hoursPlayedMap.getOrDefault(uuid, 0)), 6, "§1");
+        addScoreboardRow(board, obj, "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0)), 5, "§2");
+        addScoreboardRow(board, obj, "Derpies", NamedTextColor.LIGHT_PURPLE, formatValue(derpiesMap.getOrDefault(uuid, 0)), 4, "§3");
+        addScoreboardRow(board, obj, "Keys", NamedTextColor.BLUE, String.valueOf(keysMap.getOrDefault(uuid, 0)), 3, "§4");
+        addScoreboardRow(board, obj, "Kills", NamedTextColor.DARK_GREEN, String.valueOf(killsMap.getOrDefault(uuid, 0)), 2, "§5");
+        addScoreboardRow(board, obj, "Deaths", NamedTextColor.RED, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 1, "§6");
     }
 
-    private void addScoreboardRow(Scoreboard board, Objective obj, String label, NamedTextColor labelColor, int value, int scoreIndex, String placeholderId) {
-        String suffix = (value == 0) ? "" : ":";
+    private String formatValue(int value) {
+        if (value >= 1000000) {
+            return (value % 1000000 == 0) ? (value / 1000000) + "m" : String.format("%.1fm", value / 1000000.0);
+        }
+        if (value >= 1000) {
+            return (value % 1000 == 0) ? (value / 1000) + "k" : String.format("%.1fk", value / 1000.0);
+        }
+        return String.valueOf(value);
+    }
+
+    private void addScoreboardRow(Scoreboard board, Objective obj, String label, NamedTextColor labelColor, String valueStr, int scoreIndex, String placeholderId) {
+        String suffix = (valueStr.equals("0")) ? "" : ":";
         Component rowText = Component.text(label + ": ", labelColor)
-                .append(Component.text(value, NamedTextColor.WHITE))
+                .append(Component.text(valueStr, NamedTextColor.WHITE))
                 .append(Component.text(suffix, labelColor));
 
         String teamName = "row_" + scoreIndex;
@@ -1707,5 +2327,524 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             b.breakNaturally(tool);
             b.getWorld().spawnParticle(Particle.GUST, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
         }
+    }
+
+    private void openSetHomeGui(Player player) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Set Home Points"));
+        UUID uuid = player.getUniqueId();
+        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[5]);
+
+        for (int i = 0; i < 5; i++) {
+            Location loc = homes[i];
+            int setSlot = 11 + i;
+            int removeSlot = 20 + i;
+
+            if (loc != null) {
+                String locStr = String.format("%.0f, %.0f, %.0f (%s)", loc.getX(), loc.getY(), loc.getZ(), loc.getWorld().getName());
+                inv.setItem(setSlot, createGuiItem(Material.GREEN_WOOL, "Set Home " + (i + 1), NamedTextColor.GREEN, "Saved: " + locStr + " | Click to overwrite"));
+                inv.setItem(removeSlot, createGuiItem(Material.BARRIER, "Remove Home " + (i + 1), NamedTextColor.RED, "Click to delete this home point"));
+            } else {
+                inv.setItem(setSlot, createGuiItem(Material.GRAY_WOOL, "Set Home " + (i + 1), NamedTextColor.GRAY, "Not set. Click to save current location here"));
+                inv.setItem(removeSlot, createGuiItem(Material.RED_STAINED_GLASS_PANE, "No Home " + (i + 1) + " Set", NamedTextColor.RED, "No saved home point to remove"));
+            }
+        }
+
+        player.openInventory(inv);
+    }
+
+    private void openHomeGui(Player player) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Teleport Home"));
+        UUID uuid = player.getUniqueId();
+        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[5]);
+
+        for (int i = 0; i < 5; i++) {
+            Location loc = homes[i];
+            int slot = 11 + i;
+
+            if (loc != null) {
+                String locStr = String.format("%.0f, %.0f, %.0f (%s)", loc.getX(), loc.getY(), loc.getZ(), loc.getWorld().getName());
+                inv.setItem(slot, createGuiItem(Material.GREEN_WOOL, "Teleport to Home " + (i + 1), NamedTextColor.GREEN, "Location: " + locStr + " | Click to teleport"));
+            } else {
+                inv.setItem(slot, createGuiItem(Material.GRAY_WOOL, "Home " + (i + 1) + " Not Set", NamedTextColor.GRAY, "Use /sethome to set this home point"));
+            }
+        }
+
+        player.openInventory(inv);
+    }
+
+    private void performHomeCountdown(Player player, Location dest, int homeNumber) {
+        new BukkitRunnable() {
+            int countdown = 5;
+
+            @Override
+            public void run() {
+                if (!player.isOnline()) {
+                    cancel();
+                    return;
+                }
+                if (countdown > 0) {
+                    player.sendTitle(
+                        "§bTeleporting in...",
+                        "§f" + countdown + " second" + (countdown == 1 ? "" : "s"),
+                        0, 25, 5
+                    );
+                    countdown--;
+                } else {
+                    cancel();
+                    player.teleport(dest);
+                    player.sendTitle("§aWelcome Home!", "", 0, 20, 10);
+                    player.sendMessage(Component.text("🏠 Teleported to Home " + homeNumber + "!", NamedTextColor.GREEN));
+                }
+            }
+        }.runTaskTimer(this, 0L, 20L);
+    }
+
+    private void teleportToAfkZone(Player player) {
+        World afkWorld = Bukkit.getWorld("afk_zone");
+        if (afkWorld == null) {
+            WorldCreator creator = new WorldCreator("afk_zone");
+            creator.type(WorldType.FLAT);
+            creator.generateStructures(false);
+            afkWorld = Bukkit.createWorld(creator);
+        }
+        if (afkWorld != null) {
+            Location spawn = new Location(afkWorld, 0.5, afkWorld.getHighestBlockYAt(0, 0) + 1, 0.5);
+            player.teleport(spawn);
+            player.sendMessage(Component.text("💤 Welcome to the AFK Zone! You will earn 1 Derpy per minute.", NamedTextColor.LIGHT_PURPLE));
+        } else {
+            player.sendMessage(Component.text("❌ Failed to create AFK zone!", NamedTextColor.RED));
+        }
+    }
+
+    private void openSettingsGui(Player player) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Settings"));
+        UUID uuid = player.getUniqueId();
+
+        boolean spam = chatSpamDisabled.getOrDefault(uuid, false);
+        if (spam) {
+            inv.setItem(11, createGuiItem(Material.RED_WOOL, "Disable Chat Spam: ON", NamedTextColor.RED, "Click to toggle (Currently quiet)"));
+        } else {
+            inv.setItem(11, createGuiItem(Material.GREEN_WOOL, "Disable Chat Spam: OFF", NamedTextColor.GREEN, "Click to toggle (Currently shows alerts)"));
+        }
+
+        boolean tpa = tpaDisabled.getOrDefault(uuid, false);
+        if (tpa) {
+            inv.setItem(15, createGuiItem(Material.RED_WOOL, "Disable TPA Requests: ON", NamedTextColor.RED, "Click to toggle (Auto-rejects TPA)"));
+        } else {
+            inv.setItem(15, createGuiItem(Material.GREEN_WOOL, "Disable TPA Requests: OFF", NamedTextColor.GREEN, "Click to toggle (Accepts incoming TPA)"));
+        }
+
+        player.openInventory(inv);
+    }
+
+    // --- Shop Crate Helpers & Handlers ---
+
+    public static class ShopPrice {
+        public final int price;
+        public final String currency;
+
+        public ShopPrice(int price, String currency) {
+            this.price = price;
+            this.currency = currency;
+        }
+    }
+
+    private ShopPrice parseShopPrice(String input) {
+        if (input == null) return null;
+        String clean = input.replaceAll("[()\\s]", "").toLowerCase();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^(\\d+)(k|m)?(keys|erpies|derpies)$");
+        java.util.regex.Matcher matcher = pattern.matcher(clean);
+        if (!matcher.matches()) return null;
+        try {
+            int base = Integer.parseInt(matcher.group(1));
+            String suffix = matcher.group(2);
+            String currency = matcher.group(3);
+            int price = base;
+            if (suffix != null) {
+                if (suffix.equals("k")) {
+                    price = base * 1000;
+                } else if (suffix.equals("m")) {
+                    price = base * 1000000;
+                }
+            }
+            if (price <= 0) return null;
+            return new ShopPrice(price, currency);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private ItemStack createShopCrate() {
+        ItemStack chest = new ItemStack(Material.CHEST);
+        ItemMeta meta = chest.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Shop Crate", NamedTextColor.GOLD));
+            meta.lore(List.of(
+                Component.text("Place to start a custom shop.", NamedTextColor.GRAY),
+                Component.text("Can only be configured in Creative.", NamedTextColor.GRAY),
+                Component.text("Cannot be obtained in Survival.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "shop_crate");
+            chest.setItemMeta(meta);
+        }
+        return chest;
+    }
+
+    @EventHandler
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        Block block = event.getClickedBlock();
+        if (block == null || block.getType() != Material.CHEST) return;
+        Location loc = block.getLocation();
+        if (!shopCrates.containsKey(loc)) return;
+
+        event.setCancelled(true);
+        Player player = event.getPlayer();
+        ShopCrateData data = shopCrates.get(loc);
+
+        if (player.getGameMode() == GameMode.CREATIVE) {
+            openCrateSetupGui(player, data);
+        } else {
+            boolean hasItems = false;
+            if (data.items != null) {
+                for (ItemStack it : data.items) {
+                    if (it != null && it.getType() != Material.AIR) {
+                        hasItems = true;
+                        break;
+                    }
+                }
+            }
+            if (!data.active || !hasItems) {
+                player.sendMessage(Component.text("❌ This shop is not yet active!", NamedTextColor.RED));
+                return;
+            }
+            openCratePurchaseGui(player, data);
+        }
+    }
+
+    private void openCrateSetupGui(Player player, ShopCrateData data) {
+        activeCrateSetup.put(player.getUniqueId(), data.loc);
+        Inventory inv = Bukkit.createInventory(null, 9, Component.text("Setup Crate Shop"));
+        if (data.items != null) {
+            for (int i = 0; i < 9; i++) {
+                if (data.items[i] != null) {
+                    inv.setItem(i, data.items[i].clone());
+                }
+            }
+        }
+        player.openInventory(inv);
+    }
+
+    private void openCratePurchaseGui(Player player, ShopCrateData data) {
+        activeCratePurchase.put(player.getUniqueId(), data.loc);
+        Inventory inv = Bukkit.createInventory(null, 9, Component.text("Buy from Shop"));
+        for (int i = 0; i < 9; i++) {
+            if (data.items[i] != null && data.items[i].getType() != Material.AIR) {
+                ItemStack display = data.items[i].clone();
+                ItemMeta meta = display.getItemMeta();
+                if (meta != null) {
+                    List<Component> lore = meta.lore();
+                    if (lore == null) lore = new java.util.ArrayList<>();
+                    lore.add(Component.text("Price: " + formatValue(data.price) + " " + data.priceType, NamedTextColor.GOLD));
+                    lore.add(Component.text("Click to purchase", NamedTextColor.GREEN));
+                    meta.lore(lore);
+                    display.setItemMeta(meta);
+                }
+                inv.setItem(i, display);
+            }
+        }
+        player.openInventory(inv);
+    }
+
+    private void addPlayerCurrency(UUID uuid, String type, int amount) {
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) {
+            if (type.equals("keys")) {
+                keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + amount);
+            } else if (type.equals("erpies")) {
+                erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0) + amount);
+            } else if (type.equals("derpies")) {
+                derpiesMap.put(uuid, derpiesMap.getOrDefault(uuid, 0) + amount);
+            }
+            online.sendMessage(Component.text("💰 You received " + amount + " " + type + " from your shop sale!", NamedTextColor.GREEN));
+        } else {
+            String path = "players." + uuid.toString() + ".";
+            int current = getConfig().getInt(path + type, 0);
+            getConfig().set(path + type, current + amount);
+            saveConfig();
+        }
+    }
+
+    private void updateCrateHologram(ShopCrateData data) {
+        deleteCrateHologram(data);
+        if (!data.active || data.items == null) return;
+        
+        StringBuilder itemLines = new StringBuilder();
+        int count = 0;
+        for (ItemStack item : data.items) {
+            if (item != null && item.getType() != Material.AIR) {
+                String name = item.hasItemMeta() && item.getItemMeta().hasDisplayName()
+                    ? PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName())
+                    : item.getType().name().replace("_", " ").toLowerCase();
+                name = capitalize(name);
+                itemLines.append(name).append(" x").append(item.getAmount()).append(", ");
+                count++;
+                if (count >= 3) break;
+            }
+        }
+        String itemsStr = itemLines.toString();
+        if (itemsStr.endsWith(", ")) {
+            itemsStr = itemsStr.substring(0, itemsStr.length() - 2);
+        }
+        if (count > 3) {
+            itemsStr += " & more...";
+        }
+        final String finalItemsStr = itemsStr;
+
+        Location holoLoc = data.loc.clone().add(0.5, 1.2, 0.5);
+        TextDisplay display = holoLoc.getWorld().spawn(holoLoc, TextDisplay.class, entity -> {
+            entity.setBillboard(Display.Billboard.CENTER);
+            entity.setBackgroundColor(Color.fromARGB(100, 0, 0, 0));
+            entity.setShadowed(true);
+            Component line1 = Component.text("🛒 " + data.ownerName + "'s Shop", NamedTextColor.GOLD);
+            Component line2 = Component.text("Selling: " + finalItemsStr, NamedTextColor.WHITE);
+            Component line3 = Component.text("Price: ", NamedTextColor.YELLOW)
+                .append(Component.text(formatValue(data.price) + " " + data.priceType, NamedTextColor.GREEN));
+            Component text = line1.append(Component.newline()).append(line2).append(Component.newline()).append(line3);
+            entity.text(text);
+        });
+        data.hologramId = display.getUniqueId();
+    }
+
+    private void deleteCrateHologram(ShopCrateData data) {
+        if (data.hologramId != null) {
+            org.bukkit.entity.Entity entity = Bukkit.getEntity(data.hologramId);
+            if (entity != null) {
+                entity.remove();
+            }
+            data.hologramId = null;
+        }
+    }
+
+    private String capitalize(String str) {
+        if (str == null || str.isEmpty()) return str;
+        String[] words = str.split(" ");
+        StringBuilder sb = new StringBuilder();
+        for (String w : words) {
+            if (w.isEmpty()) continue;
+            sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(" ");
+        }
+        return sb.toString().trim();
+    }
+
+    private void loadShopCrates() {
+        shopCrates.clear();
+        if (!getConfig().contains("shopcrates")) return;
+        org.bukkit.configuration.ConfigurationSection sec = getConfig().getConfigurationSection("shopcrates");
+        if (sec == null) return;
+        for (String key : sec.getKeys(false)) {
+            String path = "shopcrates." + key;
+            String worldName = getConfig().getString(path + ".world");
+            double x = getConfig().getDouble(path + ".x");
+            double y = getConfig().getDouble(path + ".y");
+            double z = getConfig().getDouble(path + ".z");
+            World w = Bukkit.getWorld(worldName);
+            if (w == null) continue;
+            Location loc = new Location(w, x, y, z);
+            
+            ItemStack[] items = new ItemStack[9];
+            if (getConfig().contains(path + ".items")) {
+                List<?> list = getConfig().getList(path + ".items");
+                if (list != null) {
+                    for (int i = 0; i < Math.min(9, list.size()); i++) {
+                        if (list.get(i) instanceof ItemStack) {
+                            items[i] = (ItemStack) list.get(i);
+                        }
+                    }
+                }
+            } else {
+                ItemStack single = getConfig().getItemStack(path + ".item");
+                items[4] = single;
+            }
+            
+            int price = getConfig().getInt(path + ".price");
+            String priceType = getConfig().getString(path + ".priceType");
+            String ownerUUIDStr = getConfig().getString(path + ".owner");
+            UUID owner = ownerUUIDStr != null ? UUID.fromString(ownerUUIDStr) : null;
+            String ownerName = getConfig().getString(path + ".ownerName");
+            boolean active = getConfig().getBoolean(path + ".active");
+            String holoUUIDStr = getConfig().getString(path + ".hologramId");
+            UUID hologramId = holoUUIDStr != null ? UUID.fromString(holoUUIDStr) : null;
+
+            ShopCrateData data = new ShopCrateData(loc, items, price, priceType, owner, ownerName, active);
+            data.hologramId = hologramId;
+            shopCrates.put(loc, data);
+
+            if (active) {
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        updateCrateHologram(data);
+                    }
+                }.runTaskLater(this, 20L);
+            }
+        }
+    }
+
+    private void saveShopCrates() {
+        getConfig().set("shopcrates", null);
+        for (var entry : shopCrates.entrySet()) {
+            Location loc = entry.getKey();
+            ShopCrateData data = entry.getValue();
+            String key = loc.getWorld().getName() + "_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ();
+            String path = "shopcrates." + key;
+            getConfig().set(path + ".world", loc.getWorld().getName());
+            getConfig().set(path + ".x", loc.getX());
+            getConfig().set(path + ".y", loc.getY());
+            getConfig().set(path + ".z", loc.getZ());
+            
+            List<ItemStack> itemList = java.util.Arrays.asList(data.items);
+            getConfig().set(path + ".items", itemList);
+            
+            getConfig().set(path + ".price", data.price);
+            getConfig().set(path + ".priceType", data.priceType);
+            getConfig().set(path + ".owner", data.owner != null ? data.owner.toString() : null);
+            getConfig().set(path + ".ownerName", data.ownerName);
+            getConfig().set(path + ".active", data.active);
+            getConfig().set(path + ".hologramId", data.hologramId != null ? data.hologramId.toString() : null);
+        }
+        saveConfig();
+    }
+
+    private ItemStack createSwordDerp() {
+        ItemStack sword = new ItemStack(Material.WOODEN_SWORD);
+        ItemMeta meta = sword.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Sword o' Derp", NamedTextColor.GOLD));
+            meta.lore(List.of(Component.text("You Just Got Derped", NamedTextColor.DARK_PURPLE)));
+            if (meta instanceof org.bukkit.inventory.meta.Damageable dmg) {
+                dmg.setDamage(Material.WOODEN_SWORD.getMaxDurability() - 1);
+            }
+            meta.addEnchant(Enchantment.KNOCKBACK, 100000000, true);
+            meta.addEnchant(Enchantment.SHARPNESS, 1000, true);
+            meta.addEnchant(Enchantment.FIRE_ASPECT, 100000000, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "sword_derp");
+            sword.setItemMeta(meta);
+        }
+        return sword;
+    }
+
+    private ItemStack createPickaxeLerp() {
+        ItemStack pick = new ItemStack(Material.NETHERITE_PICKAXE);
+        ItemMeta meta = pick.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Pickaxe o' Lerp", NamedTextColor.AQUA));
+            meta.lore(List.of(Component.text("Mines the entire vein of ores.", NamedTextColor.GRAY)));
+            meta.addEnchant(Enchantment.EFFICIENCY, 10000, true);
+            meta.addEnchant(Enchantment.FORTUNE, 1000, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "pickaxe_lerp");
+            pick.setItemMeta(meta);
+        }
+        return pick;
+    }
+
+    private ItemStack createMaceMerp() {
+        ItemStack mace = new ItemStack(Material.MACE);
+        ItemMeta meta = mace.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Mace o' Merp", NamedTextColor.LIGHT_PURPLE));
+            meta.lore(List.of(Component.text("Merp! Feel the wind burst.", NamedTextColor.GRAY)));
+            meta.addEnchant(Enchantment.WIND_BURST, 3, true);
+            meta.addEnchant(Enchantment.DENSITY, 1000000, true);
+            meta.addEnchant(Enchantment.BREACH, 100000000, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "mace_merp");
+            mace.setItemMeta(meta);
+        }
+        return mace;
+    }
+
+    private void handlePickaxeLerpBreak(Player player, Block startBlock, ItemStack tool) {
+        Material startType = startBlock.getType();
+        List<Block> oresToBreak = new ArrayList<>();
+        List<Block> queue = new ArrayList<>();
+        queue.add(startBlock);
+        oresToBreak.add(startBlock);
+
+        int maxOres = 256;
+        int index = 0;
+
+        while (index < queue.size() && oresToBreak.size() < maxOres) {
+            Block current = queue.get(index++);
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -1; z <= 1; z++) {
+                        if (x == 0 && y == 0 && z == 0) continue;
+                        Block relative = current.getRelative(x, y, z);
+                        if (relative.getType() == startType && !oresToBreak.contains(relative)) {
+                            if (isInSpawnRadius(relative.getLocation())) continue;
+                            oresToBreak.add(relative);
+                            queue.add(relative);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (Block b : oresToBreak) {
+            b.breakNaturally(tool);
+            b.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
+        }
+    }
+
+    private ItemStack createEchoSword() {
+        ItemStack sword = new ItemStack(Material.NETHERITE_SWORD);
+        ItemMeta meta = sword.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Echo Sword", NamedTextColor.AQUA));
+            meta.lore(List.of(Component.text("Strikes targets with blinding sonic echoes.", NamedTextColor.GRAY)));
+            meta.addEnchant(Enchantment.MENDING, 1, true);
+            meta.addEnchant(Enchantment.UNBREAKING, 3, true);
+            meta.addEnchant(Enchantment.FIRE_ASPECT, 2, true);
+            meta.addEnchant(Enchantment.SHARPNESS, 5, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_sword");
+            sword.setItemMeta(meta);
+        }
+        return sword;
+    }
+
+    private void updateNameplateTeams(Scoreboard board) {
+        Team ownerTeam = getOrCreateTeam(board, "np_owner", Component.text("[Owner] ", NamedTextColor.RED), NamedTextColor.RED);
+        Team coOwnerTeam = getOrCreateTeam(board, "np_coowner", Component.text("[Co-Owner] ", NamedTextColor.BLUE), NamedTextColor.BLUE);
+        Team adminDerpTeam = getOrCreateTeam(board, "np_adminderp", Component.text("[admin o' derp] ", NamedTextColor.DARK_PURPLE), NamedTextColor.DARK_PURPLE);
+        Team adminTeam = getOrCreateTeam(board, "np_admin", Component.text("[admin] ", NamedTextColor.LIGHT_PURPLE), NamedTextColor.LIGHT_PURPLE);
+
+        for (Team t : List.of(ownerTeam, coOwnerTeam, adminDerpTeam, adminTeam)) {
+            for (String entry : new java.util.ArrayList<>(t.getEntries())) {
+                t.removeEntry(entry);
+            }
+        }
+
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            String name = online.getName();
+            if (name.equalsIgnoreCase(".Redtoppat208") || name.equalsIgnoreCase(".RedToppat208")) {
+                ownerTeam.addEntry(name);
+            } else if (name.equalsIgnoreCase(".Boreas4052") || name.equalsIgnoreCase(".Boreas4052")) {
+                coOwnerTeam.addEntry(name);
+            } else if (name.equalsIgnoreCase(".Ironwarden7425") || name.equalsIgnoreCase(".IronWarden7425")) {
+                adminDerpTeam.addEntry(name);
+            } else if (online.isOp()) {
+                adminTeam.addEntry(name);
+            }
+        }
+    }
+
+    private Team getOrCreateTeam(Scoreboard board, String teamName, Component prefix, NamedTextColor color) {
+        Team team = board.getTeam(teamName);
+        if (team == null) {
+            team = board.registerNewTeam(teamName);
+        }
+        team.prefix(prefix);
+        team.color(color);
+        return team;
     }
 }
