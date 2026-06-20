@@ -8,7 +8,7 @@ description: Custom scoreboard system for play.theerpsmp.net
 commands:
   sell:
     description: Open the sell inventory
-    usage: /sell
+    usalse: /sell
   shop:
     description: Open the shop GUI
     usage: /shop
@@ -48,7 +48,15 @@ commands:
     permission: op
   erpies:
     description: Manage a player's Erpies (OP only)
-    usage: /erpies <player> <reset|remove|add> <amount>
+    usage: /erpies <player> <amount>
+    permission: op
+  echokeys:
+    description: Manage a player's Echo keys (OP only)
+    usage: /echokeys <player> <reset|remove|add> <amount>
+    permission: op
+  crimsonkeys:
+    description: Manage a player's crimson keys (OP only)
+    usage: /crimsonkeys <player> <reset|remove|add> <amount>
     permission: op
   adminroom:
     description: Teleport to the admin room (OP only)
@@ -56,7 +64,7 @@ commands:
     permission: op
   erpitem:
     description: Spawn a custom item (OP only)
-    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword> [player]
+    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword|gateway> [player]
     permission: op
   sethome:
     description: Open sethome GUI to manage your homepoints
@@ -81,3 +89,10 @@ commands:
   admin:
     description: Manage player operator status (Special only)
     usage: /admin <player> <add|remove>
+  rules:
+    description: Open the server rules book UI
+    usage: /rules
+  item:
+    description: Save or load an item (OP only)
+    usage: /item <load|save> <name>
+    permission: op
