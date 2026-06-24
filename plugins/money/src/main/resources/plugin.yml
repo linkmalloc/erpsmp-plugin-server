@@ -21,18 +21,12 @@ commands:
   auction:
     description: Open the auction GUI
     usage: /auction
-  duel:
-    description: Challenge a player to a 1v1 duel
-    usage: /duel <player>
-  dual:
-    description: Challenge a player to a 1v1 duel
-    usage: /dual <player>
   bh:
     description: Open the Bounty Hunter trading menu
     usage: /bh
   rtp:
     description: Random teleport to Overworld, Nether, or End
-    usage: /rtp
+    usage: /rtp [overworld|nether|end]
   tpa:
     description: Send a teleport request to another player
     usage: /tpa <player>
@@ -88,11 +82,48 @@ commands:
     permission: op
   admin:
     description: Manage player operator status (Special only)
-    usage: /admin <player> <add|remove>
+    usage: /admin <add|remove> <player>
   rules:
     description: Open the server rules book UI
     usage: /rules
   item:
     description: Save or load an item (OP only)
     usage: /item <load|save> <name>
+    permission: op
+  orders:
+    description: Request to buy an item
+    usage: /orders
+  player:
+    description: Perform administrative actions on a player
+    usage: /player (ban/unban/kick) (playername)
+  gm:
+    description: Change your gamemode (OP only)
+    usage: /gm (s/c/a/sp)
+    permission: op
+  xray:
+    description: Enable xray mode (OP only)
+    usage: /xray
+    permission: op
+  unxray:
+    description: Disable xray mode (OP only)
+    usage: /unxray
+    permission: op
+  keys:
+    description: Manage player keys (OP only)
+    usage: /keys (keys/echo/crimson) (add/remove/reset) (amount) (playername)
+    permission: op
+  copy:
+    description: Copy a region between two points (OP only)
+    usage: /copy <x1> <y1> <z1> <x2> <y2> <z2>
+    permission: op
+  paste:
+    description: Paste the copied region relative to player position (OP only)
+    usage: /paste
+    permission: op
+  setspawn:
+    description: Set one of the spawnpoints in the spawn world (Special only)
+    usage: /setspawn <1-5>
+  dtp:
+    description: Teleport to a specific dimension (OP only)
+    usage: /dtp <dimension>
     permission: op
