@@ -58,7 +58,7 @@ commands:
     permission: op
   erpitem:
     description: Spawn a custom item (OP only)
-    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword|gateway> [player]
+    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword|gateway|orbital_strike|wand> [player]
     permission: op
   sethome:
     description: Open sethome GUI to manage your homepoints
@@ -95,7 +95,7 @@ commands:
     usage: /orders
   player:
     description: Perform administrative actions on a player
-    usage: /player (ban/unban/kick) (playername)
+    usage: /player (ban/unban) (playername) (optional:days)
   gm:
     description: Change your gamemode (OP only)
     usage: /gm (s/c/a/sp)
@@ -126,4 +126,38 @@ commands:
   dtp:
     description: Teleport to a specific dimension (OP only)
     usage: /dtp <dimension>
+    permission: op
+  nametag:
+    description: Manage and choose your active name tag
+    usage: /nametag
+  addnametag:
+    description: Add a nametag or all nametags (OP only)
+    usage: /addnametag (nametag/all) [player]
+    permission: op
+  erpscoreboard:
+    description: Modify erp scoreboard stats (OP only)
+    usage: /erpscoreboard (h/e/d/k/ki/de) (add/remove/set/reset) (amount) [player]
+    permission: op
+  cut:
+    description: Destroy/clear all blocks between two points (OP only)
+    usage: /cut
+    permission: op
+  wandfill:
+    description: Fill a space between 2 points (OP only)
+    usage: /wandfill (material) (optional:hollow)
+    permission: op
+  move:
+    description: Move a structure between 2 points (OP only)
+    usage: /move (up/down/north/south/east/west) (amount of blocks)
+    permission: op
+  wandstructure:
+    description: Save or load a structure between 2 points (OP only)
+    usage: /wandstructure (save/load) (name)
+    permission: op
+  offhand:
+    description: Swap the items in your main hand and offhand (useful for Bedrock players)
+    usage: /offhand
+  enchantitem:
+    description: Enchant the item in your hand with any enchantment and level (OP only)
+    usage: /enchantitem (enchantment) (level)
     permission: op
