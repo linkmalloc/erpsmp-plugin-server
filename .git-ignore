@@ -1,1 +1,19 @@
 erpsmp-dev.pem
+
+# Ignore compiled classes and jars
+*.class
+*.jar
+*.war
+*.ear
+
+# Ignore build directories
+target/
+build/
+.gradle/
+
+# Ignore Minecraft server runtime files (if any are local)
+world/
+world_nether/
+world_the_end/
+logs/
+crash-reports/
