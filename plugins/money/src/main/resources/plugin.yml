@@ -98,7 +98,11 @@ commands:
     usage: /player (ban/unban) (playername) (optional:days)
   gm:
     description: Change your gamemode (OP only)
-    usage: /gm (s/c/a/sp)
+    usage: /gm (s/c/a/spectator)
+    permission: op
+  gamemode:
+    description: Change your gamemode (OP only)
+    usage: /gamemode (s/c/a/spectator)
     permission: op
   xray:
     description: Enable xray mode (OP only)
@@ -144,7 +148,19 @@ commands:
     permission: op
   wandfill:
     description: Fill a space between 2 points (OP only)
-    usage: /wandfill (material) (optional:hollow)
+    usage: /wandfill (material) (optional:hollow/replace) (if replace:material)
+    permission: op
+  wandcircle:
+    description: Draw a hollow circle or semicircle between 2 points (OP only)
+    usage: /wandcircle (material) (optional:semicircle)
+    permission: op
+  wandundo:
+    description: Undo the last wand action performed (OP only)
+    usage: /wandundo
+    permission: op
+  wandredo:
+    description: Redo the last wand action undid (OP only)
+    usage: /wandredo
     permission: op
   move:
     description: Move a structure between 2 points (OP only)
@@ -161,3 +177,25 @@ commands:
     description: Enchant the item in your hand with any enchantment and level (OP only)
     usage: /enchantitem (enchantment) (level)
     permission: op
+  alwaysday:
+    description: Toggle always day in a specific dimension (OP only)
+    usage: /alwaysday (dimension) (true/false)
+    permission: op
+  maketeam:
+    description: Create a new team
+    usage: /maketeam <teamname>
+  team:
+    description: Open your team management GUI
+    usage: /team
+  requesteam:
+    description: Request a player to join your team
+    usage: /requesteam <playername>
+  teamaccept:
+    description: Accept a pending team invitation
+    usage: /teamaccept
+  dual:
+    description: Invite a player to a duel in the bedrock arena
+    usage: /dual <playername>
+  dualaccept:
+    description: Accept a pending duel challenge
+    usage: /dualaccept

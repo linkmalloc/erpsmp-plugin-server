@@ -1,0 +1,20 @@
+{
+    "custom.music.mysong": {
+        "category": "record",
+        "sounds": [
+            {
+                "name": "custom/mysong",
+                "stream": true
+            }
+        ]
+    },
+    "custom.music.afk": {
+        "category": "record",
+        "sounds": [
+            {
+                "name": "custom/afk",
+                "stream": true
+            }
+        ]
+    }
+}
