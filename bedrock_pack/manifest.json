@@ -1,0 +1,18 @@
+{
+  "format_version": 2,
+  "header": {
+    "description": "Custom Music Pack for play.theerpsmp.net (Bedrock)",
+    "name": "ErpSMP Music Pack",
+    "uuid": "c3d18e95-7798-4c91-9e7f-6156a5c102a1",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 14, 0]
+  },
+  "modules": [
+    {
+      "description": "Custom Music Pack Resources",
+      "type": "resources",
+      "uuid": "0a7f14b6-e2db-424a-9311-5369c7104ba1",
+      "version": [1, 0, 0]
+    }
+  ]
+}

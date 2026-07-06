@@ -66,7 +66,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 public class CustomScoreboard extends JavaPlugin implements Listener, CommandExecutor {
 
-    private final HashMap<UUID, Integer> hoursPlayedMap = new HashMap<>();
+    private final HashMap<UUID, Integer> timePlayedMap = new HashMap<>();
     private final HashMap<UUID, Long> erpiesMap = new HashMap<>();
     private final HashMap<UUID, Long> derpiesMap = new HashMap<>();
     private final HashMap<UUID, Integer> keysMap = new HashMap<>();
@@ -81,6 +81,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Integer> amethystKeysMap = new HashMap<>();
     private final HashMap<UUID, Boolean> hasErpPlusMap = new HashMap<>();
 
+    // Bank tracking maps
+    private final HashMap<UUID, Long> bankErpiesMap = new HashMap<>();
+    private final HashMap<UUID, Long> bankDerpiesMap = new HashMap<>();
+    private final HashMap<UUID, Long> lastInterestTimeMap = new HashMap<>();
+    private final HashMap<UUID, List<ItemStack>> bankItemsMap = new HashMap<>();
+
     // Auction variables
     private final List<AuctionListing> listings = new ArrayList<>();
     private final List<OrderRequest> orders = new ArrayList<>();
@@ -91,10 +97,25 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     // Combat tag system
     private final HashMap<UUID, Integer> combatTagTicks = new HashMap<>();
+    private final java.util.Set<UUID> dualNightVisionPlayers = new java.util.HashSet<>();
 
     // Wand point selection system
     private final HashMap<UUID, Location> wandPoint1 = new HashMap<>();
     private final HashMap<UUID, Location> wandPoint2 = new HashMap<>();
+
+    // Command Chest fields
+    private final HashMap<Location, String> commandChests = new HashMap<>();
+    private final HashMap<UUID, Location> activeCommandChestSetup = new HashMap<>();
+
+    // Divine Flame fields
+    private final HashMap<UUID, Long> chargingDivineFlame = new HashMap<>();
+
+    // Duel Chest fields
+    private final List<UUID> duelQueue = new ArrayList<>();
+    private final HashMap<UUID, Integer> duelPlayerPage = new HashMap<>();
+    private final HashMap<UUID, String> duelPlayerSearchQuery = new HashMap<>();
+    private final HashMap<UUID, UUID> pendingDirectDuelChallenge = new HashMap<>();
+    private final java.util.Set<UUID> bypassCommandChestOpCheck = new java.util.HashSet<>();
 
     // Team System variables
     public static class TeamData {
@@ -261,10 +282,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
     private final HashMap<UUID, Location> activeFloatingTextPlacement = new HashMap<>();
     private final HashMap<UUID, BlockBackup> originalBlockState = new HashMap<>();
+    private final HashMap<Location, BlockBackup> duelBlockChanges = new HashMap<>();
     private final HashMap<UUID, String> activeFloatingTextContent = new HashMap<>();
     private final HashMap<UUID, Boolean> chatSpamDisabled = new HashMap<>();
     private final HashMap<UUID, Boolean> tpaDisabled = new HashMap<>();
     private final HashMap<UUID, Boolean> voiceChatEnabled = new HashMap<>();
+    private final HashMap<UUID, Boolean> musicDisabled = new HashMap<>();
+    private final HashMap<UUID, String> editingGlobalBook = new HashMap<>();
+    private List<String> serverRules = new ArrayList<>();
+    private List<String> serverCredits = new ArrayList<>();
     private final List<UUID> xrayPlayers = new ArrayList<>();
     private final Location[] customSpawnPoints = new Location[5];
 
@@ -276,7 +302,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private final Random random = new Random();
 
-    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE }
+    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH }
 
     public static class PendingSignInput {
         public final Location loc;
@@ -402,6 +428,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("home") != null) getCommand("home").setExecutor(this);
         if (getCommand("afk") != null) getCommand("afk").setExecutor(this);
         if (getCommand("setting") != null) getCommand("setting").setExecutor(this);
+        if (getCommand("bank") != null) getCommand("bank").setExecutor(this);
         if (getCommand("dupe") != null) getCommand("dupe").setExecutor(this);
         if (getCommand("viewhome") != null) getCommand("viewhome").setExecutor(this);
         if (getCommand("admin") != null) getCommand("admin").setExecutor(this);
@@ -426,12 +453,28 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("teamaccept") != null) getCommand("teamaccept").setExecutor(this);
         if (getCommand("dual") != null) getCommand("dual").setExecutor(this);
         if (getCommand("dualaccept") != null) getCommand("dualaccept").setExecutor(this);
+        if (getCommand("say") != null) getCommand("say").setExecutor(this);
+        if (getCommand("dualchest") != null) getCommand("dualchest").setExecutor(this);
 
 
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
+                UUID uuid = player.getUniqueId();
+                timePlayedMap.put(uuid, timePlayedMap.getOrDefault(uuid, 0) + 1);
                 updateScoreboard(player);
+
+                if (player.getWorld().getName().equalsIgnoreCase("duel")) {
+                    if (!player.hasPotionEffect(PotionEffectType.NIGHT_VISION) || !dualNightVisionPlayers.contains(uuid)) {
+                        player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false, false));
+                        dualNightVisionPlayers.add(uuid);
+                    }
+                } else {
+                    if (dualNightVisionPlayers.contains(uuid)) {
+                        player.removePotionEffect(PotionEffectType.NIGHT_VISION);
+                        dualNightVisionPlayers.remove(uuid);
+                    }
+                }
             }
             updateCustomCrateHolograms();
 
@@ -481,10 +524,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 UUID uuid = player.getUniqueId();
-                hoursPlayedMap.put(uuid, hoursPlayedMap.getOrDefault(uuid, 0) + 1);
                 keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + 1);
                 if (!chatSpamDisabled.getOrDefault(uuid, false)) {
-                    player.sendMessage(Component.text("🎉 You received 1 Hour Played and 1 Key reward!", NamedTextColor.GOLD));
+                    player.sendMessage(Component.text("🎉 You received 1 Key reward for playing for an hour!", NamedTextColor.GOLD));
                 }
             }
         }, 72000L, 72000L);
@@ -509,6 +551,23 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }, 1200L, 1200L);
         loadShopCrates();
         loadTeams();
+        loadCommandChests();
+
+        if (getConfig().contains("server.rules")) {
+            serverRules = getConfig().getStringList("server.rules");
+        } else {
+            serverRules.add("&cServer Rules\n-------------------\n\nRule 1: no xray\n\nRule 2: no exploits and toolbox\n\nRule 3: no hacking");
+            getConfig().set("server.rules", serverRules);
+            saveConfig();
+        }
+
+        if (getConfig().contains("server.credits")) {
+            serverCredits = getConfig().getStringList("server.credits");
+        } else {
+            serverCredits.add("&eCredits\n-------------------\n\nServer Creator: .Redtoppat208\nPlugin Developer: Antigravity");
+            getConfig().set("server.credits", serverCredits);
+            saveConfig();
+        }
     }
 
     @Override
@@ -518,13 +577,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         saveShopCrates();
         saveTeams();
+        saveCommandChests();
     }
 
     private void loadPlayerData(Player player) {
         UUID uuid = player.getUniqueId();
         String path = "players." + uuid.toString() + ".";
         
-        hoursPlayedMap.put(uuid, getConfig().getInt(path + "hoursPlayed", 0));
+        int seconds = getConfig().getInt(path + "timePlayed", -1);
+        if (seconds == -1) {
+            seconds = getConfig().getInt(path + "hoursPlayed", 0) * 3600;
+        }
+        timePlayedMap.put(uuid, seconds);
         erpiesMap.put(uuid, getConfig().getLong(path + "erpies", 0L));
         derpiesMap.put(uuid, getConfig().getLong(path + "derpies", 0L));
         keysMap.put(uuid, getConfig().getInt(path + "keys", 0));
@@ -538,9 +602,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         amethystKeysMap.put(uuid, getConfig().getInt(path + "amethystKeys", 0));
         hasErpPlusMap.put(uuid, getConfig().getBoolean(path + "hasErpPlus", false));
 
+        bankErpiesMap.put(uuid, getConfig().getLong(path + "bankErpies", 0L));
+        bankDerpiesMap.put(uuid, getConfig().getLong(path + "bankDerpies", 0L));
+        lastInterestTimeMap.put(uuid, getConfig().getLong(path + "lastInterestTime", 0L));
+        
+        List<ItemStack> bankItems = new ArrayList<>();
+        if (getConfig().contains(path + "bankItems")) {
+            List<?> list = getConfig().getList(path + "bankItems");
+            if (list != null) {
+                for (Object obj : list) {
+                    if (obj instanceof ItemStack) {
+                        bankItems.add((ItemStack) obj);
+                    }
+                }
+            }
+        }
+        bankItemsMap.put(uuid, bankItems);
+
         chatSpamDisabled.put(uuid, getConfig().getBoolean(path + "chatSpamDisabled", false));
         tpaDisabled.put(uuid, getConfig().getBoolean(path + "tpaDisabled", false));
         voiceChatEnabled.put(uuid, getConfig().getBoolean(path + "voiceChatEnabled", false));
+        musicDisabled.put(uuid, getConfig().getBoolean(path + "musicDisabled", false));
 
         activeNametags.put(uuid, getConfig().getString(path + "activeNametag", ""));
         killedAdminMap.put(uuid, getConfig().getBoolean(path + "killedAdmin", false));
@@ -591,7 +673,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         UUID uuid = player.getUniqueId();
         String path = "players." + uuid.toString() + ".";
         
-        getConfig().set(path + "hoursPlayed", hoursPlayedMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "timePlayed", timePlayedMap.getOrDefault(uuid, 0));
         getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "keys", keysMap.getOrDefault(uuid, 0));
@@ -605,9 +687,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "amethystKeys", amethystKeysMap.getOrDefault(uuid, 0));
         getConfig().set(path + "hasErpPlus", hasErpPlusMap.getOrDefault(uuid, false));
 
+        getConfig().set(path + "bankErpies", bankErpiesMap.getOrDefault(uuid, 0L));
+        getConfig().set(path + "bankDerpies", bankDerpiesMap.getOrDefault(uuid, 0L));
+        getConfig().set(path + "lastInterestTime", lastInterestTimeMap.getOrDefault(uuid, 0L));
+        getConfig().set(path + "bankItems", bankItemsMap.getOrDefault(uuid, new ArrayList<>()));
+
         getConfig().set(path + "chatSpamDisabled", chatSpamDisabled.getOrDefault(uuid, false));
         getConfig().set(path + "tpaDisabled", tpaDisabled.getOrDefault(uuid, false));
         getConfig().set(path + "voiceChatEnabled", voiceChatEnabled.getOrDefault(uuid, false));
+        getConfig().set(path + "musicDisabled", musicDisabled.getOrDefault(uuid, false));
 
         getConfig().set(path + "activeNametag", activeNametags.getOrDefault(uuid, ""));
         getConfig().set(path + "killedAdmin", killedAdminMap.getOrDefault(uuid, false));
@@ -746,10 +834,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         UUID uuid = player.getUniqueId();
 
         combatTagTicks.remove(uuid);
+        duelQueue.remove(uuid);
 
         savePlayerData(player);
 
-        hoursPlayedMap.remove(uuid);
+        timePlayedMap.remove(uuid);
+        dualNightVisionPlayers.remove(uuid);
         erpiesMap.remove(uuid);
         derpiesMap.remove(uuid);
         keysMap.remove(uuid);
@@ -762,6 +852,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         endKeysMap.remove(uuid);
         amethystKeysMap.remove(uuid);
         hasErpPlusMap.remove(uuid);
+
+        bankErpiesMap.remove(uuid);
+        bankDerpiesMap.remove(uuid);
+        lastInterestTimeMap.remove(uuid);
+        bankItemsMap.remove(uuid);
 
         activeNametags.remove(uuid);
         killedAdminMap.remove(uuid);
@@ -852,6 +947,23 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage("Only players can use this system command!");
+            return true;
+        }
+
+        if (command.getName().equalsIgnoreCase("say")) {
+            if (!player.getName().equalsIgnoreCase(".Redtoppat208")) {
+                player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 1) {
+                player.sendMessage(Component.text("❌ Usage: /say <message>", NamedTextColor.RED));
+                return true;
+            }
+            String rawMessage = String.join(" ", args);
+            String formattedMessage = rawMessage.replace("&", "§");
+            for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
+                onlinePlayer.sendTitle(formattedMessage, "", 10, 70, 20);
+            }
             return true;
         }
 
@@ -1011,16 +1123,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             
-            World dualWorld = Bukkit.getWorld("dual");
+            World dualWorld = Bukkit.getWorld("duel");
             if (dualWorld == null) {
-                WorldCreator creator = new WorldCreator("dual");
+                WorldCreator creator = new WorldCreator("duel");
                 creator.environment(World.Environment.NORMAL);
                 dualWorld = Bukkit.createWorld(creator);
             }
             if (dualWorld != null) {
-                generateBedrockBox(dualWorld);
-                Location loc1 = new Location(dualWorld, -15.5, 101.0, 0.5, -90f, 0f);
-                Location loc2 = new Location(dualWorld, 15.5, 101.0, 0.5, 90f, 0f);
+                dualWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+                dualWorld.setTime(6000L);
+
+                org.bukkit.WorldBorder border = dualWorld.getWorldBorder();
+                border.setCenter(0.0, 0.0);
+                border.setSize(50.0);
+
+                cleanupDuelArena(dualWorld);
+
+                double y1 = dualWorld.getHighestBlockYAt(-15, 0);
+                double y2 = dualWorld.getHighestBlockYAt(15, 0);
+
+                Location loc1 = new Location(dualWorld, -15.5, y1 + 1.0, 0.5, -90f, 0f);
+                Location loc2 = new Location(dualWorld, 15.5, y2 + 1.0, 0.5, 90f, 0f);
                 challenger.teleport(loc1);
                 player.teleport(loc2);
                 
@@ -1029,6 +1152,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             } else {
                 player.sendMessage(Component.text("❌ Failed to load the duel arena.", NamedTextColor.RED));
                 challenger.sendMessage(Component.text("❌ Failed to load the duel arena.", NamedTextColor.RED));
+            }
+            return true;
+        }
+
+        if (command.getName().equalsIgnoreCase("dualchest")) {
+            if (player.isOp() || bypassCommandChestOpCheck.contains(player.getUniqueId())) {
+                openDuelChestGui(player);
+            } else {
+                player.sendMessage(Component.text("❌ You do not have permission to run this command!", NamedTextColor.RED));
             }
             return true;
         }
@@ -1131,7 +1263,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 2) {
-                player.sendMessage(Component.text("❌ Usage: /erpscoreboard (h/e/d/k/ki/de) (add/remove/set/reset) (amount) [player]", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /erpscoreboard (t/e/d/k/ki/de) (add/remove/set/reset) (amount) [player]", NamedTextColor.RED));
                 return true;
             }
             String statArg = args[0].toLowerCase();
@@ -1142,7 +1274,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             
             if (!opArg.equals("reset")) {
                 if (args.length < 3) {
-                    player.sendMessage(Component.text("❌ Usage: /erpscoreboard <h/e/d/k/ki/de> <add/remove/set> <amount> [player]", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Usage: /erpscoreboard <t/e/d/k/ki/de> <add/remove/set> <amount> [player]", NamedTextColor.RED));
                     return true;
                 }
                 try {
@@ -1165,14 +1297,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             UUID targetUUID = target.getUniqueId();
             long currentValue = 0;
             switch (statArg) {
-                case "h" -> currentValue = hoursPlayedMap.getOrDefault(targetUUID, 0);
+                case "t", "h" -> currentValue = timePlayedMap.getOrDefault(targetUUID, 0);
                 case "e" -> currentValue = erpiesMap.getOrDefault(targetUUID, 0L);
                 case "d" -> currentValue = derpiesMap.getOrDefault(targetUUID, 0L);
                 case "k" -> currentValue = keysMap.getOrDefault(targetUUID, 0);
                 case "ki" -> currentValue = killsMap.getOrDefault(targetUUID, 0);
                 case "de" -> currentValue = deathsMap.getOrDefault(targetUUID, 0);
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown stat '" + statArg + "'! Use: h, e, d, k, ki, de", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown stat '" + statArg + "'! Use: t, e, d, k, ki, de", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -1189,12 +1321,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }
             
-            if (statArg.equals("h") || statArg.equals("k") || statArg.equals("ki") || statArg.equals("de")) {
+            if (statArg.equals("t") || statArg.equals("h") || statArg.equals("k") || statArg.equals("ki") || statArg.equals("de")) {
                 if (newValue < 0) newValue = 0;
                 if (newValue > Integer.MAX_VALUE) newValue = Integer.MAX_VALUE;
                 int intVal = (int) newValue;
                 switch (statArg) {
-                    case "h" -> hoursPlayedMap.put(targetUUID, intVal);
+                    case "t", "h" -> timePlayedMap.put(targetUUID, intVal);
                     case "k" -> keysMap.put(targetUUID, intVal);
                     case "ki" -> killsMap.put(targetUUID, intVal);
                     case "de" -> deathsMap.put(targetUUID, intVal);
@@ -1306,6 +1438,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (command.getName().equalsIgnoreCase("nametag")) {
             openNametagMainMenu(player);
+            return true;
+        }
+
+        if (command.getName().equalsIgnoreCase("bank")) {
+            openBankGui(player);
             return true;
         }
 
@@ -1609,8 +1746,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "amethyst_key" -> item = createAmethystKey();
                 case "npc_egg" -> item = createNpcEgg();
                 case "floating_text" -> item = createFloatingTextItem();
+                case "command_chest" -> item = createCommandChest();
+                case "divine_flame" -> item = createDivineFlame();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, command_chest, divine_flame", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -2696,28 +2835,58 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (meta != null) {
                 meta.title(Component.text("Server Rules", NamedTextColor.RED));
                 meta.author(Component.text("Staff"));
-
-                Component pageContent = Component.text("📜 ")
-                    .append(Component.text("Server Rules", NamedTextColor.BLACK, net.kyori.adventure.text.format.TextDecoration.BOLD))
-                    .append(Component.newline())
-                    .append(Component.text("-------------------", NamedTextColor.BLACK))
-                    .append(Component.newline())
-                    .append(Component.newline())
-                    .append(Component.text("Rule 1: ", NamedTextColor.BLACK, net.kyori.adventure.text.format.TextDecoration.BOLD))
-                    .append(Component.text("no xray", NamedTextColor.BLACK))
-                    .append(Component.newline())
-                    .append(Component.newline())
-                    .append(Component.text("Rule 2: ", NamedTextColor.BLACK, net.kyori.adventure.text.format.TextDecoration.BOLD))
-                    .append(Component.text("no exploits and toolbox", NamedTextColor.BLACK))
-                    .append(Component.newline())
-                    .append(Component.newline())
-                    .append(Component.text("Rule 3: ", NamedTextColor.BLACK, net.kyori.adventure.text.format.TextDecoration.BOLD))
-                    .append(Component.text("no hacking", NamedTextColor.BLACK));
-
-                meta.addPages(pageContent);
+                for (String page : serverRules) {
+                    meta.addPages(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(page));
+                }
                 book.setItemMeta(meta);
             }
             player.openBook(book);
+            return true;
+        }
+
+        // --- /credits ---
+        if (command.getName().equalsIgnoreCase("credits")) {
+            ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
+            org.bukkit.inventory.meta.BookMeta meta = (org.bukkit.inventory.meta.BookMeta) book.getItemMeta();
+            if (meta != null) {
+                meta.title(Component.text("Server Credits", NamedTextColor.GOLD));
+                meta.author(Component.text("Staff"));
+                for (String page : serverCredits) {
+                    meta.addPages(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(page));
+                }
+                book.setItemMeta(meta);
+            }
+            player.openBook(book);
+            return true;
+        }
+
+        // --- /edit (rules/credits) ---
+        if (command.getName().equalsIgnoreCase("edit")) {
+            String pName = player.getName();
+            if (!pName.equalsIgnoreCase(".Redtoppat208") && !pName.equalsIgnoreCase("Redtoppat208")) {
+                player.sendMessage(Component.text("❌ Only player .Redtoppat208 can use this command!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 1) {
+                player.sendMessage(Component.text("❌ Usage: /edit (rules/credits)", NamedTextColor.RED));
+                return true;
+            }
+            String targetType = args[0].toLowerCase();
+            if (!targetType.equals("rules") && !targetType.equals("credits")) {
+                player.sendMessage(Component.text("❌ Usage: /edit (rules/credits)", NamedTextColor.RED));
+                return true;
+            }
+
+            ItemStack book = new ItemStack(Material.WRITABLE_BOOK);
+            org.bukkit.inventory.meta.BookMeta meta = (org.bukkit.inventory.meta.BookMeta) book.getItemMeta();
+            if (meta != null) {
+                List<String> pages = targetType.equals("rules") ? serverRules : serverCredits;
+                meta.setPages(pages);
+                book.setItemMeta(meta);
+            }
+            editingGlobalBook.put(player.getUniqueId(), targetType);
+            player.getInventory().addItem(book);
+            player.sendMessage(Component.text("📖 A book has been added to your inventory. Open it to edit the " + targetType + ", then Sign/Done to save!", NamedTextColor.YELLOW));
             return true;
         }
 
@@ -3073,6 +3242,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (event.isCancelled()) return;
         Location loc = block.getLocation();
 
+        if (commandChests.containsKey(loc)) {
+            if (player.getGameMode() == GameMode.SURVIVAL) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ Command Chests cannot be broken in Survival mode!", NamedTextColor.RED));
+                return;
+            }
+            commandChests.remove(loc);
+            saveCommandChests();
+            block.setType(Material.AIR);
+            loc.getWorld().dropItemNaturally(loc, createCommandChest());
+            player.sendMessage(Component.text("✅ Command Chest removed successfully.", NamedTextColor.GREEN));
+            return;
+        }
+
         if (shopCrates.containsKey(loc)) {
             ShopCrateData data = shopCrates.get(loc);
             if (player.getGameMode() == GameMode.SURVIVAL) {
@@ -3275,6 +3458,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         loc.getBlock().setType(Material.END_GATEWAY);
                     });
                     event.getPlayer().sendMessage(Component.text("🌌 You placed an End Gateway portal!", NamedTextColor.LIGHT_PURPLE));
+                } else if (customItem.equals("command_chest")) {
+                    Location loc = event.getBlock().getLocation();
+                    activeCommandChestSetup.put(event.getPlayer().getUniqueId(), loc);
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        openSignInput(event.getPlayer(), SignAction.SET_COMMAND_CHEST, null, "Enter Command");
+                    });
                 }
             }
         }
@@ -3317,6 +3506,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     event.setCancelled(true);
                     attacker.sendMessage(Component.text("❌ PvP and damage are disabled at spawn!", NamedTextColor.RED));
                     return;
+                }
+            }
+            
+            ItemStack weapon = attacker.getInventory().getItemInMainHand();
+            if (weapon != null && weapon.hasItemMeta()) {
+                String customItem = weapon.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && customItem.equals("divine_flame")) {
+                    event.getEntity().setFireTicks(160);
                 }
             }
         }
@@ -3747,7 +3944,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 && !title.equals("Set Home Points") && !title.equals("Teleport Home") && !title.equals("Settings")
                 && !title.equals("Setup Crate Shop") && !title.equals("Buy from Shop")
                 && !title.equals("Order Board") && !title.equals("Order Board - Your Orders")
-                && !title.endsWith("'s Homes") && !title.startsWith("Team: ") && !title.startsWith("Kick: ")) return;
+                && !title.endsWith("'s Homes") && !title.startsWith("Team: ") && !title.startsWith("Kick: ")
+                && !title.equals("Bank") && !title.equals("Deposit Items") && !title.equals("Withdraw Items") && !title.equals("Bank Stats")
+                && !title.equals("Duel Menu") && !title.startsWith("Select Player to Duel") && !title.startsWith("Challenge ")) return;
 
         if (title.startsWith("Kick: ")) {
             event.setCancelled(true);
@@ -3818,16 +4017,205 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
-        // Do not cancel clicks in "List an Item" GUI or "Setup Crate Shop" (slot 4) because players need to place/take items.
-        if (!title.equals("List an Item") && !title.equals("Setup Crate Shop")) {
+        // Do not cancel clicks in "List an Item" GUI, "Setup Crate Shop", or "Deposit Items" because players need to place/take items.
+        if (!title.equals("List an Item") && !title.equals("Setup Crate Shop") && !title.equals("Deposit Items")) {
             event.setCancelled(true);
         }
 
         Player player = (Player) event.getWhoClicked();
         UUID uuid = player.getUniqueId();
 
+        if (title.equals("Deposit Items")) {
+            return;
+        }
+
         if (title.equals("Setup Crate Shop")) {
             // Allow all clicks to place items in any of the 9 slots
+            return;
+        }
+
+        if (title.equals("Bank")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 11) {
+                Inventory depositInv = Bukkit.createInventory(null, 54, Component.text("Deposit Items"));
+                player.openInventory(depositInv);
+            } else if (slot == 13) {
+                openSignInput(player, SignAction.BANK_DEPOSIT, null, "Deposit: 100 erpies");
+            } else if (slot == 15) {
+                openBankWithdrawGui(player);
+            } else if (slot == 17) {
+                openBankStatsGui(player);
+            }
+            return;
+        }
+
+        if (title.equals("Bank Stats")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 22) {
+                openBankGui(player);
+            }
+            return;
+        }
+
+        if (title.equals("Withdraw Items")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 53) {
+                openBankGui(player);
+                return;
+            }
+            if (slot == 49) {
+                openSignInput(player, SignAction.BANK_WITHDRAW, null, "Withdraw: 100 erpies");
+                return;
+            }
+            if (slot >= 0 && slot < 45) {
+                List<ItemStack> bankItems = bankItemsMap.getOrDefault(uuid, new ArrayList<>());
+                List<ItemStack> compactItems = new ArrayList<>();
+                for (ItemStack item : bankItems) {
+                    if (item != null && item.getType() != Material.AIR) {
+                        compactItems.add(item);
+                    }
+                }
+                
+                if (slot < compactItems.size()) {
+                    ItemStack toWithdraw = compactItems.get(slot);
+                    HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(toWithdraw.clone());
+                    if (remaining.isEmpty()) {
+                        compactItems.remove(slot);
+                    } else {
+                        int withdrawn = toWithdraw.getAmount() - remaining.get(0).getAmount();
+                        if (withdrawn > 0) {
+                            toWithdraw.setAmount(remaining.get(0).getAmount());
+                        } else {
+                            player.sendMessage(Component.text("❌ Your inventory is full!", NamedTextColor.RED));
+                            return;
+                        }
+                    }
+                    bankItemsMap.put(uuid, compactItems);
+                    savePlayerData(player);
+                    openBankWithdrawGui(player);
+                }
+            }
+            return;
+        }
+
+        if (title.equals("Duel Menu")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 11) {
+                player.closeInventory();
+                UUID pUuid = player.getUniqueId();
+                if (duelQueue.contains(pUuid)) {
+                    player.sendMessage(Component.text("❌ You are already in the duel queue!", NamedTextColor.RED));
+                    return;
+                }
+                int activeFighters = 0;
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (p.getWorld().getName().equalsIgnoreCase("duel")) {
+                        activeFighters++;
+                    }
+                }
+                if (activeFighters >= 2) {
+                    player.sendMessage(Component.text("❌ There is still a dual waiting in queue", NamedTextColor.RED));
+                    return;
+                }
+                duelQueue.add(pUuid);
+                player.sendMessage(Component.text("✅ You joined the duel queue! (" + duelQueue.size() + " players queued)", NamedTextColor.GREEN));
+                checkAndStartQueuedDuel();
+            } else if (slot == 13) {
+                player.closeInventory();
+                UUID pUuid = player.getUniqueId();
+                if (duelQueue.remove(pUuid)) {
+                    player.sendMessage(Component.text("✅ You left the duel queue.", NamedTextColor.GREEN));
+                } else {
+                    player.sendMessage(Component.text("❌ You were not in the duel queue.", NamedTextColor.RED));
+                }
+            } else if (slot == 15) {
+                openDirectDuelSelectorGui(player, 0, null);
+            }
+            return;
+        }
+
+        if (title.startsWith("Select Player to Duel")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            int page = duelPlayerPage.getOrDefault(uuid, 0);
+            String search = duelPlayerSearchQuery.get(uuid);
+
+            if (slot == 45) {
+                if (page > 0) {
+                    openDirectDuelSelectorGui(player, page - 1, search);
+                }
+                return;
+            }
+            if (slot == 49) {
+                player.closeInventory();
+                openSignInput(player, SignAction.DUEL_PLAYER_SEARCH, null, "Search Name");
+                return;
+            }
+            if (slot == 53) {
+                List<Player> targetPlayers = new ArrayList<>();
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (p.equals(player)) continue;
+                    if (search != null && !p.getName().toLowerCase().contains(search.toLowerCase())) continue;
+                    targetPlayers.add(p);
+                }
+                if ((page + 1) * 45 < targetPlayers.size()) {
+                    openDirectDuelSelectorGui(player, page + 1, search);
+                }
+                return;
+            }
+
+            if (slot >= 0 && slot < 45) {
+                ItemStack item = event.getCurrentItem();
+                if (item != null && item.getType() == Material.PLAYER_HEAD) {
+                    String name = PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName()).trim();
+                    name = name.replaceAll("§[0-9a-fk-orxX]", "");
+                    Player target = Bukkit.getPlayer(name);
+                    if (target != null && target.isOnline()) {
+                        openDirectDuelConfirmationGui(player, target);
+                    } else {
+                        player.sendMessage(Component.text("❌ Player not found or offline.", NamedTextColor.RED));
+                    }
+                }
+            }
+            return;
+        }
+
+        if (title.startsWith("Challenge ")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            UUID targetUuid = pendingDirectDuelChallenge.remove(uuid);
+            player.closeInventory();
+            if (slot == 11) {
+                if (targetUuid != null) {
+                    Player target = Bukkit.getPlayer(targetUuid);
+                    if (target != null && target.isOnline()) {
+                        pendingDuelInvites.put(targetUuid, uuid);
+                        player.sendMessage(Component.text("⚔️ Duel challenge sent to " + target.getName() + "!", NamedTextColor.GREEN));
+                        target.sendMessage(Component.text("⚔️ " + player.getName() + " has challenged you to a duel!", NamedTextColor.GOLD));
+                        target.sendMessage(Component.text("👉 Type /dualaccept to accept (expires in 60s).", NamedTextColor.YELLOW));
+                        
+                        Bukkit.getScheduler().runTaskLater(this, () -> {
+                            if (pendingDuelInvites.containsKey(targetUuid) && pendingDuelInvites.get(targetUuid).equals(uuid)) {
+                                pendingDuelInvites.remove(targetUuid);
+                                if (target.isOnline()) {
+                                    target.sendMessage(Component.text("⏳ Duel challenge from " + player.getName() + " has expired.", NamedTextColor.GRAY));
+                                }
+                                if (player.isOnline()) {
+                                    player.sendMessage(Component.text("⏳ Duel challenge to " + target.getName() + " has expired.", NamedTextColor.GRAY));
+                                }
+                            }
+                        }, 1200L);
+                    } else {
+                        player.sendMessage(Component.text("❌ Player not found or offline.", NamedTextColor.RED));
+                    }
+                }
+            } else if (slot == 15) {
+                player.sendMessage(Component.text("❌ Challenge cancelled.", NamedTextColor.RED));
+            }
             return;
         }
 
@@ -4553,6 +4941,93 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return -1;
     }
 
+    private void applyInterest(UUID uuid) {
+        long last = lastInterestTimeMap.getOrDefault(uuid, 0L);
+        if (last == 0L) return;
+
+        long now = System.currentTimeMillis();
+        long diffMs = now - last;
+        long periodMs = 24L * 60 * 60 * 1000L;
+        if (diffMs >= periodMs) {
+            long periods = diffMs / periodMs;
+            long erpies = bankErpiesMap.getOrDefault(uuid, 0L);
+            long derpies = bankDerpiesMap.getOrDefault(uuid, 0L);
+            if (erpies > 0 || derpies > 0) {
+                for (int i = 0; i < periods; i++) {
+                    erpies = (long) (erpies * 1.40);
+                    derpies = (long) (derpies * 1.40);
+                }
+                bankErpiesMap.put(uuid, erpies);
+                bankDerpiesMap.put(uuid, derpies);
+            }
+            lastInterestTimeMap.put(uuid, last + (periods * periodMs));
+        }
+    }
+
+    private void openBankGui(Player player) {
+        UUID uuid = player.getUniqueId();
+        applyInterest(uuid);
+
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Bank"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 54; i++) {
+            inv.setItem(i, pane);
+        }
+
+        inv.setItem(11, createGuiItem(Material.CHEST, "Deposit Items", NamedTextColor.GREEN, "Click to deposit items"));
+        inv.setItem(13, createGuiItem(Material.OAK_SIGN, "Deposit Money", NamedTextColor.GOLD, "Click to deposit Erpies/Derpies"));
+        inv.setItem(15, createGuiItem(Material.ENDER_CHEST, "Withdraw", NamedTextColor.AQUA, "Click to withdraw items/money"));
+        inv.setItem(17, createGuiItem(Material.BOOK, "Stats", NamedTextColor.LIGHT_PURPLE, "Click to view your bank stats"));
+
+        player.openInventory(inv);
+    }
+
+    private void openBankStatsGui(Player player) {
+        UUID uuid = player.getUniqueId();
+        applyInterest(uuid);
+
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Bank Stats"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) {
+            inv.setItem(i, pane);
+        }
+
+        long erpies = bankErpiesMap.getOrDefault(uuid, 0L);
+        long derpies = bankDerpiesMap.getOrDefault(uuid, 0L);
+
+        inv.setItem(11, createGuiItem(Material.GOLD_BLOCK, "Deposited Erpies", NamedTextColor.GOLD, "Amount: " + erpies + " Erpies", "Interest Rate: +40% every 24 hours"));
+        inv.setItem(15, createGuiItem(Material.DIAMOND_BLOCK, "Deposited Derpies", NamedTextColor.AQUA, "Amount: " + derpies + " Derpies", "Interest Rate: +40% every 24 hours"));
+        inv.setItem(22, createGuiItem(Material.ARROW, "Back to Bank", NamedTextColor.YELLOW, "Click to go back"));
+
+        player.openInventory(inv);
+    }
+
+    private void openBankWithdrawGui(Player player) {
+        UUID uuid = player.getUniqueId();
+        applyInterest(uuid);
+
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Withdraw Items"));
+        List<ItemStack> items = bankItemsMap.getOrDefault(uuid, new ArrayList<>());
+
+        int idx = 0;
+        for (ItemStack item : items) {
+            if (idx >= 45) break;
+            if (item != null && item.getType() != Material.AIR) {
+                inv.setItem(idx++, item.clone());
+            }
+        }
+
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 45; i < 54; i++) {
+            inv.setItem(i, pane);
+        }
+
+        inv.setItem(49, createGuiItem(Material.OAK_SIGN, "Withdraw Money", NamedTextColor.GOLD, "Click to withdraw Erpies or Derpies"));
+        inv.setItem(53, createGuiItem(Material.ARROW, "Back to Bank", NamedTextColor.YELLOW, "Click to go back"));
+
+        player.openInventory(inv);
+    }
+
     private ItemStack createGuiItem(Material material, String name, NamedTextColor color, String... descriptionLines) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
@@ -4751,7 +5226,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String input = "";
             for (int i = 0; i < 4; i++) {
                 String line = PlainTextComponentSerializer.plainText().serialize(event.line(i)).trim();
-                if (line.equalsIgnoreCase("search here") || line.equalsIgnoreCase("list the price") || line.isEmpty()) {
+                if (line.equalsIgnoreCase("search here") || line.equalsIgnoreCase("list the price") || line.isEmpty()
+                        || line.equalsIgnoreCase("Enter Command") || line.equalsIgnoreCase("Search Name") || line.toLowerCase().startsWith("deposit:")
+                        || line.toLowerCase().startsWith("withdraw:") || line.toLowerCase().startsWith("price (")
+                        || line.toLowerCase().startsWith("price:") || line.toLowerCase().startsWith("enter")) {
                     continue;
                 }
                 input = line;
@@ -4759,12 +5237,163 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             if (input.isEmpty()) {
                 String line0 = PlainTextComponentSerializer.plainText().serialize(event.line(0)).trim();
-                if (!line0.equalsIgnoreCase("search here") && !line0.equalsIgnoreCase("list the price")) {
+                if (!line0.equalsIgnoreCase("search here") && !line0.equalsIgnoreCase("list the price")
+                        && !line0.equalsIgnoreCase("Enter Command") && !line0.equalsIgnoreCase("Search Name") && !line0.toLowerCase().startsWith("deposit:")
+                        && !line0.toLowerCase().startsWith("withdraw:") && !line0.toLowerCase().startsWith("price (")
+                        && !line0.toLowerCase().startsWith("price:") && !line0.toLowerCase().startsWith("enter")) {
                     input = line0;
                 }
             }
 
-            if (pending.action == SignAction.SEARCH) {
+            if (pending.action == SignAction.BANK_DEPOSIT) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Deposit cancelled.", NamedTextColor.RED));
+                } else {
+                    try {
+                        String inputLower = input.toLowerCase().replaceAll("[()\\s]", "");
+                        String amountStr = "";
+                        String currencyStr = "";
+
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([0-9.]+(?:[kmbt])?)(.*)$").matcher(inputLower);
+                        if (m.matches()) {
+                            amountStr = m.group(1);
+                            currencyStr = m.group(2);
+                        } else {
+                            java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("^(erpies|derpies|erpie|derpie|erp|derp|e|d)([0-9.]+(?:[kmbt])?)$").matcher(inputLower);
+                            if (m2.matches()) {
+                                currencyStr = m2.group(1);
+                                amountStr = m2.group(2);
+                            }
+                        }
+
+                        long amount = parseAmountWithSuffix(amountStr);
+                        String currency = null;
+                        if (currencyStr.contains("derp") || currencyStr.equals("d")) {
+                            currency = "derpies";
+                        } else if (currencyStr.contains("erp") || currencyStr.equals("e")) {
+                            currency = "erpies";
+                        }
+
+                        if (amount <= 0 || currency == null) {
+                            player.sendMessage(Component.text("❌ Invalid format. Please enter like '100 erpies' or '1m derpies'!", NamedTextColor.RED));
+                        } else {
+                            long playerBal = 0;
+                            if (currency.equals("erpies")) {
+                                playerBal = erpiesMap.getOrDefault(uuid, 0L);
+                            } else {
+                                playerBal = derpiesMap.getOrDefault(uuid, 0L);
+                            }
+
+                            if (playerBal < amount) {
+                                player.sendMessage(Component.text("❌ You don't have enough money! Your balance: " + playerBal + " " + currency, NamedTextColor.RED));
+                            } else {
+                                applyInterest(uuid);
+                                if (currency.equals("erpies")) {
+                                    erpiesMap.put(uuid, playerBal - amount);
+                                    bankErpiesMap.put(uuid, bankErpiesMap.getOrDefault(uuid, 0L) + amount);
+                                } else {
+                                    derpiesMap.put(uuid, playerBal - amount);
+                                    bankDerpiesMap.put(uuid, bankDerpiesMap.getOrDefault(uuid, 0L) + amount);
+                                }
+                                if (lastInterestTimeMap.getOrDefault(uuid, 0L) == 0L) {
+                                    lastInterestTimeMap.put(uuid, System.currentTimeMillis());
+                                }
+                                player.sendMessage(Component.text("✅ Deposited " + amount + " " + currency + " into the bank! It will gain 40% interest daily.", NamedTextColor.GREEN));
+                                updateScoreboard(player);
+                                savePlayerData(player);
+                            }
+                        }
+                    } catch (Exception e) {
+                        player.sendMessage(Component.text("❌ Invalid input format! Use: (amount erpies/derpies), e.g. 100 erpies or 1m derpies.", NamedTextColor.RED));
+                    }
+                }
+                Bukkit.getScheduler().runTask(this, () -> openBankGui(player));
+            } else if (pending.action == SignAction.BANK_WITHDRAW) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Withdrawal cancelled.", NamedTextColor.RED));
+                } else {
+                    try {
+                        String inputLower = input.toLowerCase().replaceAll("[()\\s]", "");
+                        String amountStr = "";
+                        String currencyStr = "";
+
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([0-9.]+(?:[kmbt])?)(.*)$").matcher(inputLower);
+                        if (m.matches()) {
+                            amountStr = m.group(1);
+                            currencyStr = m.group(2);
+                        } else {
+                            java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("^(erpies|derpies|erpie|derpie|erp|derp|e|d)([0-9.]+(?:[kmbt])?)$").matcher(inputLower);
+                            if (m2.matches()) {
+                                currencyStr = m2.group(1);
+                                amountStr = m2.group(2);
+                            }
+                        }
+
+                        long amount = parseAmountWithSuffix(amountStr);
+                        String currency = null;
+                        if (currencyStr.contains("derp") || currencyStr.equals("d")) {
+                            currency = "derpies";
+                        } else if (currencyStr.contains("erp") || currencyStr.equals("e")) {
+                            currency = "erpies";
+                        }
+
+                        if (amount <= 0 || currency == null) {
+                            player.sendMessage(Component.text("❌ Invalid format. Please enter like '100 erpies' or '1m derpies'!", NamedTextColor.RED));
+                        } else {
+                            applyInterest(uuid);
+                            long bankBal = 0;
+                            if (currency.equals("erpies")) {
+                                bankBal = bankErpiesMap.getOrDefault(uuid, 0L);
+                            } else {
+                                bankBal = bankDerpiesMap.getOrDefault(uuid, 0L);
+                            }
+
+                            if (bankBal < amount) {
+                                player.sendMessage(Component.text("❌ You do not have enough deposited! Deposited balance: " + bankBal + " " + currency, NamedTextColor.RED));
+                            } else {
+                                if (currency.equals("erpies")) {
+                                    bankErpiesMap.put(uuid, bankBal - amount);
+                                    erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + amount);
+                                } else {
+                                    bankDerpiesMap.put(uuid, bankBal - amount);
+                                    derpiesMap.put(uuid, derpiesMap.getOrDefault(uuid, 0L) + amount);
+                                }
+                                player.sendMessage(Component.text("✅ Withdrew " + amount + " " + currency + " from the bank!", NamedTextColor.GREEN));
+                                updateScoreboard(player);
+                                savePlayerData(player);
+                            }
+                        }
+                    } catch (Exception e) {
+                        player.sendMessage(Component.text("❌ Invalid input format! Use: (amount erpies/derpies), e.g. 100 erpies or 1m derpies.", NamedTextColor.RED));
+                    }
+                }
+                Bukkit.getScheduler().runTask(this, () -> openBankWithdrawGui(player));
+            } else if (pending.action == SignAction.SET_COMMAND_CHEST) {
+                Location chestLoc = activeCommandChestSetup.remove(uuid);
+                if (chestLoc != null) {
+                    if (input.isEmpty()) {
+                        player.sendMessage(Component.text("❌ Setup cancelled. Command chest removed.", NamedTextColor.RED));
+                        chestLoc.getBlock().setType(Material.AIR);
+                    } else {
+                        String command = input.trim();
+                        if (!command.startsWith("/")) {
+                            command = "/" + command;
+                        }
+                        commandChests.put(chestLoc, command);
+                        saveCommandChests();
+                        player.sendMessage(Component.text("✅ Command Chest bound to command: " + command, NamedTextColor.GREEN));
+                    }
+                }
+            } else if (pending.action == SignAction.DUEL_PLAYER_SEARCH) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Search cancelled.", NamedTextColor.RED));
+                    Bukkit.getScheduler().runTask(this, () -> openDirectDuelSelectorGui(player, 0, null));
+                } else {
+                    final String query = input;
+                    player.sendMessage(Component.text("🔍 Searching for: " + query, NamedTextColor.GREEN));
+                    Bukkit.getScheduler().runTask(this, () -> openDirectDuelSelectorGui(player, 0, query));
+                }
+            } else if (pending.action == SignAction.SEARCH) {
                 if (input.isEmpty()) {
                     player.sendMessage(Component.text("❌ Search cancelled.", NamedTextColor.RED));
                     Bukkit.getScheduler().runTask(this, () -> openAuctionGui(player, null));
@@ -5153,6 +5782,24 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGuiClose(InventoryCloseEvent event) {
         String title = event.getView().getTitle();
+        if (title.equals("Deposit Items")) {
+            Player player = (Player) event.getPlayer();
+            UUID uuid = player.getUniqueId();
+            List<ItemStack> bankItems = bankItemsMap.computeIfAbsent(uuid, k -> new ArrayList<>());
+            int depositedCount = 0;
+            for (ItemStack item : event.getInventory().getContents()) {
+                if (item != null && item.getType() != Material.AIR) {
+                    bankItems.add(item.clone());
+                    depositedCount += item.getAmount();
+                }
+            }
+            event.getInventory().clear();
+            if (depositedCount > 0) {
+                player.sendMessage(Component.text("✅ Successfully deposited " + depositedCount + " items into your bank!", NamedTextColor.GREEN));
+                savePlayerData(player);
+            }
+            return;
+        }
         if (title.equals("Setup Crate Shop")) {
             Player player = (Player) event.getPlayer();
             UUID uuid = player.getUniqueId();
@@ -5240,12 +5887,29 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         UUID uuid = player.getUniqueId();
 
-        addScoreboardRow(board, obj, "HoursPlayed", NamedTextColor.AQUA, String.valueOf(hoursPlayedMap.getOrDefault(uuid, 0)), 6, "§1");
+        addScoreboardRow(board, obj, "TimePlayed", NamedTextColor.AQUA, formatTimePlayed(timePlayedMap.getOrDefault(uuid, 0)), 6, "§1");
         addScoreboardRow(board, obj, "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0L)), 5, "§2");
         addScoreboardRow(board, obj, "Derpies", NamedTextColor.LIGHT_PURPLE, formatValue(derpiesMap.getOrDefault(uuid, 0L)), 4, "§3");
         addScoreboardRow(board, obj, "Keys", NamedTextColor.BLUE, String.valueOf(keysMap.getOrDefault(uuid, 0)), 3, "§4");
         addScoreboardRow(board, obj, "Kills", NamedTextColor.DARK_GREEN, String.valueOf(killsMap.getOrDefault(uuid, 0)), 2, "§5");
         addScoreboardRow(board, obj, "Deaths", NamedTextColor.RED, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 1, "§6");
+    }
+
+    private String formatTimePlayed(int totalSeconds) {
+        if (totalSeconds < 60) {
+            return totalSeconds + "s";
+        }
+        int days = totalSeconds / 86400;
+        int hours = (totalSeconds % 86400) / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int seconds = totalSeconds % 60;
+        if (days > 0) {
+            return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
+        }
+        if (hours > 0) {
+            return hours + "h " + minutes + "m " + seconds + "s";
+        }
+        return minutes + "m " + seconds + "s";
     }
 
     private String formatValue(long value) {
@@ -5428,6 +6092,156 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             sign.setItemMeta(meta);
         }
         return sign;
+    }
+
+    private ItemStack createCommandChest() {
+        ItemStack chest = new ItemStack(Material.CHEST);
+        ItemMeta meta = chest.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Command Chest", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Place to bind a command chest UI.", NamedTextColor.YELLOW),
+                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
+                Component.text("2. Type a command (e.g. /rtp) in the Sign UI.", NamedTextColor.GRAY),
+                Component.text("3. Right-click to open that command's UI.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "command_chest");
+            chest.setItemMeta(meta);
+        }
+        return chest;
+    }
+
+    private void loadCommandChests() {
+        commandChests.clear();
+        if (!getConfig().contains("commandchests")) return;
+        org.bukkit.configuration.ConfigurationSection sec = getConfig().getConfigurationSection("commandchests");
+        if (sec == null) return;
+        for (String key : sec.getKeys(false)) {
+            String path = "commandchests." + key;
+            String worldName = getConfig().getString(path + ".world");
+            double x = getConfig().getDouble(path + ".x");
+            double y = getConfig().getDouble(path + ".y");
+            double z = getConfig().getDouble(path + ".z");
+            World w = Bukkit.getWorld(worldName);
+            if (w == null) continue;
+            Location loc = new Location(w, x, y, z);
+            String command = getConfig().getString(path + ".command");
+            commandChests.put(loc, command);
+        }
+    }
+
+    private void saveCommandChests() {
+        getConfig().set("commandchests", null);
+        int i = 0;
+        for (var entry : commandChests.entrySet()) {
+            Location loc = entry.getKey();
+            String command = entry.getValue();
+            String path = "commandchests.c" + (i++);
+            getConfig().set(path + ".world", loc.getWorld().getName());
+            getConfig().set(path + ".x", loc.getX());
+            getConfig().set(path + ".y", loc.getY());
+            getConfig().set(path + ".z", loc.getZ());
+            getConfig().set(path + ".command", command);
+        }
+        saveConfig();
+    }
+
+    private ItemStack createDivineFlame() {
+        ItemStack powder = new ItemStack(Material.BLAZE_POWDER);
+        ItemMeta meta = powder.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Divine Flame", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Concentrated essence of celestial fire.", NamedTextColor.YELLOW),
+                Component.text("1. Left-click an entity to set them on fire.", NamedTextColor.GRAY),
+                Component.text("2. Crouch + hold Right-click for 3s to charge a fireball.", NamedTextColor.GRAY),
+                Component.text("3. Unleashes a massive flame tornado on impact.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "divine_flame");
+            powder.setItemMeta(meta);
+        }
+        return powder;
+    }
+
+    private void shootDivineFlame(Player player) {
+        player.sendMessage(Component.text("💥 Divine Flame unleashed!", NamedTextColor.RED));
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_DRAGON_FIREBALL_EXPLODE, 1.0f, 1.0f);
+        
+        Location startLoc = player.getEyeLocation();
+        org.bukkit.util.Vector direction = startLoc.getDirection().normalize().multiply(1.0);
+
+        new org.bukkit.scheduler.BukkitRunnable() {
+            Location currentLoc = startLoc.clone();
+            int flightTicks = 0;
+
+            @Override
+            public void run() {
+                if (flightTicks >= 60) {
+                    createFlameTornado(currentLoc, player);
+                    cancel();
+                    return;
+                }
+
+                currentLoc.add(direction);
+                currentLoc.getWorld().spawnParticle(Particle.FLAME, currentLoc, 5, 0.1, 0.1, 0.1, 0.02);
+                currentLoc.getWorld().spawnParticle(Particle.LAVA, currentLoc, 1, 0.0, 0.0, 0.0, 0.0);
+
+                if (currentLoc.getBlock().getType().isSolid()) {
+                    createFlameTornado(currentLoc, player);
+                    cancel();
+                    return;
+                }
+
+                java.util.Collection<org.bukkit.entity.LivingEntity> nearby = currentLoc.getNearbyLivingEntities(1.2);
+                for (org.bukkit.entity.LivingEntity entity : nearby) {
+                    if (!entity.equals(player)) {
+                        createFlameTornado(currentLoc, player);
+                        cancel();
+                        return;
+                    }
+                }
+
+                flightTicks++;
+            }
+        }.runTaskTimer(CustomScoreboard.this, 0L, 1L);
+    }
+
+    private void createFlameTornado(Location loc, Player shooter) {
+        loc.getWorld().playSound(loc, org.bukkit.Sound.ENTITY_GENERIC_EXPLODE, 1.5f, 0.8f);
+        loc.getWorld().playSound(loc, org.bukkit.Sound.ITEM_FIRECHARGE_USE, 1.5f, 0.5f);
+
+        java.util.Collection<org.bukkit.entity.LivingEntity> targets = loc.getNearbyLivingEntities(5.0);
+        for (org.bukkit.entity.LivingEntity entity : targets) {
+            if (!entity.equals(shooter)) {
+                entity.damage(30.0, shooter);
+                entity.setFireTicks(200);
+            }
+        }
+
+        new org.bukkit.scheduler.BukkitRunnable() {
+            int step = 0;
+            @Override
+            public void run() {
+                if (step >= 15) {
+                    cancel();
+                    return;
+                }
+                
+                for (int y = 0; y < 15; y++) {
+                    double radius = 0.5 + (y * 0.2) + (step * 0.05);
+                    double angle = (step * 0.5) + (y * 0.3);
+                    double x = radius * Math.cos(angle);
+                    double z = radius * Math.sin(angle);
+                    Location particleLoc = loc.clone().add(x, y * 0.4, z);
+                    loc.getWorld().spawnParticle(Particle.FLAME, particleLoc, 2, 0.05, 0.05, 0.05, 0.01);
+                    if (y % 3 == 0) {
+                        loc.getWorld().spawnParticle(Particle.SMALL_FLAME, particleLoc, 1, 0.0, 0.0, 0.0, 0.0);
+                    }
+                }
+                
+                step++;
+            }
+        }.runTaskTimer(CustomScoreboard.this, 0L, 2L);
     }
 
     private void openColorSelectionGui(Player player) {
@@ -5847,6 +6661,58 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (item.hasItemMeta()) {
             String customType = item.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
             if (customType != null) {
+                if (customType.equals("divine_flame")) {
+                    if (player.isSneaking()) {
+                        if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                            event.setCancelled(true);
+                            UUID pUuid = player.getUniqueId();
+                            if (!chargingDivineFlame.containsKey(pUuid)) {
+                                chargingDivineFlame.put(pUuid, System.currentTimeMillis());
+                                player.sendMessage(Component.text("🔥 You begin focusing the Divine Flame...", NamedTextColor.GOLD));
+                                player.playSound(player.getLocation(), org.bukkit.Sound.ITEM_FIRECHARGE_USE, 1.0f, 0.5f);
+                                
+                                new org.bukkit.scheduler.BukkitRunnable() {
+                                    int ticks = 0;
+                                    @Override
+                                    public void run() {
+                                        if (!player.isOnline()) {
+                                            chargingDivineFlame.remove(pUuid);
+                                            cancel();
+                                            return;
+                                        }
+                                        ItemStack hand = player.getInventory().getItemInMainHand();
+                                        String currentCustom = null;
+                                        if (hand != null && hand.hasItemMeta()) {
+                                            currentCustom = hand.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(CustomScoreboard.this, "custom_item"), PersistentDataType.STRING);
+                                        }
+                                        
+                                        if (!player.isSneaking() || currentCustom == null || !currentCustom.equals("divine_flame")) {
+                                            player.sendMessage(Component.text("❌ Focus lost!", NamedTextColor.RED));
+                                            chargingDivineFlame.remove(pUuid);
+                                            cancel();
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            player.startUsingItem(org.bukkit.inventory.EquipmentSlot.HAND);
+                                        } catch (Exception e) {}
+
+                                        Location eye = player.getEyeLocation();
+                                        player.getWorld().spawnParticle(Particle.FLAME, eye.add(player.getLocation().getDirection().multiply(0.5)), 3, 0.1, 0.1, 0.1, 0.05);
+                                        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_FIRE_AMBIENT, 0.5f, 1.0f + (ticks * 0.05f));
+
+                                        ticks += 2;
+                                        if (ticks >= 60) {
+                                            chargingDivineFlame.remove(pUuid);
+                                            cancel();
+                                            shootDivineFlame(player);
+                                        }
+                                    }
+                                }.runTaskTimer(CustomScoreboard.this, 0L, 2L);
+                            }
+                        }
+                    }
+                }
                 if (customType.equals("orbital_strike")) {
                     if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
                         event.setCancelled(true);
@@ -6051,6 +6917,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Block block = event.getClickedBlock();
         if (block == null || block.getType() != Material.CHEST) return;
         Location loc = block.getLocation();
+
+        if (commandChests.containsKey(loc)) {
+            event.setCancelled(true);
+            Player player = event.getPlayer();
+            String command = commandChests.get(loc);
+            String cmdToRun = command.startsWith("/") ? command.substring(1) : command;
+            bypassCommandChestOpCheck.add(player.getUniqueId());
+            try {
+                player.performCommand(cmdToRun);
+            } finally {
+                bypassCommandChestOpCheck.remove(player.getUniqueId());
+            }
+            return;
+        }
+
         if (!shopCrates.containsKey(loc)) return;
 
         event.setCancelled(true);
@@ -6907,7 +7788,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
     public void onPlayerCommandPreprocess(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        if (player.getWorld().getName().equalsIgnoreCase("dual")) {
+        if (player.getWorld().getName().equalsIgnoreCase("duel")) {
             String message = event.getMessage().toLowerCase().trim();
             if (message.startsWith("/tp") || message.startsWith("/spawn") || message.startsWith("/home")
                     || message.startsWith("/rtp") || message.startsWith("/dtp") || message.startsWith("/warp")
@@ -7272,8 +8153,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onMobSpawn(org.bukkit.event.entity.CreatureSpawnEvent event) {
         String worldName = event.getLocation().getWorld().getName();
-        if (worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone")) {
-            event.setCancelled(true);
+        if (worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone") || worldName.equalsIgnoreCase("spawn")) {
+            if (event.getSpawnReason() != org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM) {
+                event.setCancelled(true);
+            }
         }
     }
 
@@ -7505,6 +8388,32 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onBookEdit(org.bukkit.event.player.PlayerEditBookEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+
+        if (editingGlobalBook.containsKey(uuid)) {
+            if (!event.isSigning()) {
+                return;
+            }
+            String type = editingGlobalBook.remove(uuid);
+            org.bukkit.inventory.meta.BookMeta newMeta = event.getNewBookMeta();
+            List<String> pages = new ArrayList<>(newMeta.getPages());
+            if (type.equals("rules")) {
+                serverRules = pages;
+                getConfig().set("server.rules", serverRules);
+                saveConfig();
+                player.sendMessage(Component.text("✅ Server rules updated successfully!", NamedTextColor.GREEN));
+            } else if (type.equals("credits")) {
+                serverCredits = pages;
+                getConfig().set("server.credits", serverCredits);
+                saveConfig();
+                player.sendMessage(Component.text("✅ Server credits updated successfully!", NamedTextColor.GREEN));
+            }
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                player.getInventory().remove(Material.WRITABLE_BOOK);
+                player.getInventory().remove(Material.WRITTEN_BOOK);
+            }, 1L);
+            return;
+        }
+
         String teamLower = playerTeams.get(uuid);
         if (teamLower == null) return;
         TeamData data = teams.get(teamLower);
@@ -7558,20 +8467,82 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         leader.openInventory(inv);
     }
 
-    private void generateBedrockBox(World world) {
-        for (int x = -25; x <= 25; x++) {
-            for (int y = 100; y <= 150; y++) {
-                for (int z = -25; z <= 25; z++) {
-                    if (x == -25 || x == 25 || y == 100 || y == 150 || z == -25 || z == 25) {
-                        if (world.getBlockAt(x, y, z).getType() != Material.BEDROCK) {
-                            world.getBlockAt(x, y, z).setType(Material.BEDROCK);
-                        }
-                    } else {
-                        if (world.getBlockAt(x, y, z).getType() != Material.AIR) {
-                            world.getBlockAt(x, y, z).setType(Material.AIR);
-                        }
-                    }
+    private void cleanupDuelArena(World world) {
+        if (world == null) return;
+        
+        for (org.bukkit.entity.Entity entity : world.getEntities()) {
+            if (entity instanceof org.bukkit.entity.Item) {
+                entity.remove();
+            }
+            if (entity instanceof org.bukkit.entity.EnderCrystal) {
+                entity.remove();
+            }
+        }
+
+        for (var entry : duelBlockChanges.entrySet()) {
+            Location loc = entry.getKey();
+            BlockBackup backup = entry.getValue();
+            Block block = loc.getBlock();
+            block.setType(backup.material, false);
+            block.setBlockData(backup.data, false);
+        }
+        duelBlockChanges.clear();
+    }
+
+    @EventHandler
+    public void onDuelBlockPlace(BlockPlaceEvent event) {
+        Block block = event.getBlock();
+        if (block.getWorld().getName().equalsIgnoreCase("duel")) {
+            Location loc = block.getLocation();
+            if (!duelBlockChanges.containsKey(loc)) {
+                org.bukkit.block.BlockState state = event.getBlockReplacedState();
+                duelBlockChanges.put(loc, new BlockBackup(state.getType(), state.getBlockData()));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onDuelBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+        if (block.getWorld().getName().equalsIgnoreCase("duel")) {
+            Location loc = block.getLocation();
+            if (!duelBlockChanges.containsKey(loc)) {
+                duelBlockChanges.put(loc, new BlockBackup(block.getType(), block.getBlockData()));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onDuelExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
+        if (event.getLocation().getWorld().getName().equalsIgnoreCase("duel")) {
+            for (Block block : event.blockList()) {
+                Location loc = block.getLocation();
+                if (!duelBlockChanges.containsKey(loc)) {
+                    duelBlockChanges.put(loc, new BlockBackup(block.getType(), block.getBlockData()));
                 }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onDuelBlockExplode(org.bukkit.event.block.BlockExplodeEvent event) {
+        if (event.getBlock().getWorld().getName().equalsIgnoreCase("duel")) {
+            for (Block block : event.blockList()) {
+                Location loc = block.getLocation();
+                if (!duelBlockChanges.containsKey(loc)) {
+                    duelBlockChanges.put(loc, new BlockBackup(block.getType(), block.getBlockData()));
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onDuelBlockBurn(org.bukkit.event.block.BlockBurnEvent event) {
+        Block block = event.getBlock();
+        if (block.getWorld().getName().equalsIgnoreCase("duel")) {
+            Location loc = block.getLocation();
+            if (!duelBlockChanges.containsKey(loc)) {
+                duelBlockChanges.put(loc, new BlockBackup(block.getType(), block.getBlockData()));
             }
         }
     }
@@ -7579,7 +8550,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onCrystalPlace(org.bukkit.event.player.PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (player.getWorld().getName().equalsIgnoreCase("dual")) {
+        String worldName = player.getWorld().getName();
+        if (worldName.equalsIgnoreCase("spawn")) {
+            if (player.getGameMode() == org.bukkit.GameMode.CREATIVE) {
+                return;
+            }
+            if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
+                ItemStack item = event.getItem();
+                if (item != null && item.getType() == Material.END_CRYSTAL) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text("❌ You cannot place End Crystals in the Spawn dimension!", NamedTextColor.RED));
+                    return;
+                }
+            }
+        }
+        if (worldName.equalsIgnoreCase("duel")) {
             if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
                 ItemStack item = event.getItem();
                 if (item != null && item.getType() == Material.END_CRYSTAL) {
@@ -7594,11 +8579,26 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     @EventHandler
+    public void onBucketEmpty(org.bukkit.event.player.PlayerBucketEmptyEvent event) {
+        Player player = event.getPlayer();
+        if (player.getGameMode() == org.bukkit.GameMode.CREATIVE) {
+            return;
+        }
+        if (player.getWorld().getName().equalsIgnoreCase("spawn")) {
+            Material bucket = event.getBucket();
+            if (bucket == Material.WATER_BUCKET || bucket == Material.LAVA_BUCKET) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ You cannot place water or lava in the Spawn dimension!", NamedTextColor.RED));
+            }
+        }
+    }
+
+    @EventHandler
     public void onDuelDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
         Player deceased = event.getEntity();
-        if (deceased.getWorld().getName().equalsIgnoreCase("dual")) {
+        if (deceased.getWorld().getName().equalsIgnoreCase("duel")) {
             Player killer = deceased.getKiller();
-            if (killer != null && killer.isOnline() && killer.getWorld().getName().equalsIgnoreCase("dual")) {
+            if (killer != null && killer.isOnline() && killer.getWorld().getName().equalsIgnoreCase("duel")) {
                 killer.sendTitle("§a§lVICTORY!", "§fYou won the duel!", 10, 40, 10);
                 killer.sendMessage(Component.text("🏆 You won the duel! You have 1 minute to collect the loot before being teleported back to spawn.", NamedTextColor.GOLD));
                 
@@ -7608,11 +8608,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     
                     @Override
                     public void run() {
-                        if (!finalKiller.isOnline() || !finalKiller.getWorld().getName().equalsIgnoreCase("dual")) {
+                        if (!finalKiller.isOnline() || !finalKiller.getWorld().getName().equalsIgnoreCase("duel")) {
+                            cleanupDuelArena(deceased.getWorld());
+                            checkAndStartQueuedDuel();
                             cancel();
                             return;
                         }
                         if (timer <= 0) {
+                            cleanupDuelArena(deceased.getWorld());
+                            checkAndStartQueuedDuel();
                             cancel();
                             World spawnWorld = Bukkit.getWorld("spawn");
                             Location spawnLoc = spawnWorld != null ? spawnWorld.getSpawnLocation() : Bukkit.getWorlds().get(0).getSpawnLocation();
@@ -7626,6 +8630,257 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         timer--;
                     }
                 }.runTaskTimer(this, 20L, 20L);
+            } else {
+                cleanupDuelArena(deceased.getWorld());
+                checkAndStartQueuedDuel();
+            }
+        }
+    }
+
+
+
+    private void openDuelChestGui(Player player) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Duel Menu"));
+        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta paneMeta = pane.getItemMeta();
+        if (paneMeta != null) {
+            paneMeta.displayName(Component.text(" "));
+            pane.setItemMeta(paneMeta);
+        }
+        for (int i = 0; i < 27; i++) {
+            if (i != 11 && i != 13 && i != 15) {
+                inv.setItem(i, pane);
+            }
+        }
+
+        ItemStack join = new ItemStack(Material.GREEN_CONCRETE);
+        ItemMeta joinMeta = join.getItemMeta();
+        if (joinMeta != null) {
+            joinMeta.displayName(Component.text("Join Queue", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            joinMeta.lore(List.of(
+                Component.text("Queue up for a 1v1 duel.", NamedTextColor.GRAY),
+                Component.text("Players in queue: " + duelQueue.size(), NamedTextColor.YELLOW)
+            ));
+            join.setItemMeta(joinMeta);
+        }
+        inv.setItem(11, join);
+
+        ItemStack cancel = new ItemStack(Material.RED_CONCRETE);
+        ItemMeta cancelMeta = cancel.getItemMeta();
+        if (cancelMeta != null) {
+            cancelMeta.displayName(Component.text("Cancel Queue", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            cancelMeta.lore(List.of(Component.text("Leave the matchmaking queue.", NamedTextColor.GRAY)));
+            cancel.setItemMeta(cancelMeta);
+        }
+        inv.setItem(13, cancel);
+
+        ItemStack duelPlayer = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta dpMeta = duelPlayer.getItemMeta();
+        if (dpMeta != null) {
+            dpMeta.displayName(Component.text("Duel Player", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            dpMeta.lore(List.of(Component.text("Directly challenge an online player.", NamedTextColor.GRAY)));
+            duelPlayer.setItemMeta(dpMeta);
+        }
+        inv.setItem(15, duelPlayer);
+
+        player.openInventory(inv);
+    }
+
+    private void openDirectDuelSelectorGui(Player player, int page, String searchQuery) {
+        UUID uuid = player.getUniqueId();
+        duelPlayerPage.put(uuid, page);
+        if (searchQuery != null) {
+            duelPlayerSearchQuery.put(uuid, searchQuery);
+        } else {
+            duelPlayerSearchQuery.remove(uuid);
+        }
+
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Select Player to Duel" + (searchQuery != null ? " (Search)" : "")));
+
+        List<Player> targetPlayers = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.equals(player)) continue;
+            if (searchQuery != null && !p.getName().toLowerCase().contains(searchQuery.toLowerCase())) continue;
+            targetPlayers.add(p);
+        }
+
+        int startIndex = page * 45;
+        int endIndex = Math.min(startIndex + 45, targetPlayers.size());
+
+        int slot = 0;
+        for (int i = startIndex; i < endIndex; i++) {
+            Player target = targetPlayers.get(i);
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            org.bukkit.inventory.meta.SkullMeta skullMeta = (org.bukkit.inventory.meta.SkullMeta) head.getItemMeta();
+            if (skullMeta != null) {
+                skullMeta.setOwningPlayer(target);
+                skullMeta.displayName(Component.text(target.getName(), NamedTextColor.YELLOW, net.kyori.adventure.text.format.TextDecoration.BOLD));
+                skullMeta.lore(List.of(Component.text("Click to challenge to a duel!", NamedTextColor.GRAY)));
+                head.setItemMeta(skullMeta);
+            }
+            inv.setItem(slot++, head);
+        }
+
+        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta paneMeta = pane.getItemMeta();
+        if (paneMeta != null) {
+            paneMeta.displayName(Component.text(" "));
+            pane.setItemMeta(paneMeta);
+        }
+        for (int i = 45; i < 54; i++) {
+            inv.setItem(i, pane);
+        }
+
+        if (page > 0) {
+            ItemStack prev = new ItemStack(Material.ARROW);
+            ItemMeta prevMeta = prev.getItemMeta();
+            if (prevMeta != null) {
+                prevMeta.displayName(Component.text("Previous Page", NamedTextColor.YELLOW));
+                prev.setItemMeta(prevMeta);
+            }
+            inv.setItem(45, prev);
+        }
+
+        ItemStack search = new ItemStack(Material.OAK_SIGN);
+        ItemMeta searchMeta = search.getItemMeta();
+        if (searchMeta != null) {
+            searchMeta.displayName(Component.text("Search Player", NamedTextColor.GREEN));
+            searchMeta.lore(List.of(Component.text("Type name to filter list.", NamedTextColor.GRAY)));
+            search.setItemMeta(searchMeta);
+        }
+        inv.setItem(49, search);
+
+        if (endIndex < targetPlayers.size()) {
+            ItemStack next = new ItemStack(Material.ARROW);
+            ItemMeta nextMeta = next.getItemMeta();
+            if (nextMeta != null) {
+                nextMeta.displayName(Component.text("Next Page", NamedTextColor.YELLOW));
+                next.setItemMeta(nextMeta);
+            }
+            inv.setItem(53, next);
+        }
+
+        player.openInventory(inv);
+    }
+
+    private void openDirectDuelConfirmationGui(Player player, Player target) {
+        pendingDirectDuelChallenge.put(player.getUniqueId(), target.getUniqueId());
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Challenge " + target.getName() + "?"));
+
+        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta paneMeta = pane.getItemMeta();
+        if (paneMeta != null) {
+            paneMeta.displayName(Component.text(" "));
+            pane.setItemMeta(paneMeta);
+        }
+        for (int i = 0; i < 27; i++) {
+            if (i != 11 && i != 15) {
+                inv.setItem(i, pane);
+            }
+        }
+
+        ItemStack confirm = new ItemStack(Material.GREEN_CONCRETE);
+        ItemMeta confMeta = confirm.getItemMeta();
+        if (confMeta != null) {
+            confMeta.displayName(Component.text("Confirm Duel", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            confirm.setItemMeta(confMeta);
+        }
+        inv.setItem(11, confirm);
+
+        ItemStack cancel = new ItemStack(Material.RED_CONCRETE);
+        ItemMeta cancMeta = cancel.getItemMeta();
+        if (cancMeta != null) {
+            cancMeta.displayName(Component.text("Cancel", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            cancel.setItemMeta(cancMeta);
+        }
+        inv.setItem(15, cancel);
+
+        player.openInventory(inv);
+    }
+
+    private void checkAndStartQueuedDuel() {
+        World dualWorld = Bukkit.getWorld("duel");
+        if (dualWorld == null) {
+            WorldCreator creator = new WorldCreator("duel");
+            creator.environment(World.Environment.NORMAL);
+            dualWorld = Bukkit.createWorld(creator);
+        }
+        if (dualWorld == null) return;
+
+        int activeFighters = 0;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.getWorld().getName().equalsIgnoreCase("duel")) {
+                activeFighters++;
+            }
+        }
+
+        if (activeFighters >= 2) {
+            return;
+        }
+
+        List<Player> playersToDuel = new ArrayList<>();
+        java.util.Iterator<UUID> iter = duelQueue.iterator();
+        while (iter.hasNext() && playersToDuel.size() < 2) {
+            UUID id = iter.next();
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) {
+                playersToDuel.add(p);
+            }
+            iter.remove();
+        }
+
+        if (playersToDuel.size() < 2) {
+            for (Player p : playersToDuel) {
+                if (!duelQueue.contains(p.getUniqueId())) {
+                    duelQueue.add(0, p.getUniqueId());
+                }
+            }
+            return;
+        }
+
+        Player p1 = playersToDuel.get(0);
+        Player p2 = playersToDuel.get(1);
+
+        p1.sendMessage(Component.text("⚔️ Match found! Teleporting to duel...", NamedTextColor.GREEN));
+        p2.sendMessage(Component.text("⚔️ Match found! Teleporting to duel...", NamedTextColor.GREEN));
+
+        dualWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+        dualWorld.setTime(6000L);
+
+        org.bukkit.WorldBorder border = dualWorld.getWorldBorder();
+        border.setCenter(0.0, 0.0);
+        border.setSize(50.0);
+
+        cleanupDuelArena(dualWorld);
+
+        double y1 = dualWorld.getHighestBlockYAt(-15, 0);
+        double y2 = dualWorld.getHighestBlockYAt(15, 0);
+
+        Location loc1 = new Location(dualWorld, -15.5, y1 + 1.0, 0.5, -90f, 0f);
+        Location loc2 = new Location(dualWorld, 15.5, y2 + 1.0, 0.5, 90f, 0f);
+
+        p1.teleport(loc1);
+        p2.teleport(loc2);
+
+        p1.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
+        p2.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
+    }
+
+    @EventHandler
+    public void onEnderPearl(org.bukkit.event.player.PlayerTeleportEvent event) {
+        if (event.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.ENDER_PEARL) {
+            if (event.getFrom().getWorld().getName().equalsIgnoreCase("duel")) {
+                Location to = event.getTo();
+                if (to == null || !to.getWorld().getName().equalsIgnoreCase("duel")) {
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage(Component.text("❌ You cannot ender pearl out of the duel arena!", NamedTextColor.RED));
+                    return;
+                }
+                double limit = 25.0; // 50x50 centered at 0, 0
+                if (Math.abs(to.getX()) > limit || Math.abs(to.getZ()) > limit) {
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage(Component.text("❌ You cannot ender pearl outside the arena!", NamedTextColor.RED));
+                }
             }
         }
     }

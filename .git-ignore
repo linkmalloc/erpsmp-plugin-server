@@ -18,3 +18,5 @@ world_the_end/
 logs/
 crash-reports/
 s
+.secret
+.DS_Store

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ErpSMP | Custom Minecraft Survival Multiplayer</title>
+    <meta name="description" content="Join ErpSMP, the premium custom survival multiplayer Minecraft server featuring custom duel matchmaking, advanced banking, unique economy, and teams.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Main stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Background Ambient Glows -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    
+    <!-- Navigation -->
+    <header class="header">
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <span class="logo-accent">Erp</span>SMP
+            </a>
+            
+            <nav class="nav-links" id="navLinks">
+                <a href="#hero" class="nav-link active">Home</a>
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#guide" class="nav-link">How to Join</a>
+                <a href="#commands" class="nav-link">Commands</a>
+            </nav>
+            
+            <div class="nav-actions">
+                <button class="btn btn-primary btn-copy-ip" id="btnCopyIpNav">
+                    <i class="fa-solid fa-copy"></i> Copy IP
+                </button>
+                <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Toggle Navigation">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero-section">
+        <div class="hero-container">
+            <div class="hero-content">
+                <div class="server-badge">
+                    <span class="status-dot online"></span>
+                    <span id="playerCountText">Fetching Server Status...</span>
+                </div>
+                <h1 class="hero-title">
+                    The Ultimate <br>
+                    <span class="text-glow-gold">Custom Survival</span>
+                </h1>
+                <p class="hero-subtitle">
+                    Step into a custom-engineered multiplayer experience. Play.theerpsmp.net features real-time duel arenas, advanced banking systems, team territories, and a player-driven economy.
+                </p>
+                <div class="hero-ctas">
+                    <button class="btn btn-glow btn-copy-ip" id="btnCopyIpMain">
+                        <span class="btn-text">play.theerpsmp.net</span>
+                        <span class="btn-subtext"><i class="fa-solid fa-copy"></i> Click to Copy</span>
+                    </button>
+                    <a href="#guide" class="btn btn-secondary">
+                        How to Join <i class="fa-solid fa-arrow-down"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Hero Visual Widget -->
+            <div class="hero-widget-container">
+                <div class="status-card glass">
+                    <div class="card-header">
+                        <div class="server-brand">
+                            <div class="server-icon-container">
+                                <img src="server-icon.png" alt="ErpSMP Icon" class="server-icon-img">
+                            </div>
+                            <div>
+                                <h3 class="server-name">play.theerpsmp.net</h3>
+                                <p class="server-version">Java & Bedrock 1.21+</p>
+                            </div>
+                        </div>
+                        <span class="ping-badge" id="pingBadge"><i class="fa-solid fa-wifi"></i> 12ms</span>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-label">Online Players</span>
+                            <span class="stat-value" id="statusPlayers">-- / --</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Economy Status</span>
+                            <span class="stat-value text-green">Stable</span>
+                        </div>
+                    </div>
+                    
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div class="recent-events">
+                        <h4>Active Duel Arena</h4>
+                        <div class="event-item">
+                            <i class="fa-solid fa-swords text-gold"></i>
+                            <div>
+                                <p class="event-text" id="activeDuelText">Matchmaking queue is open</p>
+                                <span class="event-time">50x50 Overworld Arena</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+        <div class="section-header">
+            <h2 class="section-title">Engineered to <span class="text-glow-purple">Excellence</span></h2>
+            <p class="section-subtitle">We don't do vanilla survival. Explore custom plugins developed from the ground up for a balanced, high-stakes game.</p>
+        </div>
+        
+        <div class="features-grid">
+            <!-- Feature Card 1 -->
+            <div class="feature-card glass">
+                <div class="feature-icon bg-gold">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h3>1v1 Duel System</h3>
+                <p>Queue up for automated 1v1 duels inside an Overworld dimension enclosed by a 50x50 border. Features block rollback, ender pearl protection, and delayed item collection windows.</p>
+                <ul class="feature-bullets">
+                    <li><i class="fa-solid fa-check text-gold"></i> Automated Queue (/dualchest)</li>
+                    <li><i class="fa-solid fa-check text-gold"></i> Full World Recovery on Match End</li>
+                    <li><i class="fa-solid fa-check text-gold"></i> 1-Minute Loot-Collect Timer</li>
+                </ul>
+            </div>
+            
+            <!-- Feature Card 2 -->
+            <div class="feature-card glass">
+                <div class="feature-icon bg-purple">
+                    <i class="fa-solid fa-building-columns"></i>
+                </div>
+                <h3>Advanced Banking</h3>
+                <p>Deposit and withdraw physical inventory items or manage your Erpies and Derpies digital currencies in our secure bank vault systems.</p>
+                <ul class="feature-bullets">
+                    <li><i class="fa-solid fa-check text-purple"></i> Interactive Chest UIs</li>
+                    <li><i class="fa-solid fa-check text-purple"></i> Safe Item Storage & Retrieval</li>
+                    <li><i class="fa-solid fa-check text-purple"></i> Custom Floating Stats Display</li>
+                </ul>
+            </div>
+            
+            <!-- Feature Card 3 -->
+            <div class="feature-card glass">
+                <div class="feature-icon bg-teal">
+                    <i class="fa-solid fa-users-gear"></i>
+                </div>
+                <h3>Team System</h3>
+                <p>Form clans, recruit active players, design team hierarchies, and establish custom rules. Conquer the leaderboard together.</p>
+                <ul class="feature-bullets">
+                    <li><i class="fa-solid fa-check text-teal"></i> Custom Team Creation</li>
+                    <li><i class="fa-solid fa-check text-teal"></i> Invite and Leaderboard systems</li>
+                    <li><i class="fa-solid fa-check text-teal"></i> Team Chat and Base Coordinates</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- How to Join Section -->
+    <section id="guide" class="join-section">
+        <div class="section-header">
+            <h2 class="section-title">Ready to <span class="text-glow-teal">Connect?</span></h2>
+            <p class="section-subtitle">We support both Java and Bedrock cross-play connections seamlessly.</p>
+        </div>
+        
+        <div class="join-platforms">
+            <!-- Java Platform -->
+            <div class="platform-card glass">
+                <div class="platform-header">
+                    <i class="fa-brands fa-java text-gold"></i>
+                    <div>
+                        <h3>Java Edition</h3>
+                        <p>PC / MAC Client</p>
+                    </div>
+                </div>
+                <ol class="join-steps">
+                    <li>Launch Minecraft Java <strong>1.21+</strong>.</li>
+                    <li>Go to <strong>Multiplayer</strong> > <strong>Add Server</strong>.</li>
+                    <li>Enter server name and IP: <code class="code-block">play.theerpsmp.net</code>.</li>
+                    <li>Save, click join, and enjoy!</li>
+                </ol>
+            </div>
+            
+            <!-- Bedrock Platform -->
+            <div class="platform-card glass">
+                <div class="platform-header">
+                    <i class="fa-solid fa-mobile-screen-button text-teal"></i>
+                    <div>
+                        <h3>Bedrock Edition</h3>
+                        <p>Mobile / Console / Windows 10</p>
+                    </div>
+                </div>
+                <ol class="join-steps">
+                    <li>Open Minecraft Bedrock.</li>
+                    <li>Go to <strong>Servers</strong> tab > Scroll down > click <strong>Add Server</strong>.</li>
+                    <li>Server IP: <code class="code-block">play.theerpsmp.net</code>.</li>
+                    <li>Port: <code class="code-block">19132</code> (Default).</li>
+                    <li>Click Save & Join!</li>
+                </ol>
+            </div>
+        </div>
+    </section>
+
+    <!-- Commands List -->
+    <section id="commands" class="commands-section">
+        <div class="section-header">
+            <h2 class="section-title">Server <span class="text-glow-gold">Commands</span></h2>
+            <p class="section-subtitle">A quick reference list of available player command interfaces.</p>
+        </div>
+        
+        <div class="commands-container glass">
+            <div class="commands-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="commandSearchInput" placeholder="Search commands...">
+            </div>
+            
+            <div class="commands-list" id="commandsList">
+                <div class="command-row" data-name="dual join queue duelchest">
+                    <span class="command-syntax">/dualchest</span>
+                    <span class="command-desc">OP only from chat, accessible to all via Command Chest. Opens the duel matchmaking, queue cancel, or player head challenger UI.</span>
+                </div>
+                <div class="command-row" data-name="dual accept fight dualaccept">
+                    <span class="command-syntax">/dualaccept</span>
+                    <span class="command-desc">Accept a pending direct duel challenge within the 60-second window.</span>
+                </div>
+                <div class="command-row" data-name="bank money erpies balance">
+                    <span class="command-syntax">/bank</span>
+                    <span class="command-desc">Open your bank account interface to deposit or withdraw items and check digital balances.</span>
+                </div>
+                <div class="command-row" data-name="team create list maketeam">
+                    <span class="command-syntax">/maketeam &lt;name&gt;</span>
+                    <span class="command-desc">Create a new player team/clan on the server.</span>
+                </div>
+                <div class="command-row" data-name="team manage guild">
+                    <span class="command-syntax">/team</span>
+                    <span class="command-desc">Open your active team management menu to view members, rules, or base coordinate details.</span>
+                </div>
+                <div class="command-row" data-name="shop buy sell">
+                    <span class="command-syntax">/shop</span>
+                    <span class="command-desc">Open the main economy shop UI.</span>
+                </div>
+                <div class="command-row" data-name="spawn teleport home">
+                    <span class="command-syntax">/spawn</span>
+                    <span class="command-desc">Teleport safely back to the spawn dimension protection zone.</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with Mojang.</p>
+            <div class="socials">
+                <a href="#" aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
+                <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Notification for Copy IP -->
+    <div class="toast" id="copyToast">
+        <i class="fa-solid fa-circle-check"></i> Server IP Copied!
+    </div>
+
+    <!-- Script file -->
+    <script src="app.js"></script>
+</body>
+</html>

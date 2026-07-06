@@ -58,7 +58,7 @@ commands:
     permission: op
   erpitem:
     description: Spawn a custom item (OP only)
-    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword|gateway|orbital_strike|wand> [player]
+    usage: /erpitem <pickaxe|axe|bow|stick|crate|sword|pickaxe_lerp|mace|echo_sword|gateway|orbital_strike|wand|sulfur|sulfur_block> [player]
     permission: op
   sethome:
     description: Open sethome GUI to manage your homepoints
@@ -72,6 +72,9 @@ commands:
   setting:
     description: Open settings GUI to manage options
     usage: /setting
+  bank:
+    description: Open your personal bank account GUI
+    usage: /bank
   dupe:
     description: Duplicate the item in your hand (OP only)
     usage: /dupe @s <amount>
@@ -199,3 +202,15 @@ commands:
   dualaccept:
     description: Accept a pending duel challenge
     usage: /dualaccept
+  credits:
+    description: Open the server credits book UI
+    usage: /credits
+  edit:
+    description: Edit server rules or credits book (Special only)
+    usage: /edit <rules|credits>
+  say:
+    description: Send a title message to all players (Only for .Redtoppat208)
+    usage: /say <message>
+  dualchest:
+    description: Open the duel chest interface (OP only)
+    usage: /dualchest

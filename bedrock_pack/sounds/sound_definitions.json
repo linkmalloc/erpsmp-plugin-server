@@ -1,0 +1,15 @@
+{
+  "format_version": "1.14.0",
+  "sound_definitions": {
+    "custom.music.mysong": {
+      "category": "record",
+      "sounds": [
+        {
+          "name": "sounds/custom/mysong",
+          "stream": true,
+          "load_on_low_memory": true
+        }
+      ]
+    }
+  }
+}
