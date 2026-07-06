@@ -189,24 +189,80 @@
 
     <!-- Checkout Modal Dialog -->
     <div class="modal-overlay" id="checkoutModal">
-        <div class="modal-card glass">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-circle-check text-green"></i> Checkout Order</h3>
-                <button class="btn-close-modal" id="btnModalClose">&times;</button>
+        <div class="modal-card glass" id="checkoutModalCard">
+            <button class="btn-close-modal" id="btnModalClose" style="position: absolute; right: 20px; top: 20px; z-index: 10;">&times;</button>
+            
+            <div class="checkout-brand-header">
+                <div class="checkout-brand-logo">
+                    <span class="logo-accent">Erp</span>SMP
+                </div>
             </div>
-            <div class="modal-body">
-                <p>This is a simulated shop check-out. If this were a live integration, you'd proceed to pay.</p>
-                <div class="order-summary-box">
-                    <h4>Order Summary:</h4>
-                    <div id="modalOrderSummary"></div>
-                    <hr class="summary-divider">
-                    <div class="cart-summary-row">
-                        <strong>Total:</strong>
-                        <strong id="modalTotal">$0.00</strong>
+
+            <!-- STEP 1: Enter Username & Choose Platform -->
+            <div class="checkout-step-1" id="checkoutStep1">
+                <h3>Enter your Minecraft Username</h3>
+                <div class="platform-selector">
+                    <button class="platform-btn active" id="btnPlatformJava" data-platform="java">
+                        <i class="fa-solid fa-desktop"></i> JAVA
+                    </button>
+                    <button class="platform-btn" id="btnPlatformBedrock" data-platform="bedrock">
+                        <i class="fa-solid fa-gamepad"></i> BEDROCK
+                    </button>
+                </div>
+                <div class="checkout-input-group">
+                    <input type="text" id="checkoutUsernameInput" placeholder="Enter your username">
+                    <button class="btn-checkout-continue" id="btnCheckoutContinue">
+                        Continue <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 2: Checkout Basket Details -->
+            <div class="checkout-step-2" id="checkoutStep2" style="display: none;">
+                <div class="checkout-step-2-header">
+                    <div class="checkout-title-wrap">
+                        <i class="fa-solid fa-bag-shopping"></i>
+                        <div class="checkout-title-info">
+                            <h3>Checkout</h3>
+                            <p>Total: <span id="checkoutTotalText">$0.00</span></p>
+                        </div>
+                    </div>
+                    <div class="currency-select-wrap">
+                        <select id="checkoutCurrencySelect">
+                            <option value="PHP">PHP ₱</option>
+                            <option value="USD">USD $</option>
+                        </select>
                     </div>
                 </div>
-                <button class="btn btn-primary btn-pay-now" id="btnPayNow">
-                    Simulate Payment Complete
+
+                <div class="checkout-user-banner">
+                    <div class="checkout-user-info">
+                        <img src="" alt="Avatar" class="checkout-avatar" id="checkoutUserAvatar">
+                        <div class="checkout-user-details">
+                            <p>You are currently signed in as</p>
+                            <div class="checkout-username" id="checkoutUsernameDisplay">.Redtoppat208</div>
+                        </div>
+                    </div>
+                    <button class="btn-switch-account" id="btnSwitchAccount">Wrong account? Switch Accounts</button>
+                </div>
+
+                <div class="checkout-table-container">
+                    <table class="checkout-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Price</th>
+                                <th>Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="checkoutTableBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <button class="btn-proceed-checkout" id="btnProceedCheckout">
+                    Proceed to checkout <i class="fa-solid fa-chevron-right"></i>
                 </button>
             </div>
         </div>
