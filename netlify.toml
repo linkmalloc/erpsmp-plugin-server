@@ -1,0 +1,8 @@
+[build]
+  base = "www"
+  publish = "www"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
