@@ -1,1 +1,1 @@
-scp -r -i "erpsmp-dev.pem" plugins/money ubuntu@18.206.179.9:~/theerpdevs/
+scp -r -i ".secret/erpsmp-dev.pem" plugins/money ubuntu@18.206.179.9:~/theerpdevs/
