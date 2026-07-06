@@ -1,43 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ErpSMP | Official Merch Store</title>
-    <meta name="description" content="Shop official ErpSMP apparel, accessories, stickers, and mugs. High-quality custom gear for the ultimate survival multiplayer players.">
-    
+    <meta name="description"
+        content="Shop official ErpSMP apparel, accessories, stickers, and mugs. High-quality custom gear for the ultimate survival multiplayer players.">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap"
+        rel="stylesheet">
+
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- Main stylesheet (reusing variables and layout) -->
     <link rel="stylesheet" href="styles.css">
     <!-- Merch specific styles -->
     <link rel="stylesheet" href="merch-styles.css">
 </head>
+
 <body>
     <!-- Background Ambient Glows -->
     <div class="ambient-glow glow-1"></div>
     <div class="ambient-glow glow-2"></div>
-    
+
     <!-- Navigation -->
     <header class="header">
         <div class="nav-container">
             <a href="index.html" class="logo">
                 <span class="logo-accent">Erp</span>SMP
             </a>
-            
+
             <nav class="nav-links" id="navLinks">
                 <a href="index.html#hero" class="nav-link">Home</a>
                 <a href="index.html#features" class="nav-link">Features</a>
                 <a href="index.html#guide" class="nav-link">How to Join</a>
                 <a href="merch.html" class="nav-link active">Merch</a>
             </nav>
-            
+
             <div class="nav-actions">
                 <button class="btn btn-secondary btn-cart" id="btnCartToggle">
                     <i class="fa-solid fa-bag-shopping"></i> <span id="cartCountBadge" class="cart-badge">0</span>
@@ -54,7 +59,8 @@
         <div class="section-header">
             <span class="store-badge">Official Store</span>
             <h1 class="section-title">Server <span class="text-glow-gold">Gear & Merch</span></h1>
-            <p class="section-subtitle">Rep the erp. High quality custom gaming apparel, mugs, hoodies, and sticker sheets shipped worldwide.</p>
+            <p class="section-subtitle">Rep the erp. High quality custom gaming apparel, mugs, hoodies, and sticker
+                sheets shipped worldwide.</p>
         </div>
     </section>
 
@@ -77,64 +83,76 @@
             <!-- Merch Grid -->
             <div class="merch-grid" id="merchGrid">
                 <!-- Tshirt -->
-                <div class="merch-card glass" data-id="tshirt" data-category="apparel" data-name="Premium Erp T-Shirt" data-price="24.99">
+                <div class="merch-card glass" data-id="tshirt" data-category="apparel" data-name="Premium Erp T-Shirt"
+                    data-price="24.99">
                     <div class="merch-img-container">
                         <img src="merch_tshirt.png" alt="Premium Erp T-Shirt" class="merch-img">
                         <span class="merch-tag gold">Hot</span>
                     </div>
                     <div class="merch-info">
                         <h3>Premium Erp T-Shirt</h3>
-                        <p class="merch-desc">100% organic cotton tee featuring a glowing gold dimensional Erp logo printed with heavy-grade metallic ink.</p>
+                        <p class="merch-desc">100% organic cotton tee featuring a glowing gold dimensional Erp logo
+                            printed with heavy-grade metallic ink.</p>
                         <div class="merch-footer">
-                            <span class="merch-price">$24.99</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i> Add</button>
+                            <span class="merch-price">₱ 499.95</span>
+                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
+                                Add</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Hoodie -->
-                <div class="merch-card glass" data-id="hoodie" data-category="apparel" data-name="Challenger Hoodie" data-price="49.99">
+                <div class="merch-card glass" data-id="hoodie" data-category="apparel" data-name="Challenger Hoodie"
+                    data-price="49.99">
                     <div class="merch-img-container">
                         <img src="merch_hoodie.png" alt="Challenger Hoodie" class="merch-img">
                         <span class="merch-tag purple">Limited</span>
                     </div>
                     <div class="merch-info">
                         <h3>Challenger Hoodie</h3>
-                        <p class="merch-desc">Double-brushed dark violet pullover hoodie. Features the standard gold crest logo and thick warm cuffs.</p>
+                        <p class="merch-desc">Double-brushed dark violet pullover hoodie. Features the standard gold
+                            crest logo and thick warm cuffs.</p>
                         <div class="merch-footer">
-                            <span class="merch-price">$49.99</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i> Add</button>
+                            <span class="merch-price">₱ 1,499.95</span>
+                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
+                                Add</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Mug -->
-                <div class="merch-card glass" data-id="mug" data-category="accessories" data-name="Glossy Ceramic Mug" data-price="14.99">
+                <div class="merch-card glass" data-id="mug" data-category="accessories" data-name="Glossy Ceramic Mug"
+                    data-price="14.99">
                     <div class="merch-img-container">
                         <img src="merch_mug.png" alt="Glossy Ceramic Mug" class="merch-img">
                     </div>
                     <div class="merch-info">
                         <h3>Glossy Ceramic Mug</h3>
-                        <p class="merch-desc">Glossy deep-black stoneware mug with the gold brand print. Holds 15oz of fuel for overnight custom duels.</p>
+                        <p class="merch-desc">Glossy deep-black stoneware mug with the gold brand print. Holds 15oz of
+                            fuel for overnight custom duels.</p>
                         <div class="merch-footer">
-                            <span class="merch-price">$14.99</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i> Add</button>
+                            <span class="merch-price">₱ 399.95</span>
+                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
+                                Add</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Stickers -->
-                <div class="merch-card glass" data-id="stickers" data-category="accessories" data-name="Holographic Sticker Sheet" data-price="5.99">
+                <div class="merch-card glass" data-id="stickers" data-category="accessories"
+                    data-name="Holographic Sticker Sheet" data-price="5.99">
                     <div class="merch-img-container">
                         <img src="merch_stickers.png" alt="Holographic Sticker Sheet" class="merch-img">
                         <span class="merch-tag teal">Pack</span>
                     </div>
                     <div class="merch-info">
                         <h3>Holographic Sticker Sheet</h3>
-                        <p class="merch-desc">Waterproof die-cut vinyl sticker pack with reflective rainbow gold details. Perfect for laptops and water bottles.</p>
+                        <p class="merch-desc">Waterproof die-cut vinyl sticker pack with reflective rainbow gold
+                            details. Perfect for laptops and water bottles.</p>
                         <div class="merch-footer">
-                            <span class="merch-price">$5.99</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i> Add</button>
+                            <span class="merch-price">₱ 199.95</span>
+                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
+                                Add</button>
                         </div>
                     </div>
                 </div>
@@ -149,7 +167,7 @@
             <h3><i class="fa-solid fa-bag-shopping"></i> Your Cart</h3>
             <button class="btn-close-cart" id="btnCartClose">&times;</button>
         </div>
-        
+
         <div class="cart-items-container" id="cartItemsList">
             <!-- Dynamically populated via JS -->
             <div class="cart-empty-state">
@@ -157,7 +175,7 @@
                 <p>Your cart is empty.</p>
             </div>
         </div>
-        
+
         <div class="cart-drawer-footer">
             <div class="cart-summary-row">
                 <span>Subtotal:</span>
@@ -197,7 +215,8 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-container">
-            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with Mojang.</p>
+            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with
+                Mojang.</p>
             <div class="socials">
                 <a href="#" aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
                 <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
@@ -213,4 +232,5 @@
     <!-- Script files -->
     <script src="merch-app.js"></script>
 </body>
+
 </html>
