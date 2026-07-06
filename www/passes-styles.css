@@ -1,0 +1,267 @@
+/* Passes Page Styling System */
+
+.passes-hero {
+    padding-top: calc(var(--header-height) + 40px);
+    padding-bottom: 20px;
+    text-align: center;
+}
+
+.passes-section {
+    padding-top: 10px;
+    padding-bottom: 100px;
+}
+
+.passes-container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+/* Grid Layout */
+.passes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 40px;
+}
+
+/* Pass Card Styling */
+.pass-card {
+    display: flex;
+    flex-direction: column;
+    padding: 32px;
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition-smooth);
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pass-card:hover {
+    transform: translateY(-8px);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Color Themes & Ambient Glows */
+.pass-card.bronze {
+    border-top: 4px solid #b45309;
+}
+.pass-card.bronze:hover {
+    box-shadow: 0 0 30px rgba(180, 83, 9, 0.15), 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.pass-card.pro {
+    border-top: 4px solid #0066ff;
+}
+.pass-card.pro.active-glow {
+    box-shadow: 0 0 24px rgba(0, 102, 255, 0.15);
+    border-color: rgba(0, 102, 255, 0.3);
+}
+.pass-card.pro:hover {
+    box-shadow: 0 0 40px rgba(0, 102, 255, 0.3), 0 12px 40px rgba(0, 0, 0, 0.6);
+    border-color: rgba(0, 102, 255, 0.5);
+}
+
+.pass-card.premium {
+    border-top: 4px solid #a855f7;
+}
+.pass-card.premium:hover {
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.3), 0 12px 40px rgba(0, 0, 0, 0.6);
+    border-color: rgba(168, 85, 247, 0.5);
+}
+
+/* Badge styling */
+.pass-badge {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+}
+
+.pass-badge.popular {
+    background: #0066ff;
+    border-color: #0066ff;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(0, 102, 255, 0.4);
+}
+
+.pass-badge.elite {
+    background: #a855f7;
+    border-color: #a855f7;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+
+/* Header inside card */
+.pass-header {
+    margin-bottom: 28px;
+    text-align: center;
+}
+
+.pass-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 24px;
+}
+
+.bronze .pass-icon { color: #f59e0b; }
+.pro .pass-icon { color: #0066ff; }
+.premium .pass-icon { color: #a855f7; }
+
+.pass-header h3 {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.pass-price {
+    font-size: 28px;
+    font-weight: 800;
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--text-primary);
+}
+
+.pass-price .price-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-family: var(--font-primary);
+}
+
+/* Body and Features list */
+.pass-body {
+    flex-grow: 1;
+    margin-bottom: 32px;
+}
+
+.pass-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pass-features li {
+    font-size: 14px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.4;
+}
+
+.pass-features li i {
+    font-size: 14px;
+    margin-top: 3px;
+    color: #10b981; /* Default green check */
+}
+
+.pro .pass-features li i {
+    color: #3b82f6; /* Blue check for pro */
+}
+
+.premium .pass-features li i {
+    color: #a855f7; /* Gold/Purple check for premium */
+}
+
+/* Footer buttons */
+.pass-footer button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.btn-glow-blue {
+    background: #0066ff;
+    border-color: #0066ff;
+    color: white;
+}
+.btn-glow-blue:hover {
+    background: #0052cc;
+    box-shadow: 0 0 16px rgba(0, 102, 255, 0.4);
+}
+
+.btn-glow-gold {
+    background: #a855f7;
+    border-color: #a855f7;
+    color: white;
+}
+.btn-glow-gold:hover {
+    background: #9333ea;
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.4);
+}
+
+/* Hover Micro-Animations */
+.pass-card {
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.pass-features li {
+    transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.pass-card:hover .pass-features li {
+    color: var(--text-primary);
+}
+
+.pass-card:hover .pass-features li:hover {
+    transform: translateX(4px);
+}
+
+.pass-icon i {
+    transition: transform 0.3s ease;
+}
+
+.pass-card:hover .pass-icon i {
+    transform: scale(1.1) rotate(5deg);
+}
+
+/* Bronze button style */
+.pass-card.bronze button {
+    background: #b45309;
+    border-color: #b45309;
+    color: white;
+    transition: var(--transition-smooth);
+}
+
+.pass-card.bronze button:hover {
+    background: #92400e;
+    box-shadow: 0 0 16px rgba(180, 83, 9, 0.4);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .passes-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .passes-grid {
+        grid-template-columns: 1fr;
+        max-width: 420px;
+        margin: 40px auto 0;
+    }
+}

@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ErpSMP | Official Merch Store</title>
+    <title>ErpSMP | Official Game Passes Store</title>
     <meta name="description"
-        content="Shop official ErpSMP apparel, accessories, stickers, and mugs. High-quality custom gear for the ultimate survival multiplayer players.">
+        content="Buy official ErpSMP game passes and ranks. Unlock premium vault storage, custom chat tags, duel priority queue, and exclusive cosmetics.">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,10 +18,12 @@
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Main stylesheet (reusing variables and layout) -->
+    <!-- Main stylesheet -->
     <link rel="stylesheet" href="styles.css">
-    <!-- Merch specific styles -->
+    <!-- Merch styles for cart drawer and checkout modal -->
     <link rel="stylesheet" href="merch-styles.css">
+    <!-- Store specific styles -->
+    <link rel="stylesheet" href="passes-styles.css">
 </head>
 
 <body>
@@ -40,8 +42,8 @@
                 <a href="index.html#hero" class="nav-link">Home</a>
                 <a href="index.html#features" class="nav-link">Features</a>
                 <a href="index.html#guide" class="nav-link">How to Join</a>
-                <a href="passes.html" class="nav-link">Passes</a>
-                <a href="merch.html" class="nav-link active">Merch</a>
+                <a href="passes.html" class="nav-link active">Passes</a>
+                <a href="merch.html" class="nav-link">Merch</a>
             </nav>
 
             <div class="nav-actions">
@@ -55,106 +57,101 @@
         </div>
     </header>
 
-    <!-- Merch Hero -->
-    <section class="merch-hero">
+    <!-- Passes Hero -->
+    <section class="passes-hero">
         <div class="section-header">
             <span class="store-badge">Official Store</span>
-            <h1 class="section-title">Server <span class="text-glow-gold">Gear & Merch</span></h1>
-            <p class="section-subtitle">Rep the erp. High quality custom gaming apparel, mugs, hoodies, and sticker
-                sheets shipped worldwide.</p>
+            <h1 class="section-title">Server <span class="text-glow-purple">Game Passes</span></h1>
+            <p class="section-subtitle">Support the server and unlock legendary perks, custom vaults, rank tags, and duel kits.</p>
         </div>
     </section>
 
-    <!-- Merch Main Section -->
-    <section class="merch-section">
-        <div class="merch-container">
-            <!-- Filter Bar -->
-            <div class="merch-filter-bar glass">
-                <div class="search-box">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="merchSearch" placeholder="Search gear...">
-                </div>
-                <div class="filter-options">
-                    <button class="filter-btn active" data-filter="all">All Items</button>
-                    <button class="filter-btn" data-filter="apparel">Apparel</button>
-                    <button class="filter-btn" data-filter="accessories">Accessories</button>
-                </div>
-            </div>
-
-            <!-- Merch Grid -->
-            <div class="merch-grid" id="merchGrid">
-                <!-- Tshirt -->
-                <div class="merch-card glass" data-id="tshirt" data-category="apparel" data-name="Premium Erp T-Shirt"
-                    data-price="24.99">
-                    <div class="merch-img-container">
-                        <img src="merch_tshirt.png" alt="Premium Erp T-Shirt" class="merch-img">
-                        <span class="merch-tag gold">Hot</span>
-                    </div>
-                    <div class="merch-info">
-                        <h3>Premium Erp T-Shirt</h3>
-                        <p class="merch-desc">100% organic cotton tee featuring a glowing gold dimensional Erp logo
-                            printed with heavy-grade metallic ink.</p>
-                        <div class="merch-footer">
-                            <span class="merch-price">₱ 499.95</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
-                                Add</button>
+    <!-- Passes Main Section -->
+    <section class="passes-section">
+        <div class="passes-container">
+            <!-- Passes Grid -->
+            <div class="passes-grid">
+                <!-- Erpie -->
+                <div class="pass-card glass bronze" data-id="erpie" data-name="Erpie Pass" data-price="299.95">
+                    <div class="pass-badge">Basic</div>
+                    <div class="pass-header">
+                        <div class="pass-icon">
+                            <i class="fa-solid fa-cube"></i>
                         </div>
+                        <h3>Erpie</h3>
+                        <div class="pass-price">
+                            <span class="currency-symbol">₱</span> <span class="price-val">299.95</span>
+                            <span class="price-sub">/ one-time</span>
+                        </div>
+                    </div>
+                    <div class="pass-body">
+                        <ul class="pass-features">
+                            <li><i class="fa-solid fa-circle-check"></i> <strong>[Erpie]</strong> prefix in chat</li>
+                            <li><i class="fa-solid fa-circle-check"></i> Access to <strong>1x Bank Vault</strong></li>
+                            <li><i class="fa-solid fa-circle-check"></i> Standard Duel Arena entry kits</li>
+                            <li><i class="fa-solid fa-circle-check"></i> +1 Team Member Slot</li>
+                            <li><i class="fa-solid fa-circle-check"></i> Color codes in team names</li>
+                        </ul>
+                    </div>
+                    <div class="pass-footer">
+                        <button class="btn btn-primary btn-add-pass-cart">Add to cart</button>
                     </div>
                 </div>
 
-                <!-- Hoodie -->
-                <div class="merch-card glass" data-id="hoodie" data-category="apparel" data-name="Challenger Hoodie"
-                    data-price="49.99">
-                    <div class="merch-img-container">
-                        <img src="merch_hoodie.png" alt="Challenger Hoodie" class="merch-img">
-                        <span class="merch-tag purple">Limited</span>
-                    </div>
-                    <div class="merch-info">
-                        <h3>Challenger Hoodie</h3>
-                        <p class="merch-desc">Double-brushed dark violet pullover hoodie. Features the standard gold
-                            crest logo and thick warm cuffs.</p>
-                        <div class="merch-footer">
-                            <span class="merch-price">₱ 1,499.95</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
-                                Add</button>
+                <!-- Erpie Pro -->
+                <div class="pass-card glass pro active-glow" data-id="erpiepro" data-name="Erpie Pro Pass" data-price="599.95">
+                    <div class="pass-badge popular">Popular</div>
+                    <div class="pass-header">
+                        <div class="pass-icon">
+                            <i class="fa-solid fa-circle-nodes"></i>
                         </div>
+                        <h3>Erpie Pro</h3>
+                        <div class="pass-price">
+                            <span class="currency-symbol">₱</span> <span class="price-val">599.95</span>
+                            <span class="price-sub">/ one-time</span>
+                        </div>
+                    </div>
+                    <div class="pass-body">
+                        <ul class="pass-features">
+                            <li><i class="fa-solid fa-circle-check text-blue"></i> <strong>[Erpie Pro]</strong> silver chat prefix</li>
+                            <li><i class="fa-solid fa-circle-check text-blue"></i> Access to <strong>3x Bank Vaults</strong></li>
+                            <li><i class="fa-solid fa-circle-check text-blue"></i> Priority Matchmaking Queue</li>
+                            <li><i class="fa-solid fa-circle-check text-blue"></i> +3 Team Member Slots</li>
+                            <li><i class="fa-solid fa-circle-check text-blue"></i> Custom emoji support in chat</li>
+                            <li><i class="fa-solid fa-circle-check text-blue"></i> 10% Shop purchase discount</li>
+                        </ul>
+                    </div>
+                    <div class="pass-footer">
+                        <button class="btn btn-primary btn-add-pass-cart btn-glow-blue">Add to cart</button>
                     </div>
                 </div>
 
-                <!-- Mug -->
-                <div class="merch-card glass" data-id="mug" data-category="accessories" data-name="Glossy Ceramic Mug"
-                    data-price="14.99">
-                    <div class="merch-img-container">
-                        <img src="merch_mug.png" alt="Glossy Ceramic Mug" class="merch-img">
-                    </div>
-                    <div class="merch-info">
-                        <h3>Glossy Ceramic Mug</h3>
-                        <p class="merch-desc">Glossy deep-black stoneware mug with the gold brand print. Holds 15oz of
-                            fuel for overnight custom duels.</p>
-                        <div class="merch-footer">
-                            <span class="merch-price">₱ 399.95</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
-                                Add</button>
+                <!-- Erpie Pro Maxx -->
+                <div class="pass-card glass premium" data-id="erpiepromaxx" data-name="Erpie Pro Maxx Pass" data-price="1599.95">
+                    <div class="pass-badge elite">Elite</div>
+                    <div class="pass-header">
+                        <div class="pass-icon">
+                            <i class="fa-solid fa-crown"></i>
+                        </div>
+                        <h3>Erpie Pro Maxx</h3>
+                        <div class="pass-price">
+                            <span class="currency-symbol">₱</span> <span class="price-val">1,599.95</span>
+                            <span class="price-sub">/ one-time</span>
                         </div>
                     </div>
-                </div>
-
-                <!-- Stickers -->
-                <div class="merch-card glass" data-id="stickers" data-category="accessories"
-                    data-name="Holographic Sticker Sheet" data-price="5.99">
-                    <div class="merch-img-container">
-                        <img src="merch_stickers.png" alt="Holographic Sticker Sheet" class="merch-img">
-                        <span class="merch-tag teal">Pack</span>
+                    <div class="pass-body">
+                        <ul class="pass-features">
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> <strong>[Pro Maxx]</strong> animated gold chat name</li>
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> <strong>Infinite</strong> Bank Vaults</li>
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> Instantly bypass Duel Border Recovery cooldown</li>
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> +10 Team Member Slots</li>
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> Sparkle/Firework trails on spawn</li>
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> Access to VIP lounge & VIP channels</li>
+                            <li><i class="fa-solid fa-circle-check text-gold"></i> Custom nickname command (/nick)</li>
+                        </ul>
                     </div>
-                    <div class="merch-info">
-                        <h3>Holographic Sticker Sheet</h3>
-                        <p class="merch-desc">Waterproof die-cut vinyl sticker pack with reflective rainbow gold
-                            details. Perfect for laptops and water bottles.</p>
-                        <div class="merch-footer">
-                            <span class="merch-price">₱ 199.95</span>
-                            <button class="btn btn-primary btn-add-cart"><i class="fa-solid fa-cart-plus"></i>
-                                Add</button>
-                        </div>
+                    <div class="pass-footer">
+                        <button class="btn btn-primary btn-add-pass-cart btn-glow-gold">Add to cart</button>
                     </div>
                 </div>
             </div>
@@ -180,7 +177,7 @@
         <div class="cart-drawer-footer">
             <div class="cart-summary-row">
                 <span>Subtotal:</span>
-                <span id="cartSubtotal">$0.00</span>
+                <span id="cartSubtotal">₱ 0.00</span>
             </div>
             <button class="btn btn-primary btn-checkout" id="btnCheckout" disabled>
                 Proceed to Checkout <i class="fa-solid fa-arrow-right"></i>
@@ -225,7 +222,7 @@
                         <i class="fa-solid fa-bag-shopping"></i>
                         <div class="checkout-title-info">
                             <h3>Checkout</h3>
-                            <p>Total: <span id="checkoutTotalText">$0.00</span></p>
+                            <p>Total: <span id="checkoutTotalText">₱ 0.00</span></p>
                         </div>
                     </div>
                     <div class="currency-select-wrap">
@@ -241,7 +238,7 @@
                         <img src="" alt="Avatar" class="checkout-avatar" id="checkoutUserAvatar">
                         <div class="checkout-user-details">
                             <p>You are currently signed in as</p>
-                            <div class="checkout-username" id="checkoutUsernameDisplay">.Redtoppat208</div>
+                            <div class="checkout-username" id="checkoutUsernameDisplay"></div>
                         </div>
                     </div>
                     <button class="btn-switch-account" id="btnSwitchAccount">Wrong account? Switch Accounts</button>
@@ -272,8 +269,7 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-container">
-            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with
-                Mojang.</p>
+            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with Mojang.</p>
             <div class="socials">
                 <a href="#" aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
                 <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
@@ -287,7 +283,7 @@
     </div>
 
     <!-- Script files -->
-    <script src="merch-app.js"></script>
+    <script src="passes-app.js"></script>
 </body>
 
 </html>
