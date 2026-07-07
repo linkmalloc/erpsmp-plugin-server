@@ -44,6 +44,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnProceedCheckout = document.getElementById('btnProceedCheckout');
     const toast = document.getElementById('copyToast');
 
+    // Step 3 (Payment) DOM elements
+    const checkoutStep3 = document.getElementById('checkoutStep3');
+    const paymentSuccessView = document.getElementById('paymentSuccessView');
+    const btnPaymentBack = document.getElementById('btnPaymentBack');
+    const btnPaymentSubmit = document.getElementById('btnPaymentSubmit');
+    const btnSuccessClose = document.getElementById('btnSuccessClose');
+    const successAccountDisplay = document.getElementById('successAccountDisplay');
+    
+    const panelGCash = document.getElementById('panelGCash');
+    const panelUSDT = document.getElementById('panelUSDT');
+    const panelBitcoin = document.getElementById('panelBitcoin');
+    
+    const gcashRefInput = document.getElementById('gcashRefInput');
+    const usdtHashInput = document.getElementById('usdtHashInput');
+    const btcHashInput = document.getElementById('btcHashInput');
+    
+    const paymentMethodBtns = document.querySelectorAll('.payment-method-btn');
+    const paymentDetailPanels = document.querySelectorAll('.payment-detail-panel');
+
     // UI Updates
     const saveCart = () => {
         localStorage.setItem('erpsmp_cart', JSON.stringify(cart));
@@ -213,7 +232,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset to step 1
         checkoutStep1.style.display = 'flex';
         checkoutStep2.style.display = 'none';
+        if (checkoutStep3) checkoutStep3.style.display = 'none';
+        if (paymentSuccessView) paymentSuccessView.style.display = 'none';
         if (checkoutModalCard) checkoutModalCard.classList.remove('step-2-active');
+        
+        // Reset inputs
+        if (gcashRefInput) gcashRefInput.value = '';
+        if (usdtHashInput) usdtHashInput.value = '';
+        if (btcHashInput) btcHashInput.value = '';
         
         if (checkoutModal) checkoutModal.classList.add('active');
     };
@@ -379,12 +405,129 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Final checkout proceed button
+    // Proceed to payment page (Step 3)
     if (btnProceedCheckout) {
         btnProceedCheckout.addEventListener('click', () => {
-            alert(`🎉 Thank you, ${checkoutUsername}! Your order has been placed successfully under your ${checkoutPlatform.toUpperCase()} account.`);
-            cart = [];
-            updateCartUI();
+            if (checkoutStep2) checkoutStep2.style.display = 'none';
+            if (checkoutStep3) checkoutStep3.style.display = 'flex';
+        });
+    }
+
+    // Back from payment to checkout table (Step 3 -> Step 2)
+    if (btnPaymentBack) {
+        btnPaymentBack.addEventListener('click', () => {
+            if (checkoutStep3) checkoutStep3.style.display = 'none';
+            if (checkoutStep2) checkoutStep2.style.display = 'flex';
+        });
+    }
+
+    // Payment method selector tab switching
+    paymentMethodBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            paymentMethodBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const method = btn.getAttribute('data-method');
+            paymentDetailPanels.forEach(panel => {
+                panel.classList.remove('active');
+            });
+            
+            if (method === 'gcash') {
+                document.getElementById('panelGCash').classList.add('active');
+            } else if (method === 'usdt') {
+                document.getElementById('panelUSDT').classList.add('active');
+            } else if (method === 'bitcoin') {
+                document.getElementById('panelBitcoin').classList.add('active');
+            }
+        });
+    });
+
+    // Copy to clipboard for payment addresses/details
+    document.querySelectorAll('.btn-copy-address').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-copy-target');
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                const textToCopy = targetEl.textContent.trim();
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    const originalIcon = btn.innerHTML;
+                    btn.innerHTML = '<i class="fa-solid fa-check" style="color: var(--primary);"></i>';
+                    setTimeout(() => {
+                        btn.innerHTML = originalIcon;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            }
+        });
+    });
+
+    // Submit payment verification proof
+    if (btnPaymentSubmit) {
+        btnPaymentSubmit.addEventListener('click', () => {
+            // Find active payment method
+            const activeMethodBtn = document.querySelector('.payment-method-btn.active');
+            const method = activeMethodBtn ? activeMethodBtn.getAttribute('data-method') : 'gcash';
+            
+            let verificationValue = '';
+            if (method === 'gcash') {
+                verificationValue = gcashRefInput ? gcashRefInput.value.trim() : '';
+                if (!verificationValue) {
+                    alert('Please enter your 13-digit GCash Reference Number.');
+                    return;
+                }
+                if (!/^\d{13}$/.test(verificationValue)) {
+                    alert('Please enter a valid 13-digit GCash Reference Number containing only numbers.');
+                    return;
+                }
+            } else if (method === 'usdt') {
+                verificationValue = usdtHashInput ? usdtHashInput.value.trim() : '';
+                if (!verificationValue) {
+                    alert('Please enter the USDT transaction hash (TXID).');
+                    return;
+                }
+                if (verificationValue.length < 10) {
+                    alert('Please enter a valid USDT transaction hash.');
+                    return;
+                }
+            } else if (method === 'bitcoin') {
+                verificationValue = btcHashInput ? btcHashInput.value.trim() : '';
+                if (!verificationValue) {
+                    alert('Please enter the Bitcoin transaction ID (TXID).');
+                    return;
+                }
+                if (verificationValue.length < 10) {
+                    alert('Please enter a valid Bitcoin transaction ID.');
+                    return;
+                }
+            }
+
+            // Show submitting state
+            const originalBtnContent = btnPaymentSubmit.innerHTML;
+            btnPaymentSubmit.disabled = true;
+            btnPaymentSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
+
+            setTimeout(() => {
+                // Success: Transition to Step 4 (Success Screen)
+                btnPaymentSubmit.disabled = false;
+                btnPaymentSubmit.innerHTML = originalBtnContent;
+                
+                if (checkoutStep3) checkoutStep3.style.display = 'none';
+                if (paymentSuccessView) paymentSuccessView.style.display = 'flex';
+                if (successAccountDisplay) {
+                    successAccountDisplay.textContent = `${checkoutUsername} (${checkoutPlatform.toUpperCase()})`;
+                }
+                
+                // Clear cart state
+                cart = [];
+                updateCartUI();
+            }, 1200);
+        });
+    }
+
+    // Success Close Button
+    if (btnSuccessClose) {
+        btnSuccessClose.addEventListener('click', () => {
             closeCheckoutModal();
         });
     }
