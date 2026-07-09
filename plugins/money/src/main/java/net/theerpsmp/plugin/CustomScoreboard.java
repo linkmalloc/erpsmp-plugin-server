@@ -4633,7 +4633,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (title.equals("Shop - Confirm Purchase")) {
             event.setCancelled(true);
             int slot = event.getRawSlot();
-            UUID uuid = player.getUniqueId();
             Material mat = cartItem.get(uuid);
             if (mat == null) return;
             int qty = cartQuantity.getOrDefault(uuid, 1);
