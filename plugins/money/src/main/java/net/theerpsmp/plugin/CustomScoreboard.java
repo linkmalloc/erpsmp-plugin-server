@@ -300,6 +300,26 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Location> activeCratePurchase = new HashMap<>();
     private final HashMap<UUID, ItemStack[]> pendingCrateItemsArray = new HashMap<>();
 
+    // Custom Generators
+    public static class GeneratorData {
+        public final Location loc;
+        public final String type;
+        public final Inventory inventory;
+
+        public GeneratorData(Location loc, String type, Inventory inventory) {
+            this.loc = loc;
+            this.type = type;
+            this.inventory = inventory;
+        }
+    }
+    private final HashMap<Location, GeneratorData> generators = new HashMap<>();
+
+    // Shopping Cart state
+    private final HashMap<UUID, Material> cartItem = new HashMap<>();
+    private final HashMap<UUID, Integer> cartQuantity = new HashMap<>();
+    private final HashMap<UUID, Integer> cartUnitPrice = new HashMap<>();
+    private final HashMap<UUID, String> cartCategory = new HashMap<>();
+
     private final Random random = new Random();
 
     public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH }
@@ -549,9 +569,31 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }
         }, 1200L, 1200L);
+
+        // Generator minute production task
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            for (GeneratorData gen : generators.values()) {
+                Inventory inv = gen.inventory;
+                ItemStack toAdd = null;
+                if (gen.type.equals("food_generator")) {
+                    toAdd = new ItemStack(Material.COOKED_BEEF);
+                } else if (gen.type.equals("ore_generator")) {
+                    toAdd = new ItemStack(Material.DIAMOND);
+                } else if (gen.type.equals("tools_generator")) {
+                    toAdd = new ItemStack(getRandomToolOrArmorMaterial());
+                }
+
+                if (toAdd != null) {
+                    inv.addItem(toAdd);
+                    saveGenerators();
+                }
+            }
+        }, 1200L, 1200L);
+
         loadShopCrates();
         loadTeams();
         loadCommandChests();
+        loadGenerators();
 
         if (getConfig().contains("server.rules")) {
             serverRules = getConfig().getStringList("server.rules");
@@ -578,6 +620,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         saveShopCrates();
         saveTeams();
         saveCommandChests();
+        saveGenerators();
     }
 
     private void loadPlayerData(Player player) {
@@ -1748,8 +1791,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "floating_text" -> item = createFloatingTextItem();
                 case "command_chest" -> item = createCommandChest();
                 case "divine_flame" -> item = createDivineFlame();
+                case "food_generator" -> item = createFoodGeneratorItem();
+                case "ore_generator" -> item = createOreGeneratorItem();
+                case "tools_generator" -> item = createToolsGeneratorItem();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, command_chest, divine_flame", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -3242,6 +3288,37 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (event.isCancelled()) return;
         Location loc = block.getLocation();
 
+        if (generators.containsKey(loc)) {
+            event.setCancelled(true);
+            GeneratorData data = generators.get(loc);
+
+            ItemStack genItem = null;
+            if (data.type.equals("food_generator")) {
+                genItem = createFoodGeneratorItem();
+            } else if (data.type.equals("ore_generator")) {
+                genItem = createOreGeneratorItem();
+            } else if (data.type.equals("tools_generator")) {
+                genItem = createToolsGeneratorItem();
+            }
+
+            if (genItem != null) {
+                loc.getWorld().dropItemNaturally(loc, genItem);
+            }
+
+            for (ItemStack itemStack : data.inventory.getContents()) {
+                if (itemStack != null && itemStack.getType() != Material.AIR) {
+                    loc.getWorld().dropItemNaturally(loc, itemStack);
+                }
+            }
+
+            generators.remove(loc);
+            saveGenerators();
+
+            block.setType(Material.AIR);
+            player.sendMessage(Component.text("⚡ Generator removed successfully.", NamedTextColor.GREEN));
+            return;
+        }
+
         if (commandChests.containsKey(loc)) {
             if (player.getGameMode() == GameMode.SURVIVAL) {
                 event.setCancelled(true);
@@ -3464,6 +3541,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     Bukkit.getScheduler().runTask(this, () -> {
                         openSignInput(event.getPlayer(), SignAction.SET_COMMAND_CHEST, null, "Enter Command");
                     });
+                } else if (customItem.equals("food_generator") || customItem.equals("ore_generator") || customItem.equals("tools_generator")) {
+                    Location loc = event.getBlock().getLocation();
+                    String title = capitalize(customItem.replace("_", " "));
+                    Inventory genInv = Bukkit.createInventory(null, 27, Component.text(title));
+                    generators.put(loc, new GeneratorData(loc, customItem, genInv));
+                    saveGenerators();
+                    event.getPlayer().sendMessage(Component.text("⚡ You placed a " + title + "! Left-click it to open its inventory.", NamedTextColor.GREEN));
                 }
             }
         }
@@ -3922,6 +4006,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         shop.setItem(14, createGuiItem(Material.ECHO_SHARD, "Echo Key", NamedTextColor.AQUA, "Cost: 200000 Derpies | Owned: " + echoCount));
         
         shop.setItem(16, createGuiItem(Material.CHEST, "Deposit Keys", NamedTextColor.GREEN, "Click to deposit physical Crimson, Echo, End, and Amethyst keys from your inventory."));
+
+        shop.setItem(19, createGuiItem(Material.SPAWNER, "Food Generator", NamedTextColor.GOLD, "Cost: 2000 Derpies", "Generates steak every minute when placed.", "Left-click placed block to open inventory."));
+        shop.setItem(20, createGuiItem(Material.SPAWNER, "Ore Generator", NamedTextColor.AQUA, "Cost: 2000 Derpies", "Generates diamonds every minute when placed.", "Left-click placed block to open inventory."));
+        shop.setItem(21, createGuiItem(Material.SPAWNER, "Tools Generator", NamedTextColor.LIGHT_PURPLE, "Cost: 2000 Derpies", "Generates tools & armor (except netherite) every minute when placed.", "Left-click placed block to open inventory."));
 
         boolean hasErpPlus = hasErpPlusMap.getOrDefault(uuid, false);
         shop.setItem(22, createGuiItem(
@@ -4542,6 +4630,70 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
+        if (title.equals("Shop - Confirm Purchase")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            UUID uuid = player.getUniqueId();
+            Material mat = cartItem.get(uuid);
+            if (mat == null) return;
+            int qty = cartQuantity.getOrDefault(uuid, 1);
+            int unitPrice = cartUnitPrice.getOrDefault(uuid, 0);
+
+            if (slot == 9) {
+                player.sendMessage(Component.text("❌ Purchase cancelled.", NamedTextColor.RED));
+                returnToCategory(player);
+            } else if (slot == 10) {
+                qty = Math.max(1, qty - 1);
+                cartQuantity.put(uuid, qty);
+                openCartGui(player);
+            } else if (slot == 11) {
+                qty = Math.max(1, qty - 5);
+                cartQuantity.put(uuid, qty);
+                openCartGui(player);
+            } else if (slot == 12) {
+                qty = Math.max(1, qty - 10);
+                cartQuantity.put(uuid, qty);
+                openCartGui(player);
+            } else if (slot == 15) {
+                qty = Math.min(640, qty + 1);
+                cartQuantity.put(uuid, qty);
+                openCartGui(player);
+            } else if (slot == 16) {
+                qty = Math.min(640, qty + 5);
+                cartQuantity.put(uuid, qty);
+                openCartGui(player);
+            } else if (slot == 17) {
+                qty = Math.min(640, qty + 10);
+                cartQuantity.put(uuid, qty);
+                openCartGui(player);
+            } else if (slot == 14) {
+                int totalCost = unitPrice * qty;
+                long playerMoney = erpiesMap.getOrDefault(uuid, 0L);
+                if (playerMoney < totalCost) {
+                    player.sendMessage(Component.text("❌ You don't have enough Erpies! Cost: " + totalCost + " Erpies.", NamedTextColor.RED));
+                    return;
+                }
+
+                erpiesMap.put(uuid, playerMoney - totalCost);
+                int remainingToGive = qty;
+                while (remainingToGive > 0) {
+                    int giveAmount = Math.min(remainingToGive, mat.getMaxStackSize());
+                    HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(new ItemStack(mat, giveAmount));
+                    for (ItemStack left : remaining.values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), left);
+                    }
+                    remainingToGive -= giveAmount;
+                }
+
+                player.sendMessage(Component.text("🛍️ Successfully purchased " + qty + "x " + capitalize(mat.name().replace("_", " ")) + " for " + totalCost + " Erpies!", NamedTextColor.GREEN));
+                cartItem.remove(uuid);
+                cartQuantity.remove(uuid);
+                cartUnitPrice.remove(uuid);
+                returnToCategory(player);
+            }
+            return;
+        }
+
         // 2. Main Shop GUI
         if (title.equals("The Erp SMP - Shop")) {
             if (clicked.getType() == Material.ENDER_EYE) openEndMenu(player);
@@ -4625,6 +4777,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             else if (rawSlot == 12) derpCost = 2000;
             else if (rawSlot == 13) derpCost = 5000;
             else if (rawSlot == 14) derpCost = 200000;
+            else if (rawSlot == 19) derpCost = 2000;
+            else if (rawSlot == 20) derpCost = 2000;
+            else if (rawSlot == 21) derpCost = 2000;
 
             if (derpCost == -1) return;
 
@@ -4635,7 +4790,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             derpiesMap.put(uuid, playerDerpies - derpCost);
-            keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + 1);
+            if (rawSlot == 10 || rawSlot == 11 || rawSlot == 12 || rawSlot == 13 || rawSlot == 14) {
+                keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + 1);
+            }
 
             if (rawSlot == 10) {
                 regularKeysMap.put(uuid, regularKeysMap.getOrDefault(uuid, 0) + 1);
@@ -4663,9 +4820,24 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 for (ItemStack left : remaining.values()) {
                     player.getWorld().dropItemNaturally(player.getLocation(), left);
                 }
+            } else if (rawSlot == 19) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createFoodGeneratorItem());
+                for (ItemStack left : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), left);
+                }
+            } else if (rawSlot == 20) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createOreGeneratorItem());
+                for (ItemStack left : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), left);
+                }
+            } else if (rawSlot == 21) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createToolsGeneratorItem());
+                for (ItemStack left : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), left);
+                }
             }
 
-            player.sendMessage(Component.text("🔑 Successfully purchased 1x " + clicked.getItemMeta().getDisplayName() + "!", NamedTextColor.GREEN));
+            player.sendMessage(Component.text("🛍️ Successfully purchased 1x " + clicked.getItemMeta().getDisplayName() + "!", NamedTextColor.GREEN));
             openDerpShop(player);
             return;
         }
@@ -4879,17 +5051,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         int cost = getPrice(clicked.getType(), title);
         if (cost == -1) return;
 
-        long playerMoney = erpiesMap.getOrDefault(uuid, 0L);
-        if (playerMoney < cost) {
-            player.sendMessage(Component.text("❌ You don't have enough Erpies!", NamedTextColor.RED));
-            return;
-        }
-
-        erpiesMap.put(uuid, playerMoney - cost);
-        player.getInventory().addItem(new ItemStack(clicked.getType(), 1));
-        player.sendMessage(Component.text("🛍️ Successfully purchased 1x " + clicked.getType().name() + "!", NamedTextColor.GREEN));
-        
-        openMainMenu(player);
+        cartItem.put(uuid, clicked.getType());
+        cartQuantity.put(uuid, 1);
+        cartUnitPrice.put(uuid, cost);
+        cartCategory.put(uuid, title);
+        openCartGui(player);
     }
 
     private void openEndMenu(Player player) {
@@ -4954,8 +5120,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             long derpies = bankDerpiesMap.getOrDefault(uuid, 0L);
             if (erpies > 0 || derpies > 0) {
                 for (int i = 0; i < periods; i++) {
-                    erpies = (long) (erpies * 1.40);
-                    derpies = (long) (derpies * 1.40);
+                    erpies = (long) (erpies * 1.05);
+                    derpies = (long) (derpies * 1.05);
                 }
                 bankErpiesMap.put(uuid, erpies);
                 bankDerpiesMap.put(uuid, derpies);
@@ -4995,8 +5161,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         long erpies = bankErpiesMap.getOrDefault(uuid, 0L);
         long derpies = bankDerpiesMap.getOrDefault(uuid, 0L);
 
-        inv.setItem(11, createGuiItem(Material.GOLD_BLOCK, "Deposited Erpies", NamedTextColor.GOLD, "Amount: " + erpies + " Erpies", "Interest Rate: +40% every 24 hours"));
-        inv.setItem(15, createGuiItem(Material.DIAMOND_BLOCK, "Deposited Derpies", NamedTextColor.AQUA, "Amount: " + derpies + " Derpies", "Interest Rate: +40% every 24 hours"));
+        inv.setItem(11, createGuiItem(Material.GOLD_BLOCK, "Deposited Erpies", NamedTextColor.GOLD, "Amount: " + erpies + " Erpies", "Interest Rate: +5% every 24 hours"));
+        inv.setItem(15, createGuiItem(Material.DIAMOND_BLOCK, "Deposited Derpies", NamedTextColor.AQUA, "Amount: " + derpies + " Derpies", "Interest Rate: +5% every 24 hours"));
         inv.setItem(22, createGuiItem(Material.ARROW, "Back to Bank", NamedTextColor.YELLOW, "Click to go back"));
 
         player.openInventory(inv);
@@ -5298,7 +5464,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                 if (lastInterestTimeMap.getOrDefault(uuid, 0L) == 0L) {
                                     lastInterestTimeMap.put(uuid, System.currentTimeMillis());
                                 }
-                                player.sendMessage(Component.text("✅ Deposited " + amount + " " + currency + " into the bank! It will gain 40% interest daily.", NamedTextColor.GREEN));
+                                player.sendMessage(Component.text("✅ Deposited " + amount + " " + currency + " into the bank! It will gain 5% interest daily.", NamedTextColor.GREEN));
                                 updateScoreboard(player);
                                 savePlayerData(player);
                             }
@@ -6294,6 +6460,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(38, createWand());
         inv.setItem(39, createNpcEgg());
         inv.setItem(40, createFloatingTextItem());
+        inv.setItem(41, createFoodGeneratorItem());
+        inv.setItem(42, createOreGeneratorItem());
+        inv.setItem(43, createToolsGeneratorItem());
         
         player.openInventory(inv);
     }
@@ -6913,10 +7082,36 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+            Block block = event.getClickedBlock();
+            if (block != null && block.getType() == Material.SPAWNER) {
+                Location loc = block.getLocation();
+                if (generators.containsKey(loc)) {
+                    Player player = event.getPlayer();
+                    if (!player.isSneaking()) {
+                        event.setCancelled(true);
+                        GeneratorData data = generators.get(loc);
+                        player.openInventory(data.inventory);
+                        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CHEST_OPEN, 0.5f, 1.0f);
+                        return;
+                    }
+                }
+            }
+        }
+
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Block block = event.getClickedBlock();
-        if (block == null || block.getType() != Material.CHEST) return;
+        if (block == null) return;
         Location loc = block.getLocation();
+
+        if (block.getType() == Material.SPAWNER) {
+            if (generators.containsKey(loc)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        if (block.getType() != Material.CHEST) return;
 
         if (commandChests.containsKey(loc)) {
             event.setCancelled(true);
@@ -8882,6 +9077,193 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     event.getPlayer().sendMessage(Component.text("❌ You cannot ender pearl outside the arena!", NamedTextColor.RED));
                 }
             }
+        }
+    }
+
+    private ItemStack createFoodGeneratorItem() {
+        ItemStack item = new ItemStack(Material.SPAWNER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Food Generator", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Generates steak every minute.", NamedTextColor.YELLOW),
+                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
+                Component.text("2. Left-click placed block to open inventory.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "food_generator");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createOreGeneratorItem() {
+        ItemStack item = new ItemStack(Material.SPAWNER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Ore Generator", NamedTextColor.AQUA, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Generates diamonds every minute.", NamedTextColor.YELLOW),
+                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
+                Component.text("2. Left-click placed block to open inventory.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "ore_generator");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createToolsGeneratorItem() {
+        ItemStack item = new ItemStack(Material.SPAWNER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Tools Generator", NamedTextColor.LIGHT_PURPLE, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Generates tools & armor (except netherite) every minute.", NamedTextColor.YELLOW),
+                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
+                Component.text("2. Left-click placed block to open inventory.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "tools_generator");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private Material getRandomToolOrArmorMaterial() {
+        Material[] materials = {
+            Material.DIAMOND_SWORD, Material.DIAMOND_PICKAXE, Material.DIAMOND_AXE, Material.DIAMOND_SHOVEL, Material.DIAMOND_HOE,
+            Material.DIAMOND_HELMET, Material.DIAMOND_CHESTPLATE, Material.DIAMOND_LEGGINGS, Material.DIAMOND_BOOTS,
+            Material.IRON_SWORD, Material.IRON_PICKAXE, Material.IRON_AXE, Material.IRON_SHOVEL, Material.IRON_HOE,
+            Material.IRON_HELMET, Material.IRON_CHESTPLATE, Material.IRON_LEGGINGS, Material.IRON_BOOTS,
+            Material.GOLDEN_SWORD, Material.GOLDEN_PICKAXE, Material.GOLDEN_AXE, Material.GOLDEN_SHOVEL, Material.GOLDEN_HOE,
+            Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS, Material.GOLDEN_BOOTS,
+            Material.CHAINMAIL_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.CHAINMAIL_LEGGINGS, Material.CHAINMAIL_BOOTS,
+            Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS,
+            Material.STONE_SWORD, Material.STONE_PICKAXE, Material.STONE_AXE, Material.STONE_SHOVEL, Material.STONE_HOE,
+            Material.WOODEN_SWORD, Material.WOODEN_PICKAXE, Material.WOODEN_AXE, Material.WOODEN_SHOVEL, Material.WOODEN_HOE,
+            Material.BOW, Material.CROSSBOW, Material.SHIELD, Material.TRIDENT, Material.SHEARS, Material.FLINT_AND_STEEL
+        };
+        return materials[random.nextInt(materials.length)];
+    }
+
+    private void saveGenerators() {
+        getConfig().set("generators", null);
+        for (var entry : generators.entrySet()) {
+            Location loc = entry.getKey();
+            GeneratorData data = entry.getValue();
+            String key = loc.getWorld().getName() + "_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ();
+            String path = "generators." + key;
+            getConfig().set(path + ".world", loc.getWorld().getName());
+            getConfig().set(path + ".x", loc.getX());
+            getConfig().set(path + ".y", loc.getY());
+            getConfig().set(path + ".z", loc.getZ());
+            getConfig().set(path + ".type", data.type);
+            
+            List<ItemStack> itemList = new ArrayList<>();
+            for (ItemStack item : data.inventory.getContents()) {
+                itemList.add(item != null ? item : new ItemStack(Material.AIR));
+            }
+            getConfig().set(path + ".items", itemList);
+        }
+        saveConfig();
+    }
+
+    private void loadGenerators() {
+        generators.clear();
+        if (!getConfig().contains("generators")) return;
+        org.bukkit.configuration.ConfigurationSection sec = getConfig().getConfigurationSection("generators");
+        if (sec == null) return;
+        for (String key : sec.getKeys(false)) {
+            String path = "generators." + key;
+            String worldName = getConfig().getString(path + ".world");
+            double x = getConfig().getDouble(path + ".x");
+            double y = getConfig().getDouble(path + ".y");
+            double z = getConfig().getDouble(path + ".z");
+            World w = Bukkit.getWorld(worldName);
+            if (w == null) continue;
+            Location loc = new Location(w, x, y, z);
+            String type = getConfig().getString(path + ".type");
+            
+            String title = capitalize(type.replace("_", " "));
+            Inventory inventory = Bukkit.createInventory(null, 27, Component.text(title));
+            if (getConfig().contains(path + ".items")) {
+                List<?> list = getConfig().getList(path + ".items");
+                if (list != null) {
+                    for (int i = 0; i < Math.min(27, list.size()); i++) {
+                        if (list.get(i) instanceof ItemStack) {
+                            inventory.setItem(i, (ItemStack) list.get(i));
+                        }
+                    }
+                }
+            }
+            generators.put(loc, new GeneratorData(loc, type, inventory));
+        }
+    }
+
+    @EventHandler
+    public void onGeneratorInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
+        if (title.equals("Food Generator") || title.equals("Ore Generator") || title.equals("Tools Generator")) {
+            saveGenerators();
+        }
+    }
+
+    private void openCartGui(Player player) {
+        UUID uuid = player.getUniqueId();
+        Material mat = cartItem.get(uuid);
+        if (mat == null) return;
+        int qty = cartQuantity.getOrDefault(uuid, 1);
+        int unitPrice = cartUnitPrice.getOrDefault(uuid, 0);
+        int totalPrice = unitPrice * qty;
+
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Shop - Confirm Purchase"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) {
+            inv.setItem(i, pane);
+        }
+
+        inv.setItem(9, createGuiItem(Material.RED_WOOL, "Cancel", NamedTextColor.RED, "Cancel the order and return"));
+        inv.setItem(10, createGuiItem(Material.RED_DYE, "Remove 1", NamedTextColor.RED, "Remove 1 from cart"));
+        inv.setItem(11, createGuiItem(Material.RED_DYE, "Remove 5", NamedTextColor.RED, "Remove 5 from cart"));
+        inv.setItem(12, createGuiItem(Material.RED_DYE, "Remove 10", NamedTextColor.RED, "Remove 10 from cart"));
+
+        ItemStack itemShow = new ItemStack(mat, Math.min(qty, mat.getMaxStackSize()));
+        ItemMeta meta = itemShow.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(qty + "x " + capitalize(mat.name().replace("_", " ")), NamedTextColor.YELLOW, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Unit Price: " + unitPrice + " Erpies", NamedTextColor.GRAY),
+                Component.text("Total Cost: " + totalPrice + " Erpies", NamedTextColor.GOLD)
+            ));
+            itemShow.setItemMeta(meta);
+        }
+        inv.setItem(13, itemShow);
+
+        inv.setItem(14, createGuiItem(Material.GREEN_WOOL, "Purchase", NamedTextColor.GREEN, "Pay " + totalPrice + " Erpies and receive items"));
+        inv.setItem(15, createGuiItem(Material.GREEN_DYE, "Add 1", NamedTextColor.GREEN, "Add 1 to cart"));
+        inv.setItem(16, createGuiItem(Material.GREEN_DYE, "Add 5", NamedTextColor.GREEN, "Add 5 to cart"));
+        inv.setItem(17, createGuiItem(Material.GREEN_DYE, "Add 10", NamedTextColor.GREEN, "Add 10 to cart"));
+
+        player.openInventory(inv);
+    }
+
+    private void returnToCategory(Player player) {
+        UUID uuid = player.getUniqueId();
+        String category = cartCategory.remove(uuid);
+        if (category == null) {
+            openMainMenu(player);
+            return;
+        }
+        if (category.contains("End Items")) {
+            openEndMenu(player);
+        } else if (category.contains("PvP Combat")) {
+            openPvpMenu(player);
+        } else if (category.contains("Food")) {
+            openFoodMenu(player);
+        } else {
+            openMainMenu(player);
         }
     }
 }
