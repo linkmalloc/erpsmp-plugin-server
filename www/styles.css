@@ -118,16 +118,21 @@ body {
 }
 
 .logo {
-    font-size: 26px;
-    font-weight: 800;
-    color: var(--text-primary);
+    display: flex;
+    align-items: center;
     text-decoration: none;
-    font-family: 'Space Grotesk', sans-serif;
-    letter-spacing: -0.5px;
+    transition: var(--transition-smooth);
 }
 
-.logo-accent {
-    color: var(--accent-gold);
+.logo:hover {
+    transform: scale(1.05);
+}
+
+.logo-img {
+    height: 48px;
+    width: auto;
+    display: block;
+    object-fit: contain;
 }
 
 .nav-links {
@@ -837,6 +842,10 @@ section {
 @media (max-width: 768px) {
     .header {
         height: 70px;
+    }
+    
+    .logo-img {
+        height: 38px;
     }
     
     .mobile-nav-toggle {

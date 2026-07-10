@@ -462,14 +462,17 @@
 .checkout-brand-logo {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 24px;
-    font-weight: 800;
-    font-family: 'Space Grotesk', sans-serif;
+    justify-content: center;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 6px 20px;
+    padding: 8px 24px;
     border-radius: 12px;
+}
+
+.checkout-brand-logo .logo-img {
+    height: 38px;
+    width: auto;
+    display: block;
 }
 
 /* Step 1 Styles */
