@@ -1,9 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Passes products database
     const PRODUCTS = {
-        erpie: { name: 'Erpie Pass', priceUSD: 14.99, pricePHP: 299.95, icon: 'fa-cube', color: '#f59e0b' },
-        erpiepro: { name: 'Erpie Pro Pass', priceUSD: 29.99, pricePHP: 599.95, icon: 'fa-circle-nodes', color: '#0066ff' },
-        erpiepromaxx: { name: 'Erpie Pro Maxx Pass', priceUSD: 79.99, pricePHP: 1599.95, icon: 'fa-crown', color: '#a855f7' }
+        erpie: { name: 'Erp+', priceUSD: 14.99, pricePHP: 299.95, icon: 'fa-cube', color: '#f59e0b' },
+        erpiepro: { name: 'Erp++', priceUSD: 29.99, pricePHP: 599.95, icon: 'fa-circle-nodes', color: '#0066ff' },
+        erpiepromaxx: { name: 'Erp+++', priceUSD: 79.99, pricePHP: 1599.95, icon: 'fa-crown', color: '#a855f7' },
+        echokey: { name: 'Echo Key', priceUSD: 24.99, pricePHP: 500.00, icon: 'fa-key', color: '#22d3ee' },
+        crimsonkey: { name: 'Crimson Key', priceUSD: 22.49, pricePHP: 450.00, icon: 'fa-key', color: '#ef4444' },
+        endkey: { name: 'End Key', priceUSD: 14.99, pricePHP: 300.00, icon: 'fa-key', color: '#c084fc' },
+        amethystkey: { name: 'Amethyst Key', priceUSD: 12.49, pricePHP: 250.00, icon: 'fa-key', color: '#d946ef' },
+        basickey: { name: 'Basic Key', priceUSD: 4.99, pricePHP: 100.00, icon: 'fa-key', color: '#eab308' }
     };
 
     // State (isolated to passes store cart, or using shared cart)
@@ -106,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const itemTotalPHP = product.pricePHP * item.quantity;
             subtotalPHP += itemTotalPHP;
 
+            const isRank = item.id === 'erpie' || item.id === 'erpiepro' || item.id === 'erpiepromaxx';
             const itemEl = document.createElement('div');
             itemEl.className = 'cart-item';
             itemEl.innerHTML = `
@@ -118,9 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="cart-item-controls">
                     <div class="quantity-stepper">
-                        <button class="btn-qty-minus" data-id="${item.id}">-</button>
+                        ${isRank ? '' : `<button class="btn-qty-minus" data-id="${item.id}">-</button>`}
                         <span>${item.quantity}</span>
-                        <button class="btn-qty-plus" data-id="${item.id}">+</button>
+                        ${isRank ? '' : `<button class="btn-qty-plus" data-id="${item.id}">+</button>`}
                     </div>
                     <button class="btn-remove-item" data-id="${item.id}">Remove</button>
                 </div>
@@ -133,8 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Actions
     const addToCart = (productId) => {
+        const isRank = productId === 'erpie' || productId === 'erpiepro' || productId === 'erpiepromaxx';
         const existing = cart.find(item => item.id === productId);
         if (existing) {
+            if (isRank) {
+                alert('You can only purchase this pass once per transaction!');
+                return;
+            }
             existing.quantity += 1;
         } else {
             cart.push({ id: productId, quantity: 1 });
@@ -146,6 +157,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const changeQuantity = (productId, delta) => {
         const item = cart.find(item => item.id === productId);
         if (item) {
+            const isRank = productId === 'erpie' || productId === 'erpiepro' || productId === 'erpiepromaxx';
+            if (isRank && delta > 0) {
+                alert('You can only purchase this pass once per transaction!');
+                return;
+            }
             item.quantity += delta;
             if (item.quantity <= 0) {
                 cart = cart.filter(i => i.id !== productId);
@@ -201,6 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const rowTotal = price * item.quantity;
             total += rowTotal;
 
+            const isRank = item.id === 'erpie' || item.id === 'erpiepro' || item.id === 'erpiepromaxx';
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>
@@ -211,9 +228,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 </td>
                 <td>
                     <div class="checkout-qty-cell">
-                        <input type="number" class="checkout-qty-input" data-id="${item.id}" value="${item.quantity}" min="1">
+                        <input type="number" class="checkout-qty-input" data-id="${item.id}" value="${item.quantity}" min="1" ${isRank ? 'disabled' : ''}>
                         <div class="checkout-row-actions">
-                            <button class="btn-row-action update-qty" data-id="${item.id}"><i class="fa-solid fa-arrows-rotate"></i></button>
+                            ${isRank ? '' : `<button class="btn-row-action update-qty" data-id="${item.id}"><i class="fa-solid fa-arrows-rotate"></i></button>`}
                             <button class="btn-row-action info-item" data-id="${item.id}"><i class="fa-solid fa-circle-info"></i></button>
                             <button class="btn-row-action delete delete-item" data-id="${item.id}"><i class="fa-solid fa-xmark"></i></button>
                         </div>
