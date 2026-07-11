@@ -110,31 +110,40 @@ function showLogin() {
     adminDashboard.style.display = 'none';
 }
 
-function showDashboard() {
+function showDashboard(orders) {
     adminLoginOverlay.style.display = 'none';
     adminDashboard.style.display = 'flex';
-    loadOrders();
+    adminLoading.style.display = 'none';
+    allOrders = orders;
+    updateStats();
+    renderTable();
 }
 
-btnAdminLogin.addEventListener('click', () => {
+btnAdminLogin.addEventListener('click', async () => {
     const token = adminTokenInput.value.trim();
     if (!token) {
         showError('Please enter your admin token.');
         return;
     }
     adminToken = token;
-    sessionStorage.setItem('erp_admin_token', token);
-    // Try fetching orders to validate token
-    fetchOrders().then(() => {
+    const originalHtml = btnAdminLogin.innerHTML;
+    btnAdminLogin.disabled = true;
+    btnAdminLogin.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Logging in...';
+    try {
+        const orders = await fetchOrders();
+        sessionStorage.setItem('erp_admin_token', token);
         adminLoginError.style.display = 'none';
-        showDashboard();
-    }).catch(err => {
+        showDashboard(orders);
+    } catch (err) {
         if (err.status === 401) {
             showError('Invalid admin token. Please try again.');
         } else {
-            showError('Connection error. Please check your network.');
+            showError(`Connection error (HTTP ${err.status || '?'}): ${err.message}`);
         }
-    });
+    } finally {
+        btnAdminLogin.disabled = false;
+        btnAdminLogin.innerHTML = originalHtml;
+    }
 });
 
 adminTokenInput.addEventListener('keydown', e => {
@@ -158,7 +167,9 @@ async function fetchOrders() {
         headers: { 'X-Admin-Token': adminToken }
     });
     if (!resp.ok) {
-        const err = new Error('Failed to fetch');
+        let errMsg = `HTTP ${resp.status}`;
+        try { const d = await resp.json(); errMsg = d.error || errMsg; } catch {}
+        const err = new Error(errMsg);
         err.status = resp.status;
         throw err;
     }
@@ -172,12 +183,13 @@ async function loadOrders() {
 
     try {
         allOrders = await fetchOrders();
+        adminLoading.style.display = 'none';
         updateStats();
         renderTable();
     } catch (err) {
         adminLoading.style.display = 'none';
         adminEmptyState.style.display = 'flex';
-        adminEmptyState.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><p>Failed to load orders. Check your connection or admin token.</p>';
+        adminEmptyState.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i><p>Failed to load orders: <strong>${err.message}</strong>.<br>Check GITHUB_TOKEN, GIST_ID env vars in Netlify.</p>`;
     }
 }
 
@@ -416,7 +428,7 @@ btnCopyCommands.addEventListener('click', () => {
 // ---- Init ----
 if (adminToken) {
     fetchOrders()
-        .then(() => showDashboard())
+        .then(orders => showDashboard(orders))
         .catch(() => showLogin());
 } else {
     showLogin();
