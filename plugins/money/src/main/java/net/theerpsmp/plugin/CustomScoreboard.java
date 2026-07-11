@@ -9,6 +9,7 @@ import org.bukkit.Material;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
 import org.bukkit.World;
+import org.bukkit.WorldBorder;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -80,6 +81,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Integer> endKeysMap = new HashMap<>();
     private final HashMap<UUID, Integer> amethystKeysMap = new HashMap<>();
     private final HashMap<UUID, Boolean> hasErpPlusMap = new HashMap<>();
+    private final HashMap<UUID, Boolean> hasErpProMap = new HashMap<>();
+    private final HashMap<UUID, Boolean> hasErpProMaxMap = new HashMap<>();
 
     // Bank tracking maps
     private final HashMap<UUID, Long> bankErpiesMap = new HashMap<>();
@@ -92,6 +95,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Integer> apocalypseZombieKillsMap = new HashMap<>();
     private final HashMap<UUID, Long> apocalypseLongestSurvivalTimeMap = new HashMap<>();
     private final HashMap<UUID, Long> apocalypseStartTimeMap = new HashMap<>();
+    private final HashMap<UUID, Integer> apocalypseMaxWavesSurvivedMap = new HashMap<>();
     private final HashMap<UUID, Long> lastHordeSpawnTime = new HashMap<>();
     private final HashMap<UUID, Integer> playerApocalypseWaveMap = new HashMap<>();
     private final HashMap<UUID, java.util.Set<UUID>> playerActiveApocalypseZombies = new HashMap<>();
@@ -591,21 +595,48 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }, 72000L, 72000L);
 
-        // AFK Zone minute reward tracking task
+        // AFK Zone & Rank minute reward tracking task
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 UUID uuid = player.getUniqueId();
-                if (player.getWorld().getName().equals("afk_zone") || player.getWorld().getName().equals("afk")) {
-                    derpiesMap.put(uuid, derpiesMap.getOrDefault(uuid, 0L) + 1L);
-                    if (!chatSpamDisabled.getOrDefault(uuid, false)) {
-                        player.sendMessage(Component.text("🎁 You received 1 Derpy for being AFK!", NamedTextColor.LIGHT_PURPLE));
+                boolean isAfk = player.getWorld().getName().equals("afk_zone") || player.getWorld().getName().equals("afk");
+                
+                long derpiesEarned = 0;
+                String source = "";
+
+                if (hasErpProMaxMap.getOrDefault(uuid, false)) { // Erp+++
+                    if (isAfk) {
+                        derpiesEarned = 10;
+                        source = "Erp+++ (AFK Zone)";
+                    } else {
+                        derpiesEarned = 5;
+                        source = "Erp+++ (Passive)";
+                    }
+                } else if (hasErpProMap.getOrDefault(uuid, false)) { // Erp++
+                    if (isAfk) {
+                        derpiesEarned = 2;
+                        source = "Erp++ (AFK Zone)";
+                    } else {
+                        derpiesEarned = 1;
+                        source = "Erp++ (Passive)";
+                    }
+                } else if (hasErpPlusMap.getOrDefault(uuid, false)) { // Erp+
+                    derpiesEarned = 1;
+                    source = isAfk ? "Erp+ (AFK)" : "Erp+ (Passive)";
+                } else { // Normal Player
+                    if (isAfk) {
+                        derpiesEarned = 1;
+                        source = "AFK Zone";
                     }
                 }
-                if (hasErpPlusMap.getOrDefault(uuid, false)) {
-                    erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + 10L);
+
+                if (derpiesEarned > 0) {
+                    derpiesMap.put(uuid, derpiesMap.getOrDefault(uuid, 0L) + derpiesEarned);
                     if (!chatSpamDisabled.getOrDefault(uuid, false)) {
-                        player.sendMessage(Component.text("⭐ erp+ Perk: You received 10 Erpies!", NamedTextColor.GOLD));
+                        player.sendMessage(Component.text("🎁 You received " + derpiesEarned + " Derpies (" + source + ")!", NamedTextColor.LIGHT_PURPLE));
                     }
+                    updateScoreboard(player);
+                    savePlayerData(player);
                 }
             }
         }, 1200L, 1200L);
@@ -684,6 +715,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         endKeysMap.put(uuid, getConfig().getInt(path + "endKeys", 0));
         amethystKeysMap.put(uuid, getConfig().getInt(path + "amethystKeys", 0));
         hasErpPlusMap.put(uuid, getConfig().getBoolean(path + "hasErpPlus", false));
+        hasErpProMap.put(uuid, getConfig().getBoolean(path + "hasErpPro", false));
+        hasErpProMaxMap.put(uuid, getConfig().getBoolean(path + "hasErpProMax", false));
 
         bankErpiesMap.put(uuid, getConfig().getLong(path + "bankErpies", 0L));
         bankDerpiesMap.put(uuid, getConfig().getLong(path + "bankDerpies", 0L));
@@ -719,6 +752,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         starvationDeathsMap.put(uuid, getConfig().getInt(path + "starvationDeaths", 0));
         apocalypseZombieKillsMap.put(uuid, getConfig().getInt(path + "apocalypseZombieKills", 0));
         apocalypseLongestSurvivalTimeMap.put(uuid, getConfig().getLong(path + "apocalypseLongestSurvival", 0L));
+        apocalypseMaxWavesSurvivedMap.put(uuid, getConfig().getInt(path + "apocalypseMaxWavesSurvived", 0));
 
         HashMap<Material, Integer> foods = new HashMap<>();
         if (getConfig().contains(path + "foodsEaten")) {
@@ -735,8 +769,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         foodsEatenMap.put(uuid, foods);
 
-        Location[] homes = new Location[5];
-        for (int i = 0; i < 5; i++) {
+        Location[] homes = new Location[36];
+        for (int i = 0; i < 36; i++) {
             String homePath = path + "homes." + i;
             if (getConfig().contains(homePath)) {
                 String worldName = getConfig().getString(homePath + ".world");
@@ -753,8 +787,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         playerHomes.put(uuid, homes);
 
-        String[] homeNames = new String[5];
-        for (int i = 0; i < 5; i++) {
+        String[] homeNames = new String[36];
+        for (int i = 0; i < 36; i++) {
             String homePath = path + "homes." + i;
             if (getConfig().contains(homePath + ".name")) {
                 homeNames[i] = getConfig().getString(homePath + ".name");
@@ -782,6 +816,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "endKeys", endKeysMap.getOrDefault(uuid, 0));
         getConfig().set(path + "amethystKeys", amethystKeysMap.getOrDefault(uuid, 0));
         getConfig().set(path + "hasErpPlus", hasErpPlusMap.getOrDefault(uuid, false));
+        getConfig().set(path + "hasErpPro", hasErpProMap.getOrDefault(uuid, false));
+        getConfig().set(path + "hasErpProMax", hasErpProMaxMap.getOrDefault(uuid, false));
 
         getConfig().set(path + "bankErpies", bankErpiesMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "bankDerpies", bankDerpiesMap.getOrDefault(uuid, 0L));
@@ -809,6 +845,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "starvationDeaths", starvationDeathsMap.getOrDefault(uuid, 0));
         getConfig().set(path + "apocalypseZombieKills", apocalypseZombieKillsMap.getOrDefault(uuid, 0));
         getConfig().set(path + "apocalypseLongestSurvival", apocalypseLongestSurvivalTimeMap.getOrDefault(uuid, 0L));
+        getConfig().set(path + "apocalypseMaxWavesSurvived", apocalypseMaxWavesSurvivedMap.getOrDefault(uuid, 0));
 
         HashMap<Material, Integer> foods = foodsEatenMap.get(uuid);
         if (foods != null) {
@@ -819,7 +856,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         Location[] homes = playerHomes.get(uuid);
         if (homes != null) {
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 36; i++) {
                 String homePath = path + "homes." + i;
                 if (homes[i] != null) {
                     getConfig().set(homePath + ".world", homes[i].getWorld().getName());
@@ -836,7 +873,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         String[] homeNames = playerHomeNames.get(uuid);
         if (homeNames != null) {
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 36; i++) {
                 String homePath = path + "homes." + i;
                 if (homeNames[i] != null) {
                     getConfig().set(homePath + ".name", homeNames[i]);
@@ -971,6 +1008,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         endKeysMap.remove(uuid);
         amethystKeysMap.remove(uuid);
         hasErpPlusMap.remove(uuid);
+        hasErpProMap.remove(uuid);
+        hasErpProMaxMap.remove(uuid);
 
         bankErpiesMap.remove(uuid);
         bankDerpiesMap.remove(uuid);
@@ -4157,11 +4196,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         int zombieKills = apocalypseZombieKillsMap.getOrDefault(uuid, 0);
         long longestSurvival = apocalypseLongestSurvivalTimeMap.getOrDefault(uuid, 0L);
+        int maxWaves = apocalypseMaxWavesSurvivedMap.getOrDefault(uuid, 0);
         String formatTime = formatTimePlayed((int) longestSurvival);
         inv.setItem(33, createGuiItem(Material.BOOK, "Stats", NamedTextColor.BLUE, 
             "Your Apocalypse Records:",
             "Zombie Kills: " + zombieKills,
-            "Longest Survival: " + formatTime));
+            "Longest Survival: " + formatTime,
+            "Max Waves Survived: " + maxWaves));
 
         player.openInventory(inv);
     }
@@ -4189,17 +4230,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         Long start = apocalypseStartTimeMap.remove(uuid);
+        Integer currentWaveObj = playerApocalypseWaveMap.remove(uuid);
+        int wavesSurvived = currentWaveObj != null ? currentWaveObj - 1 : 0;
+        if (wavesSurvived < 0) wavesSurvived = 0;
+
         if (start != null) {
             long elapsedSeconds = (System.currentTimeMillis() - start) / 1000L;
             long currentRecord = apocalypseLongestSurvivalTimeMap.getOrDefault(uuid, 0L);
+            int maxWaves = apocalypseMaxWavesSurvivedMap.getOrDefault(uuid, 0);
             
             player.sendMessage(Component.text("💀 Apocalypse run ended!", NamedTextColor.RED));
             player.sendMessage(Component.text("⏱️ You survived for: " + formatTimePlayed((int) elapsedSeconds), NamedTextColor.YELLOW));
+            player.sendMessage(Component.text("🧟 Waves survived: " + wavesSurvived, NamedTextColor.YELLOW));
             
             if (elapsedSeconds > currentRecord) {
                 apocalypseLongestSurvivalTimeMap.put(uuid, elapsedSeconds);
                 player.sendMessage(Component.text("🏆 NEW RECORD! Your longest survival is now: " + formatTimePlayed((int) elapsedSeconds), NamedTextColor.GREEN));
                 player.sendTitle("§aNEW RECORD!", "§7Survived: " + formatTimePlayed((int) elapsedSeconds), 10, 40, 10);
+            }
+            if (wavesSurvived > maxWaves) {
+                apocalypseMaxWavesSurvivedMap.put(uuid, wavesSurvived);
+                player.sendMessage(Component.text("🏆 NEW RECORD! Max waves survived: " + wavesSurvived, NamedTextColor.GREEN));
             }
             savePlayerData(player);
         }
@@ -4475,6 +4526,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                 apocWorld.setTime(18000L);
                 apocWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+
+                // Set 64x64 barrier (WorldBorder)
+                Location spawnLoc = apocWorld.getSpawnLocation();
+                WorldBorder border = apocWorld.getWorldBorder();
+                border.setCenter(spawnLoc.getX(), spawnLoc.getZ());
+                border.setSize(64.0);
                 
                 if (difficulty.equalsIgnoreCase("easy")) {
                     apocWorld.setDifficulty(org.bukkit.Difficulty.EASY);
@@ -4909,20 +4966,31 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (title.equals("Homes Menu")) {
             event.setCancelled(true);
             int rawSlot = event.getRawSlot();
-            Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[5]);
-            String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> new String[]{"Home 1", "Home 2", "Home 3", "Home 4", "Home 5"});
+            Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[36]);
+            String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
+                String[] names = new String[36];
+                for (int i = 0; i < 36; i++) {
+                    names[i] = "Home " + (i + 1);
+                }
+                return names;
+            });
 
             boolean renameMode = renameModeActive.getOrDefault(uuid, false);
             boolean deleteMode = deleteModeActive.getOrDefault(uuid, false);
 
-            if (rawSlot >= 11 && rawSlot <= 15) {
-                int homeIdx = rawSlot - 11;
+            if (rawSlot >= 0 && rawSlot <= 35) {
+                int limit = getPlayerMaxHomes(player);
+                if (rawSlot >= limit) {
+                    player.sendMessage(Component.text("❌ This home slot is locked! Upgrade your store rank to unlock.", NamedTextColor.RED));
+                    return;
+                }
+                int homeIdx = rawSlot;
                 if (deleteMode) {
                     // Remove home
                     homes[homeIdx] = null;
                     homeNames[homeIdx] = "Home " + (homeIdx + 1);
                     deleteModeActive.put(uuid, false);
-                    player.sendMessage(Component.text("❌ Home " + (homeIdx + 1) + " removed!", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ " + homeNames[homeIdx] + " removed!", NamedTextColor.RED));
                     savePlayerData(player);
                     openUnifiedHomeGui(player);
                 } else if (renameMode) {
@@ -7050,15 +7118,34 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         for (Block b : logsToBreak) {
             b.breakNaturally(tool);
-            b.getWorld().spawnParticle(Particle.GUST, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
         }
+    }
+
+    private int getPlayerMaxHomes(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (hasErpProMaxMap.getOrDefault(uuid, false)) {
+            return 35;
+        }
+        if (hasErpProMap.getOrDefault(uuid, false)) {
+            return 23;
+        }
+        if (hasErpPlusMap.getOrDefault(uuid, false)) {
+            return 14;
+        }
+        return 5;
     }
 
     private void openUnifiedHomeGui(Player player) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Homes Menu"));
         UUID uuid = player.getUniqueId();
-        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[5]);
-        String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> new String[]{"Home 1", "Home 2", "Home 3", "Home 4", "Home 5"});
+        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[36]);
+        String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
+            String[] names = new String[36];
+            for (int i = 0; i < 36; i++) {
+                names[i] = "Home " + (i + 1);
+            }
+            return names;
+        });
 
         // Fill with decorative background gray stained glass pane
         ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
@@ -7078,21 +7165,26 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             modeLore = "§7Left-click: Teleport | Click if empty: Set Location";
         }
 
-        // Slots 11 to 15: Homes
-        for (int i = 0; i < 5; i++) {
-            Location loc = homes[i];
-            String name = homeNames[i] != null ? homeNames[i] : "Home " + (i + 1);
-            int slot = 11 + i;
-
-            if (loc != null) {
-                String locStr = String.format("%.0f, %.0f, %.0f (%s)", loc.getX(), loc.getY(), loc.getZ(), loc.getWorld().getName());
-                inv.setItem(slot, createGuiItem(Material.RED_BED, name, NamedTextColor.GREEN, 
-                    "Location: " + locStr, 
-                    modeLore));
+        // Slots 0 to 35: Homes / Locked Slots
+        int limit = getPlayerMaxHomes(player);
+        for (int i = 0; i < 36; i++) {
+            if (i < limit) {
+                Location loc = homes[i];
+                String name = homeNames[i] != null ? homeNames[i] : "Home " + (i + 1);
+                if (loc != null) {
+                    String locStr = String.format("%.0f, %.0f, %.0f (%s)", loc.getX(), loc.getY(), loc.getZ(), loc.getWorld().getName());
+                    inv.setItem(i, createGuiItem(Material.RED_BED, name, NamedTextColor.GREEN, 
+                        "Location: " + locStr, 
+                        modeLore));
+                } else {
+                    inv.setItem(i, createGuiItem(Material.BLACK_BED, name + " (Not Set)", NamedTextColor.GRAY, 
+                        "No location saved here.", 
+                        renameMode || deleteMode ? modeLore : "§7Click to save your current location"));
+                }
             } else {
-                inv.setItem(slot, createGuiItem(Material.BLACK_BED, name + " (Not Set)", NamedTextColor.GRAY, 
-                    "No location saved here.", 
-                    renameMode || deleteMode ? modeLore : "§7Click to save your current location"));
+                inv.setItem(i, createGuiItem(Material.RED_STAINED_GLASS_PANE, "§cLocked Home Slot", NamedTextColor.RED, 
+                    "§7Requires a higher store rank to unlock.", 
+                    "§7Purchase at play.theerpsmp.net"));
             }
         }
 
@@ -8227,6 +8319,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             } else if (online.isOp()) {
                 prefix = prefix.append(Component.text("[admin] ", NamedTextColor.LIGHT_PURPLE));
                 team.color(NamedTextColor.LIGHT_PURPLE);
+            } else if (hasErpProMaxMap.getOrDefault(uuid, false)) {
+                prefix = prefix.append(createGoldGradientComponent("[Erp+++] "));
+                team.color(NamedTextColor.GOLD);
+            } else if (hasErpProMap.getOrDefault(uuid, false)) {
+                prefix = prefix.append(Component.text("[Erp++] ", NamedTextColor.GRAY));
+                team.color(NamedTextColor.GRAY);
+            } else if (hasErpPlusMap.getOrDefault(uuid, false)) {
+                prefix = prefix.append(Component.text("[Erp+] ", NamedTextColor.GOLD));
+                team.color(NamedTextColor.WHITE);
             } else {
                 team.color(NamedTextColor.WHITE);
             }
@@ -8780,6 +8881,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             NamedTextColor color = colors[i % colors.length];
+            comp = comp.append(Component.text(String.valueOf(c), color));
+        }
+        return comp;
+    }
+
+    private Component createGoldGradientComponent(String text) {
+        Component comp = Component.empty();
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            NamedTextColor color = (i % 2 == 0) ? NamedTextColor.GOLD : NamedTextColor.YELLOW;
             comp = comp.append(Component.text(String.valueOf(c), color));
         }
         return comp;

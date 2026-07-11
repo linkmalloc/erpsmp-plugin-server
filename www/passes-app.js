@@ -61,8 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const panelBitcoin = document.getElementById('panelBitcoin');
     
     const gcashRefInput = document.getElementById('gcashRefInput');
+    const gcashScreenshotInput = document.getElementById('gcashScreenshotInput');
+    const gcashScreenshotName = document.getElementById('gcashScreenshotName');
     const usdtHashInput = document.getElementById('usdtHashInput');
     const btcHashInput = document.getElementById('btcHashInput');
+    
+    const successOrderIdEl = document.getElementById('successOrderId');
+    const btnCopyOrderId = document.getElementById('btnCopyOrderId');
     
     const paymentMethodBtns = document.querySelectorAll('.payment-method-btn');
     const paymentDetailPanels = document.querySelectorAll('.payment-detail-panel');
@@ -256,6 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Reset inputs
         if (gcashRefInput) gcashRefInput.value = '';
+        if (gcashScreenshotInput) gcashScreenshotInput.value = '';
+        if (gcashScreenshotName) gcashScreenshotName.innerHTML = 'Upload GCash Screenshot <em>(optional but recommended)</em>';
         if (usdtHashInput) usdtHashInput.value = '';
         if (btcHashInput) btcHashInput.value = '';
         
@@ -480,13 +487,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Screenshot file input display update
+    if (gcashScreenshotInput) {
+        gcashScreenshotInput.addEventListener('change', () => {
+            const file = gcashScreenshotInput.files[0];
+            if (file && gcashScreenshotName) {
+                gcashScreenshotName.innerHTML = `<i class="fa-solid fa-circle-check" style="color:#22c55e;"></i> ${file.name}`;
+            }
+        });
+    }
+
+    // Helper: read file as base64
+    const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result); // data:image/...;base64,...
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
     // Submit payment verification proof
     if (btnPaymentSubmit) {
-        btnPaymentSubmit.addEventListener('click', () => {
-            // Find active payment method
+        btnPaymentSubmit.addEventListener('click', async () => {
             const activeMethodBtn = document.querySelector('.payment-method-btn.active');
             const method = activeMethodBtn ? activeMethodBtn.getAttribute('data-method') : 'gcash';
-            
+
             let verificationValue = '';
             if (method === 'gcash') {
                 verificationValue = gcashRefInput ? gcashRefInput.value.trim() : '';
@@ -520,26 +544,84 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            // Read screenshot if provided (GCash only)
+            let screenshotBase64 = null;
+            if (method === 'gcash' && gcashScreenshotInput && gcashScreenshotInput.files[0]) {
+                try {
+                    screenshotBase64 = await readFileAsBase64(gcashScreenshotInput.files[0]);
+                } catch (e) {
+                    console.warn('Could not read screenshot file:', e);
+                }
+            }
+
             // Show submitting state
             const originalBtnContent = btnPaymentSubmit.innerHTML;
             btnPaymentSubmit.disabled = true;
             btnPaymentSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
 
-            setTimeout(() => {
-                // Success: Transition to Step 4 (Success Screen)
+            // Build order payload
+            const orderPayload = {
+                username: checkoutUsername,
+                platform: checkoutPlatform,
+                items: cart.map(item => ({ id: item.id, name: PRODUCTS[item.id]?.name, quantity: item.quantity })),
+                total: cart.reduce((sum, item) => {
+                    const p = PRODUCTS[item.id];
+                    return sum + (p ? (selectedCurrency === 'PHP' ? p.pricePHP : p.priceUSD) * item.quantity : 0);
+                }, 0),
+                currency: selectedCurrency,
+                method,
+                refNo: verificationValue,
+                screenshotBase64
+            };
+
+            try {
+                const resp = await fetch('/.netlify/functions/submit-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderPayload)
+                });
+                const data = await resp.json();
+
                 btnPaymentSubmit.disabled = false;
                 btnPaymentSubmit.innerHTML = originalBtnContent;
-                
+
+                if (!resp.ok || !data.success) {
+                    alert('Failed to submit order: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                // Show success view
                 if (checkoutStep3) checkoutStep3.style.display = 'none';
                 if (paymentSuccessView) paymentSuccessView.style.display = 'flex';
                 if (successAccountDisplay) {
                     successAccountDisplay.textContent = `${checkoutUsername} (${checkoutPlatform.toUpperCase()})`;
                 }
-                
-                // Clear cart state
+                if (successOrderIdEl) successOrderIdEl.textContent = data.orderId;
+
+                // Clear cart
                 cart = [];
                 updateCartUI();
-            }, 1200);
+
+            } catch (err) {
+                btnPaymentSubmit.disabled = false;
+                btnPaymentSubmit.innerHTML = originalBtnContent;
+                alert('Network error. Please try again or contact support.');
+                console.error('submit-order fetch error:', err);
+            }
+        });
+    }
+
+    // Copy Order ID button
+    if (btnCopyOrderId) {
+        btnCopyOrderId.addEventListener('click', () => {
+            const id = successOrderIdEl ? successOrderIdEl.textContent.trim() : '';
+            if (id && id !== '—') {
+                navigator.clipboard.writeText(id).then(() => {
+                    const orig = btnCopyOrderId.innerHTML;
+                    btnCopyOrderId.innerHTML = '<i class="fa-solid fa-check" style="color:#22c55e;"></i>';
+                    setTimeout(() => { btnCopyOrderId.innerHTML = orig; }, 2000);
+                });
+            }
         });
     }
 

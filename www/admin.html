@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ErpSMP | Admin — Payment Verification</title>
+    <meta name="robots" content="noindex, nofollow">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-styles.css">
+</head>
+
+<body class="admin-body">
+
+    <!-- Login Screen -->
+    <div class="admin-login-overlay" id="adminLoginOverlay">
+        <div class="admin-login-card glass">
+            <div class="admin-login-logo">
+                <img src="assets/logo/logo-transparent.png" alt="ErpSMP" style="height:48px;">
+            </div>
+            <h2>Admin Panel</h2>
+            <p>Enter your admin token to access the payment verification dashboard.</p>
+            <div class="admin-login-form">
+                <div class="admin-input-group">
+                    <i class="fa-solid fa-key"></i>
+                    <input type="password" id="adminTokenInput" placeholder="Admin Token" autocomplete="off">
+                </div>
+                <button class="btn-admin-login" id="btnAdminLogin">
+                    <i class="fa-solid fa-arrow-right-to-bracket"></i> Login
+                </button>
+                <p class="admin-login-error" id="adminLoginError" style="display:none;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div class="admin-dashboard" id="adminDashboard" style="display:none;">
+
+        <!-- Sidebar -->
+        <aside class="admin-sidebar">
+            <div class="admin-sidebar-brand">
+                <img src="assets/logo/logo-transparent.png" alt="ErpSMP" style="height:36px;">
+                <span>Admin</span>
+            </div>
+            <nav class="admin-sidebar-nav">
+                <a href="#" class="admin-nav-link active" data-tab="pending" id="navPending">
+                    <i class="fa-solid fa-clock"></i> Pending
+                    <span class="admin-badge" id="pendingCount">0</span>
+                </a>
+                <a href="#" class="admin-nav-link" data-tab="approved" id="navApproved">
+                    <i class="fa-solid fa-circle-check"></i> Approved
+                </a>
+                <a href="#" class="admin-nav-link" data-tab="rejected" id="navRejected">
+                    <i class="fa-solid fa-circle-xmark"></i> Rejected
+                </a>
+                <a href="#" class="admin-nav-link" data-tab="all" id="navAll">
+                    <i class="fa-solid fa-list"></i> All Orders
+                </a>
+            </nav>
+            <div class="admin-sidebar-footer">
+                <button class="btn-admin-refresh" id="btnRefresh">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                </button>
+                <button class="btn-admin-logout" id="btnLogout">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="admin-main">
+            <!-- Header -->
+            <div class="admin-header">
+                <div class="admin-header-left">
+                    <h1 id="adminTabTitle">Pending Orders</h1>
+                    <p class="admin-header-sub" id="adminTabSub">Orders awaiting review and payment verification.</p>
+                </div>
+                <div class="admin-header-right">
+                    <div class="admin-search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="adminSearchInput" placeholder="Search by username, order ID...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Row -->
+            <div class="admin-stats-row">
+                <div class="admin-stat-card">
+                    <div class="admin-stat-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b;"><i class="fa-solid fa-clock"></i></div>
+                    <div>
+                        <div class="admin-stat-value" id="statPending">0</div>
+                        <div class="admin-stat-label">Pending</div>
+                    </div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-icon" style="background:rgba(34,197,94,0.1);color:#22c55e;"><i class="fa-solid fa-circle-check"></i></div>
+                    <div>
+                        <div class="admin-stat-value" id="statApproved">0</div>
+                        <div class="admin-stat-label">Approved</div>
+                    </div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;"><i class="fa-solid fa-circle-xmark"></i></div>
+                    <div>
+                        <div class="admin-stat-value" id="statRejected">0</div>
+                        <div class="admin-stat-label">Rejected</div>
+                    </div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-icon" style="background:rgba(168,85,247,0.1);color:#a855f7;"><i class="fa-solid fa-receipt"></i></div>
+                    <div>
+                        <div class="admin-stat-value" id="statTotal">0</div>
+                        <div class="admin-stat-label">Total Orders</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Orders Table -->
+            <div class="admin-table-card glass">
+                <div class="admin-table-loading" id="adminLoading">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Loading orders...
+                </div>
+                <div class="admin-empty-state" id="adminEmptyState" style="display:none;">
+                    <i class="fa-solid fa-inbox"></i>
+                    <p>No orders found.</p>
+                </div>
+                <table class="admin-table" id="adminOrdersTable" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Player</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Method</th>
+                            <th>Ref / TXID</th>
+                            <th>Screenshot</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Screenshot Preview Modal -->
+    <div class="screenshot-modal-overlay" id="screenshotModalOverlay" style="display:none;">
+        <div class="screenshot-modal">
+            <button class="screenshot-modal-close" id="screenshotModalClose">&times;</button>
+            <img src="" alt="GCash Screenshot" id="screenshotModalImg">
+        </div>
+    </div>
+
+    <!-- Approve/Reject Action Modal -->
+    <div class="action-modal-overlay" id="actionModalOverlay" style="display:none;">
+        <div class="action-modal glass">
+            <h3 id="actionModalTitle">Approve Order</h3>
+            <p id="actionModalDesc">Are you sure you want to approve this order?</p>
+
+            <div class="action-command-box" id="actionCommandBox" style="display:none;">
+                <div class="action-command-label"><i class="fa-solid fa-terminal"></i> Server Commands to Execute</div>
+                <div class="action-commands" id="actionCommandsList"></div>
+                <button class="btn-copy-commands" id="btnCopyCommands">
+                    <i class="fa-regular fa-copy"></i> Copy All Commands
+                </button>
+            </div>
+
+            <div class="action-note-group">
+                <label for="actionNoteInput">Admin Note (optional)</label>
+                <input type="text" id="actionNoteInput" placeholder="e.g. Verified via GCash ref #1234567890123">
+            </div>
+
+            <div class="action-modal-buttons">
+                <button class="btn-action-cancel" id="btnActionCancel">Cancel</button>
+                <button class="btn-action-confirm" id="btnActionConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin-app.js"></script>
+</body>
+
+</html>

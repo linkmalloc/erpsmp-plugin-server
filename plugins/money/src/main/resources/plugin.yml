@@ -226,3 +226,7 @@ commands:
   store:
     description: Get the link to the server store
     usage: /store
+  setrank:
+    description: Set a player's store rank (OP only)
+    usage: /setrank <player> <erp+|erp++|erp+++|none>
+    permission: op

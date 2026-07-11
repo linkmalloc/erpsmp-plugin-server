@@ -451,6 +451,13 @@
                         <div class="payment-verify-input-group">
                             <input type="text" class="payment-verify-input-box" id="gcashRefInput" placeholder="Enter 13-digit GCash Reference Number">
                         </div>
+                        <div class="payment-screenshot-upload" id="gcashScreenshotUpload">
+                            <label for="gcashScreenshotInput" class="screenshot-upload-label">
+                                <i class="fa-solid fa-image"></i>
+                                <span id="gcashScreenshotName">Upload GCash Screenshot <em>(optional but recommended)</em></span>
+                            </label>
+                            <input type="file" id="gcashScreenshotInput" accept="image/*" style="display:none;">
+                        </div>
                     </div>
                 </div>
 
@@ -556,8 +563,14 @@
                 <div class="success-icon-wrap">
                     <i class="fa-solid fa-check"></i>
                 </div>
-                <h3>Payment Proof Submitted</h3>
-                <p>Thank you! Your payment verification has been received. Our administrators will verify your order for account <strong id="successAccountDisplay"></strong> shortly.</p>
+                <h3>Payment Proof Submitted!</h3>
+                <p>Your order has been received for account <strong id="successAccountDisplay"></strong>. Our admin team will verify and credit your items shortly.</p>
+                <div class="success-order-id-box">
+                    <span class="success-order-id-label">Order ID</span>
+                    <span class="success-order-id" id="successOrderId">—</span>
+                    <button class="btn-copy-order-id" id="btnCopyOrderId" title="Copy Order ID"><i class="fa-regular fa-copy"></i></button>
+                </div>
+                <p class="success-note"><i class="fa-solid fa-clock"></i> Please keep your Order ID for reference. Processing usually takes 5–30 minutes.</p>
                 <button class="btn-success-close" id="btnSuccessClose">Close</button>
             </div>
         </div>
