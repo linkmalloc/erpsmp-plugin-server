@@ -1,34 +1,40 @@
-const { Octokit } = require('@octokit/rest');
-
 // Environment variables (set in Netlify dashboard):
 // GITHUB_TOKEN - Personal Access Token with gist scope
 // GIST_ID      - The Gist ID to use as the database
 // ADMIN_TOKEN  - Secret token for admin API calls
 
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 const GIST_ID = process.env.GIST_ID;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 
 async function readOrders() {
-    try {
-        const { data } = await octokit.gists.get({ gist_id: GIST_ID });
-        const content = data.files['orders.json']?.content || '[]';
-        return JSON.parse(content);
-    } catch (err) {
-        console.error('readOrders error:', err);
-        return [];
-    }
+    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        headers: {
+            Authorization: `Bearer ${GITHUB_TOKEN}`,
+            Accept: 'application/vnd.github+json'
+        }
+    });
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+    const data = await res.json();
+    const content = data.files['orders.json']?.content || '[]';
+    return JSON.parse(content);
 }
 
 async function writeOrders(orders) {
-    await octokit.gists.update({
-        gist_id: GIST_ID,
-        files: {
-            'orders.json': {
-                content: JSON.stringify(orders, null, 2)
+    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        method: 'PATCH',
+        headers: {
+            Authorization: `Bearer ${GITHUB_TOKEN}`,
+            Accept: 'application/vnd.github+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            files: {
+                'orders.json': { content: JSON.stringify(orders, null, 2) }
             }
-        }
+        })
     });
+    if (!res.ok) throw new Error(`GitHub write error: ${res.status}`);
 }
 
 function generateOrderId() {
@@ -50,7 +56,6 @@ exports.handler = async (event) => {
     }
 
     const { username, platform, items, total, currency, method, refNo, screenshotBase64 } = body;
-
     if (!username || !items || !items.length || !method) {
         return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
@@ -75,9 +80,8 @@ exports.handler = async (event) => {
 
     try {
         const orders = await readOrders();
-        orders.unshift(order); // newest first
+        orders.unshift(order);
         await writeOrders(orders);
-
         return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
