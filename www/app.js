@@ -35,10 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data.online) {
                 const onlineCount = data.players?.online || 0;
-                const maxCount = data.players?.max || 20;
+                const maxCount = 40000;
                 
-                playerCountText.textContent = `${onlineCount} Players Online`;
-                statusPlayers.textContent = `${onlineCount} / ${maxCount}`;
+                playerCountText.textContent = `${onlineCount.toLocaleString()} Players Online`;
+                statusPlayers.textContent = `${onlineCount.toLocaleString()} / ${maxCount.toLocaleString()}`;
                 
                 // Calculate percentage for progress bar
                 const percent = Math.min((onlineCount / maxCount) * 100, 100);

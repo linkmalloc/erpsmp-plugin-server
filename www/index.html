@@ -237,11 +237,59 @@
             </div>
             
             <div class="commands-list" id="commandsList">
-                <div class="command-row" data-name="dual accept fight dualaccept">
+                <div class="command-row" data-name="auction open buy sell bid market gui">
+                    <span class="command-syntax">/auction</span>
+                    <span class="command-desc">Open the global Auction House menu to buy or sell player listings.</span>
+                </div>
+                <div class="command-row" data-name="requesteam team invite recruit join request">
+                    <span class="command-syntax">/requesteam &lt;player&gt;</span>
+                    <span class="command-desc">Send an invitation request to another player to join your team.</span>
+                </div>
+                <div class="command-row" data-name="teamaccept accept request join team">
+                    <span class="command-syntax">/teamaccept</span>
+                    <span class="command-desc">Accept a pending team invitation request.</span>
+                </div>
+                <div class="command-row" data-name="orders buy list requests board gui">
+                    <span class="command-syntax">/orders</span>
+                    <span class="command-desc">Open the buy orders board to request custom items or view pending requests.</span>
+                </div>
+                <div class="command-row" data-name="bh bounty hunter head trade erpies derpies npc menu">
+                    <span class="command-syntax">/bh</span>
+                    <span class="command-desc">Open the Bounty Hunter head trading menu to exchange player heads for money.</span>
+                </div>
+                <div class="command-row" data-name="derpshop key crate keys generator buy menu gui">
+                    <span class="command-syntax">/derpshop</span>
+                    <span class="command-desc">Open the special Derpshop GUI to purchase keys and spawners using Derpies.</span>
+                </div>
+                <div class="command-row" data-name="afk zone earn derpies money teleport">
+                    <span class="command-syntax">/afk</span>
+                    <span class="command-desc">Teleport to the server's AFK zone to earn Derpies automatically over time.</span>
+                </div>
+                <div class="command-row" data-name="dual invite challenge fight bedrock arena player">
+                    <span class="command-syntax">/dual &lt;player&gt;</span>
+                    <span class="command-desc">Send a direct duel invitation to another player in the Bedrock arena.</span>
+                </div>
+                <div class="command-row" data-name="dualaccept accept fight match dual">
                     <span class="command-syntax">/dualaccept</span>
                     <span class="command-desc">Accept a pending direct duel challenge within the 60-second window.</span>
                 </div>
-                <div class="command-row" data-name="bank money erpies balance">
+                <div class="command-row" data-name="apocalypse zombie minigame start difficulty selector menu gui">
+                    <span class="command-syntax">/apocalypse</span>
+                    <span class="command-desc">Open the Apocalypse mini-game menu to challenge waves of zombies.</span>
+                </div>
+                <div class="command-row" data-name="rtp random teleport overworld nether end dimension wildcard">
+                    <span class="command-syntax">/rtp [overworld|nether|end]</span>
+                    <span class="command-desc">Randomly teleport within the Overworld, Nether, or End dimensions.</span>
+                </div>
+                <div class="command-row" data-name="tpa teleport request player tpa">
+                    <span class="command-syntax">/tpa &lt;player&gt;</span>
+                    <span class="command-desc">Send a teleport request to another online player.</span>
+                </div>
+                <div class="command-row" data-name="tpaccept accept teleport request tpa">
+                    <span class="command-syntax">/tpaccept</span>
+                    <span class="command-desc">Accept a pending teleport request.</span>
+                </div>
+                <div class="command-row" data-name="bank money erpies balance vault">
                     <span class="command-syntax">/bank</span>
                     <span class="command-desc">Open your bank account interface to deposit or withdraw items and check digital balances.</span>
                 </div>
@@ -249,17 +297,49 @@
                     <span class="command-syntax">/maketeam &lt;name&gt;</span>
                     <span class="command-desc">Create a new player team/clan on the server.</span>
                 </div>
-                <div class="command-row" data-name="team manage guild">
+                <div class="command-row" data-name="team manage guild clan coords list chat">
                     <span class="command-syntax">/team</span>
-                    <span class="command-desc">Open your active team management menu to view members, rules, or base coordinate details.</span>
+                    <span class="command-desc">Open your active team management menu to view members, base coordinates, and edit settings.</span>
                 </div>
-                <div class="command-row" data-name="shop buy sell">
+                <div class="command-row" data-name="shop buy sell economy market gui">
                     <span class="command-syntax">/shop</span>
-                    <span class="command-desc">Open the main economy shop UI.</span>
+                    <span class="command-desc">Open the main player shop to trade items using Erpies.</span>
                 </div>
-                <div class="command-row" data-name="spawn teleport home">
+                <div class="command-row" data-name="sell quick inventory money erpies">
+                    <span class="command-syntax">/sell</span>
+                    <span class="command-desc">Open the quick sell inventory to convert items in hand directly to Erpies.</span>
+                </div>
+                <div class="command-row" data-name="pay give send erpies money player">
+                    <span class="command-syntax">/pay &lt;amount&gt; &lt;player&gt;</span>
+                    <span class="command-desc">Transfer a specified amount of Erpies directly to another online player.</span>
+                </div>
+                <div class="command-row" data-name="spawn teleport home lobby">
                     <span class="command-syntax">/spawn</span>
-                    <span class="command-desc">Teleport safely back to the spawn dimension protection zone.</span>
+                    <span class="command-desc">Teleport safely back to the spawn protection zone.</span>
+                </div>
+                <div class="command-row" data-name="home sethome teleport points double chest gui rename remove search">
+                    <span class="command-syntax">/home</span>
+                    <span class="command-desc">Open the unified Homes Menu to teleport to one of your saved home locations.</span>
+                </div>
+                <div class="command-row" data-name="sethome sethome double chest gui edit manage rename remove">
+                    <span class="command-syntax">/sethome</span>
+                    <span class="command-desc">Open the unified Homes Menu to save or manage your home points.</span>
+                </div>
+                <div class="command-row" data-name="setting settings chat spam music tpa toggle configuration gui">
+                    <span class="command-syntax">/setting</span>
+                    <span class="command-desc">Open the settings menu to configure chat spam, tpa requests, and other features.</span>
+                </div>
+                <div class="command-row" data-name="credits book author names rules credits info gui">
+                    <span class="command-syntax">/credits</span>
+                    <span class="command-desc">Open the server credits book UI to view developers and contributors.</span>
+                </div>
+                <div class="command-row" data-name="warp warps list teleport point locations">
+                    <span class="command-syntax">/warp &lt;name&gt;</span>
+                    <span class="command-desc">Teleport directly to any public server warp point.</span>
+                </div>
+                <div class="command-row" data-name="store link buy url web browser store">
+                    <span class="command-syntax">/store</span>
+                    <span class="command-desc">Show the official store web page link to copy and browse passes/items.</span>
                 </div>
             </div>
         </div>
