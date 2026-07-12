@@ -227,9 +227,8 @@ commands:
     description: Get the link to the server store
     usage: /store
   setrank:
-    description: Set a player's store rank (OP only)
+    description: Set a player's store rank (Console only)
     usage: /setrank <player> <erp+|erp++|erp+++|none>
-    permission: op
   rank:
-    description: Set a player's store rank (Trusted admins only - .Boreas4025 and ..Redtoppat208)
+    description: Set a player's store rank (Trusted admins only - .Boreas4052 and .Redtoppat208)
     usage: /rank <erp+|erp++|erp+++> <playername>

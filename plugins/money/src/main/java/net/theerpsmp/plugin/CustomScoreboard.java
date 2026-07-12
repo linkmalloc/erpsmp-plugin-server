@@ -518,6 +518,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("dualchest") != null) getCommand("dualchest").setExecutor(this);
         if (getCommand("apocalypse") != null) getCommand("apocalypse").setExecutor(this);
         if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
+        if (getCommand("setrank") != null) getCommand("setrank").setExecutor(this);
+
 
 
 
@@ -1109,6 +1111,53 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (command.getName().equalsIgnoreCase("setrank")) {
+            if (sender instanceof Player) {
+                sender.sendMessage(Component.text("❌ This command can only be executed from the Server Console.", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 2) {
+                sender.sendMessage("Usage: /setrank <playername> <erp+|erp++|erp+++|none>");
+                return true;
+            }
+            String targetName = args[0];
+            String rankArg = args[1].toLowerCase();
+            Player target = Bukkit.getPlayer(targetName);
+            if (target == null) {
+                sender.sendMessage("Error: Player '" + targetName + "' is not online.");
+                return true;
+            }
+            UUID targetUuid = target.getUniqueId();
+            hasErpPlusMap.put(targetUuid, false);
+            hasErpProMap.put(targetUuid, false);
+            hasErpProMaxMap.put(targetUuid, false);
+            String rankLabel = "None";
+            switch (rankArg) {
+                case "erp+":
+                    hasErpPlusMap.put(targetUuid, true);
+                    rankLabel = "Erp+";
+                    break;
+                case "erp++":
+                    hasErpProMap.put(targetUuid, true);
+                    rankLabel = "Erp++";
+                    break;
+                case "erp+++":
+                    hasErpProMaxMap.put(targetUuid, true);
+                    rankLabel = "Erp+++";
+                    break;
+                case "none":
+                    break;
+                default:
+                    sender.sendMessage("Error: Invalid rank. Use: erp+, erp++, erp+++, or none");
+                    return true;
+            }
+            savePlayerData(target);
+            updateScoreboard(target);
+            sender.sendMessage("Success: Set " + target.getName() + "'s rank to " + rankLabel);
+            target.sendMessage(Component.text("🌟 Your rank has been updated to " + rankLabel + "!", NamedTextColor.GOLD));
+            return true;
+        }
+
         if (!(sender instanceof Player player)) {
             sender.sendMessage("Only players can use this system command!");
             return true;
