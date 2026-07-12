@@ -443,10 +443,14 @@
 .modal-card {
     width: 100%;
     max-width: 520px;
+    max-height: 90vh;
+    overflow-y: auto;
     padding: 24px;
     position: relative;
     transform: translateY(20px);
     transition: transform 0.3s ease, max-width 0.3s ease;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
 }
 
 .modal-card.step-2-active {
@@ -848,23 +852,23 @@
 }
 
 .checkout-step-3 h3 {
-    font-size: 20px;
+    font-size: 17px;
     font-weight: 700;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     text-align: center;
 }
 
 .checkout-step-3 .payment-subtitle {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 14px;
 }
 
 .payment-method-selector {
     display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
+    gap: 8px;
+    margin-bottom: 16px;
     width: 100%;
 }
 
@@ -874,22 +878,22 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 14px 10px;
+    gap: 5px;
+    padding: 9px 8px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: 10px;
     color: var(--text-secondary);
     cursor: pointer;
     transition: var(--transition-smooth);
 }
 
 .payment-method-btn i {
-    font-size: 20px;
+    font-size: 18px;
 }
 
 .payment-method-btn span {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.5px;
 }
@@ -926,9 +930,9 @@
 .payment-detail-panel {
     background: rgba(255, 255, 255, 0.015);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 24px;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
     display: none;
 }
 
@@ -945,7 +949,7 @@
 .payment-qr-container {
     display: flex;
     justify-content: center;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .qr-code-frame {
@@ -959,8 +963,8 @@
 }
 
 .qr-placeholder-svg {
-    width: 140px;
-    height: 140px;
+    width: 110px;
+    height: 110px;
 }
 
 .payment-address-block {
@@ -1046,8 +1050,8 @@
 /* Verification form */
 .payment-verify-section {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    padding-top: 20px;
-    margin-top: 20px;
+    padding-top: 12px;
+    margin-top: 12px;
 }
 
 .payment-verify-section h4 {
