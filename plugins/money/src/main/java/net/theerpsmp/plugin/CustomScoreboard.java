@@ -1180,7 +1180,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // /rank <erp+|erp++|erp+++> <playername>  — restricted to trusted admins
         if (command.getName().equalsIgnoreCase("rank")) {
             String senderName = player.getName();
-            boolean isTrusted = senderName.equals("..Redtoppat208") || senderName.equals(".Boreas4025");
+            boolean isTrusted = senderName.equals(".Redtoppat208") || senderName.equals(".Boreas4052");
             if (!isTrusted) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command.", NamedTextColor.RED));
                 return true;
