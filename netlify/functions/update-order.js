@@ -59,7 +59,10 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Invalid JSON' }) };
     }
 
-    const { orderId, status, adminNote } = body;
+    let { orderId, status, adminNote } = body;
+    if (status === 'approve') status = 'approved';
+    if (status === 'reject') status = 'rejected';
+
     if (!orderId || !['approved', 'rejected'].includes(status)) {
         return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Invalid orderId or status' }) };
     }
