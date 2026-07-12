@@ -41,6 +41,6 @@ exports.handler = async (event) => {
         return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify(orders) };
     } catch (err) {
         console.error('get-orders error:', err);
-        return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Failed to fetch orders' }) };
+        return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Failed to fetch orders', details: err.message }) };
     }
 };
