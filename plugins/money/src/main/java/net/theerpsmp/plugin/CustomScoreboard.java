@@ -517,6 +517,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("say") != null) getCommand("say").setExecutor(this);
         if (getCommand("dualchest") != null) getCommand("dualchest").setExecutor(this);
         if (getCommand("apocalypse") != null) getCommand("apocalypse").setExecutor(this);
+        if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
+
 
 
 
@@ -1172,6 +1174,55 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             for (Player onlinePlayer : Bukkit.getOnlinePlayers()) {
                 onlinePlayer.sendTitle(formattedMessage, "", 10, 70, 20);
             }
+            return true;
+        }
+
+        // /rank <erp+|erp++|erp+++> <playername>  — restricted to trusted admins
+        if (command.getName().equalsIgnoreCase("rank")) {
+            String senderName = player.getName();
+            boolean isTrusted = senderName.equals("..Redtoppat208") || senderName.equals(".Boreas4025");
+            if (!isTrusted) {
+                player.sendMessage(Component.text("❌ You do not have permission to use this command.", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 2) {
+                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++> <playername>", NamedTextColor.RED));
+                return true;
+            }
+            String rankArg = args[0].toLowerCase();
+            String targetName = args[1];
+            Player target = Bukkit.getPlayer(targetName);
+            if (target == null) {
+                player.sendMessage(Component.text("❌ Player '" + targetName + "' is not online.", NamedTextColor.RED));
+                return true;
+            }
+            UUID targetUuid = target.getUniqueId();
+            // Clear all ranks first, then apply the chosen one
+            hasErpPlusMap.put(targetUuid, false);
+            hasErpProMap.put(targetUuid, false);
+            hasErpProMaxMap.put(targetUuid, false);
+            String rankLabel;
+            switch (rankArg) {
+                case "erp+":
+                    hasErpPlusMap.put(targetUuid, true);
+                    rankLabel = "Erp+";
+                    break;
+                case "erp++":
+                    hasErpProMap.put(targetUuid, true);
+                    rankLabel = "Erp++";
+                    break;
+                case "erp+++":
+                    hasErpProMaxMap.put(targetUuid, true);
+                    rankLabel = "Erp+++";
+                    break;
+                default:
+                    player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, or erp+++", NamedTextColor.RED));
+                    return true;
+            }
+            savePlayerData(target);
+            updateScoreboard(target);
+            player.sendMessage(Component.text("✅ Set " + target.getName() + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
+            target.sendMessage(Component.text("🌟 You have been given the " + rankLabel + " rank!", NamedTextColor.GOLD));
             return true;
         }
 

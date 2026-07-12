@@ -230,3 +230,6 @@ commands:
     description: Set a player's store rank (OP only)
     usage: /setrank <player> <erp+|erp++|erp+++|none>
     permission: op
+  rank:
+    description: Set a player's store rank (Trusted admins only - .Boreas4025 and ..Redtoppat208)
+    usage: /rank <erp+|erp++|erp+++> <playername>
