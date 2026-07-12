@@ -91,6 +91,28 @@ exports.handler = async (event) => {
         }
 
         await writeOrders(orders);
+
+        // Webhook to Minecraft server for instant delivery
+        if (status === 'approved') {
+            const mcWebhookUrl = process.env.MC_WEBHOOK_URL || 'http://18.206.179.9:8081/webhook';
+            try {
+                await fetch(mcWebhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Token': ADMIN_TOKEN
+                    },
+                    body: JSON.stringify({
+                        orderId: orders[idx].orderId,
+                        username: orders[idx].username,
+                        items: orders[idx].items
+                    })
+                });
+            } catch (webhookErr) {
+                console.error('Failed to notify Minecraft server webhook:', webhookErr.message);
+            }
+        }
+
         return {
             statusCode: 200,
             headers: CORS_HEADERS,

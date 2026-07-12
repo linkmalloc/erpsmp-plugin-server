@@ -520,7 +520,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
         if (getCommand("setrank") != null) getCommand("setrank").setExecutor(this);
         loadAdminToken();
-        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::pollAndDeliverOrders, 200L, 200L); // every 10 seconds
+        startWebhookServer();
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -687,6 +687,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @Override
     public void onDisable() {
+        stopWebhookServer();
         for (Player player : Bukkit.getOnlinePlayers()) {
             savePlayerData(player);
         }
@@ -10101,6 +10102,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
+
     private String adminTokenForPoller = "";
 
     private void loadAdminToken() {
@@ -10118,95 +10120,101 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
-    private void pollAndDeliverOrders() {
+    private com.sun.net.httpserver.HttpServer webhookServer = null;
+
+    private void startWebhookServer() {
         if (adminTokenForPoller == null || adminTokenForPoller.isEmpty()) {
+            getLogger().warning("Webhook server did not start because ADMIN_TOKEN was empty or missing.");
             return;
         }
         try {
-            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create("https://theerpsmp.net/.netlify/functions/get-orders"))
-                    .header("X-Admin-Token", adminTokenForPoller)
-                    .timeout(java.time.Duration.ofSeconds(10))
-                    .GET()
-                    .build();
+            webhookServer = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(8081), 0);
+            
+            webhookServer.createContext("/webhook", exchange -> {
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    exchange.sendResponseHeaders(405, -1);
+                    exchange.close();
+                    return;
+                }
 
-            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                return;
-            }
+                String token = exchange.getRequestHeaders().getFirst("X-Admin-Token");
+                if (token == null || !token.equals(adminTokenForPoller)) {
+                    exchange.sendResponseHeaders(401, -1);
+                    exchange.close();
+                    return;
+                }
 
-            com.google.gson.Gson gson = new com.google.gson.Gson();
-            com.google.gson.JsonArray orders = gson.fromJson(response.body(), com.google.gson.JsonArray.class);
-            if (orders == null) return;
+                try {
+                    java.io.InputStream is = exchange.getRequestBody();
+                    String body = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    
+                    com.google.gson.Gson gson = new com.google.gson.Gson();
+                    com.google.gson.JsonObject payload = gson.fromJson(body, com.google.gson.JsonObject.class);
+                    
+                    if (payload != null && payload.has("username")) {
+                        String username = payload.get("username").getAsString();
+                        com.google.gson.JsonArray items = payload.has("items") ? payload.getAsJsonArray("items") : new com.google.gson.JsonArray();
+                        
+                        List<String> cmds = new ArrayList<>();
+                        for (com.google.gson.JsonElement itemEl : items) {
+                            if (!itemEl.isJsonObject()) continue;
+                            com.google.gson.JsonObject itemObj = itemEl.getAsJsonObject();
+                            if (!itemObj.has("id")) continue;
+                            String itemId = itemObj.get("id").getAsString();
+                            int qty = itemObj.has("quantity") ? itemObj.get("quantity").getAsInt() : 1;
 
-            for (com.google.gson.JsonElement el : orders) {
-                if (!el.isJsonObject()) continue;
-                com.google.gson.JsonObject order = el.getAsJsonObject();
-                if (!order.has("status") || !order.has("orderId") || !order.has("username")) continue;
-
-                String status = order.get("status").getAsString();
-                boolean delivered = order.has("delivered") && order.get("delivered").getAsBoolean();
-
-                if ("approved".equals(status) && !delivered) {
-                    String orderId = order.get("orderId").getAsString();
-                    String username = order.get("username").getAsString();
-                    com.google.gson.JsonArray items = order.has("items") ? order.getAsJsonArray("items") : new com.google.gson.JsonArray();
-
-                    List<String> cmds = new ArrayList<>();
-                    for (com.google.gson.JsonElement itemEl : items) {
-                        if (!itemEl.isJsonObject()) continue;
-                        com.google.gson.JsonObject itemObj = itemEl.getAsJsonObject();
-                        if (!itemObj.has("id")) continue;
-                        String itemId = itemObj.get("id").getAsString();
-                        int qty = itemObj.has("quantity") ? itemObj.get("quantity").getAsInt() : 1;
-
-                        if ("erpie".equals(itemId)) {
-                            cmds.add("setrank " + username + " erp+");
-                        } else if ("erpiepro".equals(itemId)) {
-                            cmds.add("setrank " + username + " erp++");
-                        } else if ("erpiepromaxx".equals(itemId)) {
-                            cmds.add("setrank " + username + " erp+++");
-                        } else if ("echokey".equals(itemId)) {
-                            cmds.add("echokeys " + username + " add " + qty);
-                        } else if ("crimsonkey".equals(itemId)) {
-                            cmds.add("crimsonkeys " + username + " add " + qty);
-                        } else if ("endkey".equals(itemId)) {
-                            cmds.add("keys end add " + qty + " " + username);
-                        } else if ("amethystkey".equals(itemId)) {
-                            cmds.add("keys amethyst add " + qty + " " + username);
-                        } else if ("basickey".equals(itemId)) {
-                            cmds.add("keys basic add " + qty + " " + username);
+                            if ("erpie".equals(itemId)) {
+                                cmds.add("setrank " + username + " erp+");
+                            } else if ("erpiepro".equals(itemId)) {
+                                cmds.add("setrank " + username + " erp++");
+                            } else if ("erpiepromaxx".equals(itemId)) {
+                                cmds.add("setrank " + username + " erp+++");
+                            } else if ("echokey".equals(itemId)) {
+                                cmds.add("echokeys " + username + " add " + qty);
+                            } else if ("crimsonkey".equals(itemId)) {
+                                cmds.add("crimsonkeys " + username + " add " + qty);
+                            } else if ("endkey".equals(itemId)) {
+                                cmds.add("keys end add " + qty + " " + username);
+                            } else if ("amethystkey".equals(itemId)) {
+                                cmds.add("keys amethyst add " + qty + " " + username);
+                            } else if ("basickey".equals(itemId)) {
+                                cmds.add("keys basic add " + qty + " " + username);
+                            }
                         }
+
+                        Bukkit.getScheduler().runTask(this, () -> {
+                            for (String cmd : cmds) {
+                                getLogger().info("Webhook executing auto-delivery command: " + cmd);
+                                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
+                            }
+                        });
                     }
 
-                    // Run commands on primary thread
-                    Bukkit.getScheduler().runTask(this, () -> {
-                        for (String cmd : cmds) {
-                            getLogger().info("Executing auto-delivery command: " + cmd);
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
-                        }
-                    });
-
-                    // Mark as delivered in Gist via update-order POST
-                    com.google.gson.JsonObject updateBody = new com.google.gson.JsonObject();
-                    updateBody.addProperty("orderId", orderId);
-                    updateBody.addProperty("status", "approved");
-                    updateBody.addProperty("delivered", true);
-
-                    java.net.http.HttpRequest updateReq = java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create("https://theerpsmp.net/.netlify/functions/update-order"))
-                            .header("Content-Type", "application/json")
-                            .header("X-Admin-Token", adminTokenForPoller)
-                            .timeout(java.time.Duration.ofSeconds(10))
-                            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(updateBody.toString()))
-                            .build();
-
-                    client.send(updateReq, java.net.http.HttpResponse.BodyHandlers.discarding());
+                    String response = "{\"success\":true}";
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, response.length());
+                    java.io.OutputStream os = exchange.getResponseBody();
+                    os.write(response.getBytes());
+                    os.close();
+                } catch (Exception parseErr) {
+                    getLogger().warning("Error processing webhook body: " + parseErr.getMessage());
+                    exchange.sendResponseHeaders(400, -1);
+                    exchange.close();
                 }
-            }
+            });
+
+            webhookServer.setExecutor(java.util.concurrent.Executors.newSingleThreadExecutor());
+            webhookServer.start();
+            getLogger().info("🚀 Webhook server successfully listening on port 8081");
         } catch (Exception e) {
-            getLogger().warning("Error in pollAndDeliverOrders: " + e.getMessage());
+            getLogger().warning("Failed to start webhook server: " + e.getMessage());
+        }
+    }
+
+    private void stopWebhookServer() {
+        if (webhookServer != null) {
+            webhookServer.stop(1);
+            getLogger().info("Stopped Webhook server.");
         }
     }
 }
