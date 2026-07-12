@@ -59,7 +59,7 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Invalid JSON' }) };
     }
 
-    let { orderId, status, adminNote } = body;
+    let { orderId, status, adminNote, delivered } = body;
     if (status === 'approve') status = 'approved';
     if (status === 'reject') status = 'rejected';
 
@@ -76,9 +76,16 @@ exports.handler = async (event) => {
         }
 
         orders[idx].status = status;
-        orders[idx].adminNote = adminNote || null;
+        if (adminNote !== undefined) orders[idx].adminNote = adminNote || null;
         if (status === 'approved') {
-            orders[idx].approvedAt = new Date().toISOString();
+            if (orders[idx].status !== 'approved') {
+                orders[idx].approvedAt = new Date().toISOString();
+            }
+            if (delivered !== undefined) {
+                orders[idx].delivered = delivered;
+            } else if (orders[idx].delivered === undefined) {
+                orders[idx].delivered = false;
+            }
         } else {
             orders[idx].rejectedAt = new Date().toISOString();
         }

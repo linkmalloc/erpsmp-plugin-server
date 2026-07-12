@@ -519,10 +519,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("apocalypse") != null) getCommand("apocalypse").setExecutor(this);
         if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
         if (getCommand("setrank") != null) getCommand("setrank").setExecutor(this);
-
-
-
-
+        loadAdminToken();
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::pollAndDeliverOrders, 200L, 200L); // every 10 seconds
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -10100,6 +10098,115 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             openFoodMenu(player);
         } else {
             openMainMenu(player);
+        }
+    }
+
+    private String adminTokenForPoller = "";
+
+    private void loadAdminToken() {
+        java.io.File file = new java.io.File(".secret/tokens.properties");
+        if (file.exists()) {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                java.util.Properties props = new java.util.Properties();
+                props.load(fis);
+                adminTokenForPoller = props.getProperty("ADMIN_TOKEN", "").trim();
+            } catch (Exception e) {
+                getLogger().warning("Failed to load .secret/tokens.properties: " + e.getMessage());
+            }
+        } else {
+            getLogger().warning(".secret/tokens.properties file not found at " + file.getAbsolutePath());
+        }
+    }
+
+    private void pollAndDeliverOrders() {
+        if (adminTokenForPoller == null || adminTokenForPoller.isEmpty()) {
+            return;
+        }
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://theerpsmp.net/.netlify/functions/get-orders"))
+                    .header("X-Admin-Token", adminTokenForPoller)
+                    .timeout(java.time.Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+
+            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                return;
+            }
+
+            com.google.gson.Gson gson = new com.google.gson.Gson();
+            com.google.gson.JsonArray orders = gson.fromJson(response.body(), com.google.gson.JsonArray.class);
+            if (orders == null) return;
+
+            for (com.google.gson.JsonElement el : orders) {
+                if (!el.isJsonObject()) continue;
+                com.google.gson.JsonObject order = el.getAsJsonObject();
+                if (!order.has("status") || !order.has("orderId") || !order.has("username")) continue;
+
+                String status = order.get("status").getAsString();
+                boolean delivered = order.has("delivered") && order.get("delivered").getAsBoolean();
+
+                if ("approved".equals(status) && !delivered) {
+                    String orderId = order.get("orderId").getAsString();
+                    String username = order.get("username").getAsString();
+                    com.google.gson.JsonArray items = order.has("items") ? order.getAsJsonArray("items") : new com.google.gson.JsonArray();
+
+                    List<String> cmds = new ArrayList<>();
+                    for (com.google.gson.JsonElement itemEl : items) {
+                        if (!itemEl.isJsonObject()) continue;
+                        com.google.gson.JsonObject itemObj = itemEl.getAsJsonObject();
+                        if (!itemObj.has("id")) continue;
+                        String itemId = itemObj.get("id").getAsString();
+                        int qty = itemObj.has("quantity") ? itemObj.get("quantity").getAsInt() : 1;
+
+                        if ("erpie".equals(itemId)) {
+                            cmds.add("setrank " + username + " erp+");
+                        } else if ("erpiepro".equals(itemId)) {
+                            cmds.add("setrank " + username + " erp++");
+                        } else if ("erpiepromaxx".equals(itemId)) {
+                            cmds.add("setrank " + username + " erp+++");
+                        } else if ("echokey".equals(itemId)) {
+                            cmds.add("echokeys " + username + " add " + qty);
+                        } else if ("crimsonkey".equals(itemId)) {
+                            cmds.add("crimsonkeys " + username + " add " + qty);
+                        } else if ("endkey".equals(itemId)) {
+                            cmds.add("keys end add " + qty + " " + username);
+                        } else if ("amethystkey".equals(itemId)) {
+                            cmds.add("keys amethyst add " + qty + " " + username);
+                        } else if ("basickey".equals(itemId)) {
+                            cmds.add("keys basic add " + qty + " " + username);
+                        }
+                    }
+
+                    // Run commands on primary thread
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        for (String cmd : cmds) {
+                            getLogger().info("Executing auto-delivery command: " + cmd);
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
+                        }
+                    });
+
+                    // Mark as delivered in Gist via update-order POST
+                    com.google.gson.JsonObject updateBody = new com.google.gson.JsonObject();
+                    updateBody.addProperty("orderId", orderId);
+                    updateBody.addProperty("status", "approved");
+                    updateBody.addProperty("delivered", true);
+
+                    java.net.http.HttpRequest updateReq = java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create("https://theerpsmp.net/.netlify/functions/update-order"))
+                            .header("Content-Type", "application/json")
+                            .header("X-Admin-Token", adminTokenForPoller)
+                            .timeout(java.time.Duration.ofSeconds(10))
+                            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(updateBody.toString()))
+                            .build();
+
+                    client.send(updateReq, java.net.http.HttpResponse.BodyHandlers.discarding());
+                }
+            }
+        } catch (Exception e) {
+            getLogger().warning("Error in pollAndDeliverOrders: " + e.getMessage());
         }
     }
 }
