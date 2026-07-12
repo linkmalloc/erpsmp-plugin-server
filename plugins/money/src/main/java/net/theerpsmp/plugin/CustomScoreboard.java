@@ -5031,6 +5031,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     player.sendMessage(Component.text("❌ Delete mode active! Click the home button above that you want to remove.", NamedTextColor.RED));
                 }
                 openUnifiedHomeGui(player);
+            } else if (rawSlot == 53) {
+                // Team Home teleport
+                player.closeInventory();
+                String teamNameClick = playerTeams.get(uuid);
+                if (teamNameClick == null) {
+                    player.sendMessage(Component.text("❌ You are not in a team!", NamedTextColor.RED));
+                    return;
+                }
+                TeamData tdClick = teams.get(teamNameClick);
+                if (tdClick == null || tdClick.teamHome == null) {
+                    player.sendMessage(Component.text("❌ Your team does not have a home set yet!", NamedTextColor.RED));
+                    return;
+                }
+                performHomeCountdown(player, tdClick.teamHome, -1);
+                player.sendMessage(Component.text("🏠 Teleporting to Team Home: " + tdClick.name, NamedTextColor.AQUA));
             }
             return;
         }
@@ -7188,15 +7203,38 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
-        // Bottom row: Search (47), Rename (49), Remove (51)
-        inv.setItem(47, createGuiItem(Material.COMPASS, "Search Home", NamedTextColor.YELLOW, 
+        // Bottom row: Search (47), Rename (49), Remove (51), Team Home (53)
+        inv.setItem(47, createGuiItem(Material.COMPASS, "Search Home", NamedTextColor.YELLOW,
             "Click to search for a named home point."));
-        inv.setItem(49, createGuiItem(Material.NAME_TAG, "Rename Home", NamedTextColor.GOLD, 
-            renameMode ? "§aStatus: ACTIVE" : "§cStatus: INACTIVE", 
+        inv.setItem(49, createGuiItem(Material.NAME_TAG, "Rename Home", NamedTextColor.GOLD,
+            renameMode ? "§aStatus: ACTIVE" : "§cStatus: INACTIVE",
             "Click here, then click a home above to rename it."));
-        inv.setItem(51, createGuiItem(Material.BARRIER, "Remove Home", NamedTextColor.RED, 
-            deleteMode ? "§aStatus: ACTIVE" : "§cStatus: INACTIVE", 
+        inv.setItem(51, createGuiItem(Material.BARRIER, "Remove Home", NamedTextColor.RED,
+            deleteMode ? "§aStatus: ACTIVE" : "§cStatus: INACTIVE",
             "Click here, then click a home above to delete it."));
+
+        // Slot 53 — Team Home
+        String teamNameForGui = playerTeams.get(uuid);
+        if (teamNameForGui != null) {
+            TeamData teamDataForGui = teams.get(teamNameForGui);
+            if (teamDataForGui != null && teamDataForGui.teamHome != null) {
+                Location th = teamDataForGui.teamHome;
+                String thLoc = String.format("%.0f, %.0f, %.0f (%s)", th.getX(), th.getY(), th.getZ(), th.getWorld().getName());
+                inv.setItem(53, createGuiItem(Material.BEACON, "Team Home", NamedTextColor.AQUA,
+                    "Team: §b" + teamDataForGui.name,
+                    "Location: " + thLoc,
+                    "§7Click to teleport to your team's home."));
+            } else {
+                inv.setItem(53, createGuiItem(Material.BEACON, "Team Home", NamedTextColor.GRAY,
+                    "Team: §7" + (teamDataForGui != null ? teamDataForGui.name : "?"),
+                    "§cNo team home set yet.",
+                    "§7Ask your team leader to set one with /team."));
+            }
+        } else {
+            inv.setItem(53, createGuiItem(Material.BEACON, "Team Home", NamedTextColor.DARK_GRAY,
+                "§cYou are not in a team.",
+                "§7Join or create a team to use this."));
+        }
 
         player.openInventory(inv);
     }
@@ -7231,7 +7269,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     cancel();
                     player.teleport(dest);
                     player.sendTitle("§aWelcome Home!", "", 0, 20, 10);
-                    player.sendMessage(Component.text("🏠 Teleported to Home " + homeNumber + "!", NamedTextColor.GREEN));
+                    if (homeNumber == -1) {
+                        player.sendMessage(Component.text("🏠 Teleported to Team Home!", NamedTextColor.AQUA));
+                    } else {
+                        player.sendMessage(Component.text("🏠 Teleported to Home " + homeNumber + "!", NamedTextColor.GREEN));
+                    }
                 }
             }
         }.runTaskTimer(this, 0L, 20L);
