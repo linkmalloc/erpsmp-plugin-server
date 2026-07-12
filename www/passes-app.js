@@ -544,16 +544,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Read screenshot if provided (GCash only)
-            let screenshotBase64 = null;
-            if (method === 'gcash' && gcashScreenshotInput && gcashScreenshotInput.files[0]) {
-                try {
-                    screenshotBase64 = await readFileAsBase64(gcashScreenshotInput.files[0]);
-                } catch (e) {
-                    console.warn('Could not read screenshot file:', e);
-                }
-            }
-
             // Show submitting state
             const originalBtnContent = btnPaymentSubmit.innerHTML;
             btnPaymentSubmit.disabled = true;
@@ -570,8 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 0),
                 currency: selectedCurrency,
                 method,
-                refNo: verificationValue,
-                screenshotBase64
+                refNo: verificationValue
             };
 
             try {
