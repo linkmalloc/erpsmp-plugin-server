@@ -65,7 +65,8 @@ exports.handler = async (event) => {
     }
 
     try {
-        const orders = await readOrders();
+        let orders = await readOrders();
+        if (!Array.isArray(orders)) orders = [];
         const idx = orders.findIndex(o => o.orderId === orderId);
         if (idx === -1) {
             return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Order not found' }) };

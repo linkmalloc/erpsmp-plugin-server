@@ -79,7 +79,10 @@ exports.handler = async (event) => {
     };
 
     try {
-        const orders = await readOrders();
+        let orders = await readOrders();
+        if (!Array.isArray(orders)) {
+            orders = [];
+        }
         orders.unshift(order);
         await writeOrders(orders);
         return {

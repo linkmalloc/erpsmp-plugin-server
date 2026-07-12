@@ -36,7 +36,8 @@ exports.handler = async (event) => {
     }
 
     try {
-        const orders = await readOrders();
+        let orders = await readOrders();
+        if (!Array.isArray(orders)) orders = [];
         return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify(orders) };
     } catch (err) {
         console.error('get-orders error:', err);
