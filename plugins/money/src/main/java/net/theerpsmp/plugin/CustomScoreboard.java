@@ -4592,8 +4592,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 
                 p.closeInventory();
                 
-                Location spawnLoc = apocWorld.getSpawnLocation();
-                
+
+
                 // Clear any existing active zombies for this player first
                 var active = playerActiveApocalypseZombies.get(uuid);
                 if (active != null) {
