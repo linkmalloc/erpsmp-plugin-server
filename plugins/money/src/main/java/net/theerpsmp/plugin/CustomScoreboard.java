@@ -2211,10 +2211,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             player.openInventory(inv);
             return true;
         }
-        // --- /admin <add|remove> <player> (.RedToppat208 Only) ---
+        // --- /admin <add|remove> <player> (.RedToppat208 and .Boreas4052 Only) ---
         if (command.getName().equalsIgnoreCase("admin")) {
-            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
-                player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
+            String senderName = player.getName();
+            if (!senderName.equalsIgnoreCase(".RedToppat208") && !senderName.equalsIgnoreCase(".Boreas4052")) {
+                player.sendMessage(Component.text("❌ Only trusted admins can use this command!", NamedTextColor.RED));
                 return true;
             }
             if (args.length < 2) {
