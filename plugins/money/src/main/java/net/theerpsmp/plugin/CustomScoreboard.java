@@ -606,21 +606,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 long derpiesEarned = 0;
                 String source = "";
 
-                if (hasErpProMaxMap.getOrDefault(uuid, false)) { // Erp+++
+                if (hasErpProMaxMap.getOrDefault(uuid, false)) { // Erp+ Pro Max
                     if (isAfk) {
                         derpiesEarned = 10;
-                        source = "Erp+++ (AFK Zone)";
+                        source = "Erp+ Pro Max (AFK Zone)";
                     } else {
                         derpiesEarned = 5;
-                        source = "Erp+++ (Passive)";
+                        source = "Erp+ Pro Max (Passive)";
                     }
-                } else if (hasErpProMap.getOrDefault(uuid, false)) { // Erp++
+                } else if (hasErpProMap.getOrDefault(uuid, false)) { // Erp+ Pro
                     if (isAfk) {
                         derpiesEarned = 2;
-                        source = "Erp++ (AFK Zone)";
+                        source = "Erp+ Pro (AFK Zone)";
                     } else {
                         derpiesEarned = 1;
-                        source = "Erp++ (Passive)";
+                        source = "Erp+ Pro (Passive)";
                     }
                 } else if (hasErpPlusMap.getOrDefault(uuid, false)) { // Erp+
                     derpiesEarned = 1;
@@ -1116,7 +1116,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 2) {
-                sender.sendMessage("Usage: /setrank <playername> <erp+|erp++|erp+++|none>");
+                sender.sendMessage("Usage: /setrank <playername> <erp+|erp++|erp+++|none> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)");
                 return true;
             }
             String targetName = args[0];
@@ -1138,11 +1138,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     break;
                 case "erp++":
                     hasErpProMap.put(targetUuid, true);
-                    rankLabel = "Erp++";
+                    rankLabel = "Erp+ Pro";
                     break;
                 case "erp+++":
                     hasErpProMaxMap.put(targetUuid, true);
-                    rankLabel = "Erp+++";
+                    rankLabel = "Erp+ Pro Max";
                     break;
                 case "none":
                     break;
@@ -1234,7 +1234,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 2) {
-                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++> <playername>", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++> <playername> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)", NamedTextColor.RED));
                 return true;
             }
             String rankArg = args[0].toLowerCase();
@@ -1257,11 +1257,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     break;
                 case "erp++":
                     hasErpProMap.put(targetUuid, true);
-                    rankLabel = "Erp++";
+                    rankLabel = "Erp+ Pro";
                     break;
                 case "erp+++":
                     hasErpProMaxMap.put(targetUuid, true);
-                    rankLabel = "Erp+++";
+                    rankLabel = "Erp+ Pro Max";
                     break;
                 default:
                     player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, or erp+++", NamedTextColor.RED));
@@ -8444,10 +8444,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 prefix = prefix.append(Component.text("[admin] ", NamedTextColor.LIGHT_PURPLE));
                 team.color(NamedTextColor.LIGHT_PURPLE);
             } else if (hasErpProMaxMap.getOrDefault(uuid, false)) {
-                prefix = prefix.append(createGoldGradientComponent("[Erp+++] "));
+                prefix = prefix.append(createGoldGradientComponent("[Erp+ Pro Max] "));
                 team.color(NamedTextColor.GOLD);
             } else if (hasErpProMap.getOrDefault(uuid, false)) {
-                prefix = prefix.append(Component.text("[Erp++] ", NamedTextColor.GRAY));
+                prefix = prefix.append(Component.text("[Erp+ Pro] ", NamedTextColor.GRAY));
                 team.color(NamedTextColor.GRAY);
             } else if (hasErpPlusMap.getOrDefault(uuid, false)) {
                 prefix = prefix.append(Component.text("[Erp+] ", NamedTextColor.GOLD));
