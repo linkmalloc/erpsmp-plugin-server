@@ -5158,20 +5158,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 player.sendMessage(Component.text("⚙️ Chat Spam disabled: " + (!current ? "ON" : "OFF"), NamedTextColor.YELLOW));
                 savePlayerData(player);
                 openSettingsGui(player);
-            } else if (rawSlot == 13) {
-                boolean current = musicDisabled.getOrDefault(uuid, false);
-                musicDisabled.put(uuid, !current);
-                player.sendMessage(Component.text("⚙️ Lobby Music disabled: " + (!current ? "ON" : "OFF"), NamedTextColor.YELLOW));
-                if (!current) {
-                    stopLobbyMusic(player);
-                } else {
-                    String worldName = player.getWorld().getName();
-                    if (worldName.equalsIgnoreCase("spawn") || worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone")) {
-                        playLobbyMusic(player);
-                    }
-                }
-                savePlayerData(player);
-                openSettingsGui(player);
+
             } else if (rawSlot == 15) {
                 boolean current = tpaDisabled.getOrDefault(uuid, false);
                 tpaDisabled.put(uuid, !current);
@@ -7449,12 +7436,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             inv.setItem(11, createGuiItem(Material.GREEN_WOOL, "Disable Chat Spam: OFF", NamedTextColor.GREEN, "Click to toggle (Currently shows alerts)"));
         }
 
-        boolean music = musicDisabled.getOrDefault(uuid, false);
-        if (music) {
-            inv.setItem(13, createGuiItem(Material.RED_WOOL, "Disable Lobby Music: ON", NamedTextColor.RED, "Click to toggle (Currently quiet)"));
-        } else {
-            inv.setItem(13, createGuiItem(Material.GREEN_WOOL, "Disable Lobby Music: OFF", NamedTextColor.GREEN, "Click to toggle (Currently plays lobby music)"));
-        }
+
 
         boolean tpa = tpaDisabled.getOrDefault(uuid, false);
         if (tpa) {
@@ -9266,18 +9248,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void playLobbyMusic(Player player) {
-        if (musicDisabled.getOrDefault(player.getUniqueId(), false)) {
-            return;
-        }
-        // Play custom resource pack sound for Java players
-        player.playSound(player.getLocation(), "custom.music.mysong", org.bukkit.SoundCategory.RECORDS, 1.0f, 1.0f);
-        // Also play a vanilla music disc sound so Bedrock players (via Geyser) can hear music
-        player.playSound(player.getLocation(), org.bukkit.Sound.MUSIC_DISC_CHIRP, org.bukkit.SoundCategory.RECORDS, 0.5f, 1.0f);
+        // Disabled custom lobby music
     }
 
     private void stopLobbyMusic(Player player) {
-        player.stopSound("custom.music.mysong");
-        player.stopSound(org.bukkit.Sound.MUSIC_DISC_CHIRP);
+        // Disabled custom lobby music
     }
 
     private void openTeamGui(Player player) {
