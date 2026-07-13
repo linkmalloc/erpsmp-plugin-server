@@ -236,7 +236,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
 
     // Nametag and achievements system
-    private final HashMap<UUID, String> activeNametags = new HashMap<>();
+    private final HashMap<UUID, java.util.Set<String>> activeNametags = new HashMap<>();
+    private final HashMap<UUID, List<org.bukkit.entity.TextDisplay>> playerTagDisplays = new HashMap<>();
     private final HashMap<UUID, Boolean> killedAdminMap = new HashMap<>();
     private final HashMap<UUID, Boolean> killedDragonMap = new HashMap<>();
     private final HashMap<UUID, java.util.Set<String>> manuallyUnlockedNametags = new HashMap<>();
@@ -704,6 +705,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         saveTeams();
         saveCommandChests();
         saveGenerators();
+
+        // Clean up all spawned floating nametags
+        for (List<org.bukkit.entity.TextDisplay> displays : playerTagDisplays.values()) {
+            for (org.bukkit.entity.TextDisplay td : displays) {
+                if (td.isValid()) td.remove();
+            }
+        }
+        playerTagDisplays.clear();
     }
 
     private void loadPlayerData(Player player) {
@@ -753,7 +762,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         voiceChatEnabled.put(uuid, getConfig().getBoolean(path + "voiceChatEnabled", false));
         musicDisabled.put(uuid, getConfig().getBoolean(path + "musicDisabled", false));
 
-        activeNametags.put(uuid, getConfig().getString(path + "activeNametag", ""));
+        java.util.List<String> activeList = getConfig().getStringList(path + "activeNametagsList");
+        if (activeList.isEmpty() && getConfig().contains(path + "activeNametag")) {
+            String legacy = getConfig().getString(path + "activeNametag", "");
+            if (!legacy.isEmpty()) activeList.add(legacy);
+        }
+        activeNametags.put(uuid, new java.util.HashSet<>(activeList));
         killedAdminMap.put(uuid, getConfig().getBoolean(path + "killedAdmin", false));
         killedDragonMap.put(uuid, getConfig().getBoolean(path + "killedDragon", false));
         java.util.List<String> unlocked = getConfig().getStringList(path + "manuallyUnlockedNametags");
@@ -843,7 +857,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "voiceChatEnabled", voiceChatEnabled.getOrDefault(uuid, false));
         getConfig().set(path + "musicDisabled", musicDisabled.getOrDefault(uuid, false));
 
-        getConfig().set(path + "activeNametag", activeNametags.getOrDefault(uuid, ""));
+        java.util.Set<String> activeSet = activeNametags.get(uuid);
+        if (activeSet != null) {
+            getConfig().set(path + "activeNametagsList", new java.util.ArrayList<>(activeSet));
+        } else {
+            getConfig().set(path + "activeNametagsList", null);
+        }
         getConfig().set(path + "killedAdmin", killedAdminMap.getOrDefault(uuid, false));
         getConfig().set(path + "killedDragon", killedDragonMap.getOrDefault(uuid, false));
         java.util.Set<String> unlockedSet = manuallyUnlockedNametags.get(uuid);
@@ -903,6 +922,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Player player = event.getPlayer();
         loadPlayerData(player);
         updateScoreboard(player);
+        updatePlayerFloatingTags(player);
         if (!player.hasPlayedBefore()) {
             giveStarterGear(player);
             player.teleport(getRandomSpawnPoint());
@@ -928,6 +948,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // Play custom spawn/afk music on respawn only for this player
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (player.isOnline()) {
+                updatePlayerFloatingTags(player);
                 String worldName = player.getWorld().getName();
                 if (worldName.equalsIgnoreCase("spawn") || worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone")) {
                     playLobbyMusic(player);
@@ -995,12 +1016,35 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     @EventHandler
+    public void onPlayerChangedWorld(org.bukkit.event.player.PlayerChangedWorldEvent event) {
+        updatePlayerFloatingTags(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerTeleport(org.bukkit.event.player.PlayerTeleportEvent event) {
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (player.isOnline()) {
+                updatePlayerFloatingTags(player);
+            }
+        }, 5L);
+    }
+
+    @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
         if (player.getWorld().getName().equalsIgnoreCase("apocalypse")) {
             endApocalypseRun(player);
+        }
+
+        // Clean up spawned displays
+        List<org.bukkit.entity.TextDisplay> displays = playerTagDisplays.remove(uuid);
+        if (displays != null) {
+            for (org.bukkit.entity.TextDisplay td : displays) {
+                if (td.isValid()) td.remove();
+            }
         }
 
         combatTagTicks.remove(uuid);
@@ -4246,12 +4290,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (title.equals("Nametag Menu")) {
             if (event.getRawSlot() == 11) {
-                // Clear tag
-                activeNametags.put(uuid, "");
-                player.sendMessage(Component.text("✅ Your active nametag has been cleared!", NamedTextColor.GREEN));
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    updateNameplateTeams(online.getScoreboard());
-                }
+                // Clear all active tags
+                activeNametags.put(uuid, new java.util.HashSet<>());
+                updatePlayerFloatingTags(player);
+                player.sendMessage(Component.text("✅ Your active nametags have been cleared!", NamedTextColor.GREEN));
                 player.closeInventory();
             } else if (event.getRawSlot() == 15) {
                 openNametagAddMenu(player);
@@ -4276,11 +4318,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             if (selectedTag != null) {
                 if (isNametagUnlocked(player, selectedTag)) {
-                    activeNametags.put(uuid, selectedTag);
-                    player.sendMessage(Component.text("✅ Applied nametag: " + selectedTag + "!", NamedTextColor.GREEN));
-                    for (Player online : Bukkit.getOnlinePlayers()) {
-                        updateNameplateTeams(online.getScoreboard());
+                    java.util.Set<String> activeSet = activeNametags.computeIfAbsent(uuid, k -> new java.util.HashSet<>());
+                    if (activeSet.contains(selectedTag)) {
+                        activeSet.remove(selectedTag);
+                        player.sendMessage(Component.text("❌ Unequipped nametag: " + selectedTag, NamedTextColor.RED));
+                    } else {
+                        activeSet.add(selectedTag);
+                        player.sendMessage(Component.text("✅ Equipped nametag: " + selectedTag, NamedTextColor.GREEN));
                     }
+                    updatePlayerFloatingTags(player);
                     player.closeInventory();
                 } else {
                     player.sendMessage(Component.text("❌ You have not unlocked this nametag yet!", NamedTextColor.RED));
@@ -8479,23 +8525,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             UUID uuid = online.getUniqueId();
-            String activeTag = activeNametags.getOrDefault(uuid, "");
-            if (!activeTag.isEmpty()) {
-                Component tagComp = switch (activeTag) {
-                    case "Berry Lover" -> Component.text("[Berry Lover] ", NamedTextColor.LIGHT_PURPLE);
-                    case "Combat Master" -> Component.text("[Combat Master] ", NamedTextColor.RED);
-                    case "Admin killer" -> createRainbowComponent("[Admin killer] ");
-                    case "Richie Boi" -> Component.text("[Richie Boi] ", NamedTextColor.GREEN);
-                    case "Dragon Slayer" -> Component.text("[Dragon Slayer] ", NamedTextColor.DARK_PURPLE);
-                    case "The Miner" -> Component.text("[The Miner] ", NamedTextColor.BLUE);
-                    case "Silent Assassin" -> Component.text("[Silent Assassin] ", NamedTextColor.RED);
-                    case "The Builder" -> Component.text("[The Builder] ", NamedTextColor.YELLOW);
-                    case "Fatty" -> Component.text("[", NamedTextColor.GRAY).append(Component.text("Fat", NamedTextColor.GREEN)).append(Component.text("ty", net.kyori.adventure.text.format.TextColor.color(0x8b, 0x5a, 0x2b))).append(Component.text("] ", NamedTextColor.GRAY));
-                    case "Skin and Bones" -> Component.text("[Skin and Bones] ", NamedTextColor.WHITE);
-                    default -> Component.empty();
-                };
-                prefix = prefix.append(tagComp);
-            }
 
             if (name.equalsIgnoreCase(".RedToppat208")) {
                 prefix = prefix.append(Component.text("[Owner o' Merp] ", NamedTextColor.RED));
@@ -8535,6 +8564,66 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 team.suffix(Component.empty());
             }
         }
+    }
+
+    private void updatePlayerFloatingTags(Player player) {
+        UUID uuid = player.getUniqueId();
+        
+        // 1. Remove old displays
+        List<org.bukkit.entity.TextDisplay> old = playerTagDisplays.remove(uuid);
+        if (old != null) {
+            for (org.bukkit.entity.TextDisplay td : old) {
+                if (td.isValid()) td.remove();
+            }
+        }
+        
+        // 2. Get active tags
+        java.util.Set<String> activeTags = activeNametags.getOrDefault(uuid, java.util.Collections.emptySet());
+        if (activeTags.isEmpty()) {
+            return;
+        }
+        
+        // 3. Create a list of text displays
+        List<org.bukkit.entity.TextDisplay> displays = new java.util.ArrayList<>();
+        
+        // Sort the tags so they stack consistently
+        List<String> sortedTags = new java.util.ArrayList<>(activeTags);
+        java.util.Collections.sort(sortedTags);
+        
+        org.bukkit.entity.Entity currentVehicle = player;
+        
+        for (String tag : sortedTags) {
+            Component tagComp = switch (tag) {
+                case "Berry Lover" -> Component.text("[Berry Lover]", NamedTextColor.LIGHT_PURPLE);
+                case "Combat Master" -> Component.text("[Combat Master]", NamedTextColor.RED);
+                case "Admin killer" -> createRainbowComponent("[Admin killer]");
+                case "Richie Boi" -> Component.text("[Richie Boi]", NamedTextColor.GREEN);
+                case "Dragon Slayer" -> Component.text("[Dragon Slayer]", NamedTextColor.DARK_PURPLE);
+                case "The Miner" -> Component.text("[The Miner]", NamedTextColor.BLUE);
+                case "Silent Assassin" -> Component.text("[Silent Assassin]", NamedTextColor.RED);
+                case "The Builder" -> Component.text("[The Builder]", NamedTextColor.YELLOW);
+                case "Fatty" -> Component.text("[", NamedTextColor.GRAY).append(Component.text("Fat", NamedTextColor.GREEN)).append(Component.text("ty", net.kyori.adventure.text.format.TextColor.color(0x8b, 0x5a, 0x2b))).append(Component.text("]", NamedTextColor.GRAY));
+                case "Skin and Bones" -> Component.text("[Skin and Bones]", NamedTextColor.WHITE);
+                default -> Component.empty();
+            };
+            
+            if (tagComp.equals(Component.empty())) continue;
+            
+            Location spawnLoc = player.getLocation().add(0, 2.0, 0);
+            org.bukkit.entity.TextDisplay display = player.getWorld().spawn(spawnLoc, org.bukkit.entity.TextDisplay.class);
+            display.text(tagComp);
+            display.setBillboard(org.bukkit.entity.Display.Billboard.CENTER);
+            display.setPersistent(false);
+            display.setGravity(false);
+            display.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
+            
+            currentVehicle.addPassenger(display);
+            currentVehicle = display;
+            
+            displays.add(display);
+        }
+        
+        playerTagDisplays.put(uuid, displays);
     }
 
     private ItemStack createEchoCrate() {
