@@ -83,6 +83,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Boolean> hasErpPlusMap = new HashMap<>();
     private final HashMap<UUID, Boolean> hasErpProMap = new HashMap<>();
     private final HashMap<UUID, Boolean> hasErpProMaxMap = new HashMap<>();
+    private final HashMap<UUID, Boolean> hasVipMap = new HashMap<>();
 
     // Bank tracking maps
     private final HashMap<UUID, Long> bankErpiesMap = new HashMap<>();
@@ -625,6 +626,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 } else if (hasErpPlusMap.getOrDefault(uuid, false)) { // Erp+
                     derpiesEarned = 1;
                     source = isAfk ? "Erp+ (AFK)" : "Erp+ (Passive)";
+                } else if (hasVipMap.getOrDefault(uuid, false)) { // VIP
+                    if (isAfk) {
+                        derpiesEarned = 1;
+                        source = "VIP (AFK)";
+                    } else {
+                        derpiesEarned = ((System.currentTimeMillis() / 60000) % 2 == 0) ? 1 : 0;
+                        source = "VIP (Passive)";
+                    }
                 } else { // Normal Player
                     if (isAfk) {
                         derpiesEarned = 1;
@@ -720,6 +729,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         hasErpPlusMap.put(uuid, getConfig().getBoolean(path + "hasErpPlus", false));
         hasErpProMap.put(uuid, getConfig().getBoolean(path + "hasErpPro", false));
         hasErpProMaxMap.put(uuid, getConfig().getBoolean(path + "hasErpProMax", false));
+        hasVipMap.put(uuid, getConfig().getBoolean(path + "hasVip", false));
 
         bankErpiesMap.put(uuid, getConfig().getLong(path + "bankErpies", 0L));
         bankDerpiesMap.put(uuid, getConfig().getLong(path + "bankDerpies", 0L));
@@ -821,6 +831,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "hasErpPlus", hasErpPlusMap.getOrDefault(uuid, false));
         getConfig().set(path + "hasErpPro", hasErpProMap.getOrDefault(uuid, false));
         getConfig().set(path + "hasErpProMax", hasErpProMaxMap.getOrDefault(uuid, false));
+        getConfig().set(path + "hasVip", hasVipMap.getOrDefault(uuid, false));
 
         getConfig().set(path + "bankErpies", bankErpiesMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "bankDerpies", bankDerpiesMap.getOrDefault(uuid, 0L));
@@ -1013,6 +1024,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         hasErpPlusMap.remove(uuid);
         hasErpProMap.remove(uuid);
         hasErpProMaxMap.remove(uuid);
+        hasVipMap.remove(uuid);
 
         bankErpiesMap.remove(uuid);
         bankDerpiesMap.remove(uuid);
@@ -1130,6 +1142,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
+            hasVipMap.put(targetUuid, false);
             String rankLabel = "None";
             switch (rankArg) {
                 case "erp+":
@@ -1144,10 +1157,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     hasErpProMaxMap.put(targetUuid, true);
                     rankLabel = "Erp+ Pro Max";
                     break;
+                case "vip":
+                    hasVipMap.put(targetUuid, true);
+                    rankLabel = "VIP";
+                    break;
                 case "none":
                     break;
                 default:
-                    sender.sendMessage("Error: Invalid rank. Use: erp+, erp++, erp+++, or none");
+                    sender.sendMessage("Error: Invalid rank. Use: erp+, erp++, erp+++, vip, or none");
                     return true;
             }
             savePlayerData(target);
@@ -1234,7 +1251,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 2) {
-                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++> <playername> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++|vip> <playername> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)", NamedTextColor.RED));
                 return true;
             }
             String rankArg = args[0].toLowerCase();
@@ -1249,6 +1266,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
+            hasVipMap.put(targetUuid, false);
             String rankLabel;
             switch (rankArg) {
                 case "erp+":
@@ -1263,8 +1281,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     hasErpProMaxMap.put(targetUuid, true);
                     rankLabel = "Erp+ Pro Max";
                     break;
+                case "vip":
+                    hasVipMap.put(targetUuid, true);
+                    rankLabel = "VIP";
+                    break;
                 default:
-                    player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, or erp+++", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, erp+++, or vip", NamedTextColor.RED));
                     return true;
             }
             savePlayerData(target);
@@ -4539,6 +4561,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         int regCount = regularKeysMap.getOrDefault(uuid, 0);
 
         shop.setItem(10, createGuiItem(Material.TRIPWIRE_HOOK, "Regular Key", NamedTextColor.YELLOW, "Cost: 100 Derpies | Owned: " + regCount));
+        
+        boolean hasVip = hasVipMap.getOrDefault(uuid, false);
+        shop.setItem(13, createGuiItem(Material.GOLD_NUGGET, "VIP Rank", NamedTextColor.GOLD, 
+            "Cost: 200000 Derpies", 
+            "Status: " + (hasVip ? "Purchased" : "Not Owned"),
+            "Earn 0.5 Derpies/min passively", 
+            "Get golden [VIP] tag in chat",
+            "Click to purchase!"));
 
         shop.setItem(19, createGuiItem(Material.SPAWNER, "Food Generator", NamedTextColor.GOLD, "Cost: 2000 Derpies", "Generates steak every minute when placed.", "Right-click placed block to open inventory."));
         shop.setItem(20, createGuiItem(Material.SPAWNER, "Ore Generator", NamedTextColor.AQUA, "Cost: 2000 Derpies", "Generates diamonds every minute when placed.", "Right-click placed block to open inventory."));
@@ -5361,11 +5391,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             long derpCost = -1;
             if (rawSlot == 10) derpCost = 100;
+            else if (rawSlot == 13) derpCost = 200000;
             else if (rawSlot == 19) derpCost = 2000;
             else if (rawSlot == 20) derpCost = 2000;
             else if (rawSlot == 21) derpCost = 2000;
 
             if (derpCost == -1) return;
+
+            if (rawSlot == 13) {
+                if (hasVipMap.getOrDefault(uuid, false) || hasErpPlusMap.getOrDefault(uuid, false) || hasErpProMap.getOrDefault(uuid, false) || hasErpProMaxMap.getOrDefault(uuid, false)) {
+                    player.sendMessage(Component.text("❌ You already own VIP Rank or a higher rank!", NamedTextColor.RED));
+                    return;
+                }
+            }
 
             long playerDerpies = derpiesMap.getOrDefault(uuid, 0L);
             if (playerDerpies < derpCost) {
@@ -5380,6 +5418,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             if (rawSlot == 10) {
                 regularKeysMap.put(uuid, regularKeysMap.getOrDefault(uuid, 0) + 1);
+            } else if (rawSlot == 13) {
+                hasVipMap.put(uuid, true);
+                savePlayerData(player);
+                updateScoreboard(player);
+                player.sendMessage(Component.text("👑 You are now a VIP! Enjoy your passive income and golden [VIP] tag!", NamedTextColor.GOLD));
             } else if (rawSlot == 19) {
                 HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createFoodGeneratorItem());
                 for (ItemStack left : remaining.values()) {
@@ -7234,6 +7277,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (hasErpPlusMap.getOrDefault(uuid, false)) {
             return 14;
         }
+        if (hasVipMap.getOrDefault(uuid, false)) {
+            return 10;
+        }
         return 5;
     }
 
@@ -8474,6 +8520,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 team.color(NamedTextColor.GRAY);
             } else if (hasErpPlusMap.getOrDefault(uuid, false)) {
                 prefix = prefix.append(Component.text("[Erp+] ", NamedTextColor.GOLD));
+                team.color(NamedTextColor.WHITE);
+            } else if (hasVipMap.getOrDefault(uuid, false)) {
+                prefix = prefix.append(Component.text("[VIP] ", NamedTextColor.GOLD));
                 team.color(NamedTextColor.WHITE);
             } else {
                 team.color(NamedTextColor.WHITE);
