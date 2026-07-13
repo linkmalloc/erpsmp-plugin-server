@@ -209,7 +209,7 @@ commands:
     description: Edit server rules or credits book (Special only)
     usage: /edit <rules|credits>
   say:
-    description: Send a title message to all players (Only for .Redtoppat208)
+    description: Send a title message to all players (Only for .RedToppat208)
     usage: /say <message>
   dualchest:
     description: Open the duel chest interface (OP only)
@@ -230,5 +230,5 @@ commands:
     description: Set a player's store rank (Console only)
     usage: /setrank <player> <erp+|erp++|erp+++|none>
   rank:
-    description: Set a player's store rank (Trusted admins only - .Boreas4052 and .Redtoppat208)
+    description: Set a player's store rank (Trusted admins only - .Boreas4052 and .RedToppat208)
     usage: /rank <erp+|erp++|erp+++> <playername>

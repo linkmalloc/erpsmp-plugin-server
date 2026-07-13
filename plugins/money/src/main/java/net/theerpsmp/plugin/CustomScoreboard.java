@@ -1077,7 +1077,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 invisibleKillsMap.put(killerUUID, invisibleKillsMap.getOrDefault(killerUUID, 0) + 1);
             }
 
-            if (victim.isOp() || victim.getName().equalsIgnoreCase(".Redtoppat208") || victim.getName().equalsIgnoreCase(".Boreas4052")) {
+            if (victim.isOp() || victim.getName().equalsIgnoreCase(".RedToppat208") || victim.getName().equalsIgnoreCase(".Boreas4052")) {
                 killedAdminMap.put(killerUUID, true);
             }
 
@@ -1163,7 +1163,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("setwarp")) {
-            if (!player.getName().equalsIgnoreCase(".Redtoppat208") && !player.getName().equalsIgnoreCase(".RedToppat208")) {
+            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -1209,7 +1209,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("say")) {
-            if (!player.getName().equalsIgnoreCase(".Redtoppat208")) {
+            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -1228,7 +1228,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // /rank <erp+|erp++|erp+++> <playername>  — restricted to trusted admins
         if (command.getName().equalsIgnoreCase("rank")) {
             String senderName = player.getName();
-            boolean isTrusted = senderName.equals(".Redtoppat208") || senderName.equals(".Boreas4052");
+            boolean isTrusted = senderName.equals(".RedToppat208") || senderName.equals(".Boreas4052");
             if (!isTrusted) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command.", NamedTextColor.RED));
                 return true;
@@ -1694,7 +1694,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (command.getName().equalsIgnoreCase("player")) {
             String pName = player.getName();
-            if (!player.isOp() && !pName.equalsIgnoreCase(".Redtoppat208") && !pName.equalsIgnoreCase(".Boreas4052")) {
+            if (!player.isOp() && !pName.equalsIgnoreCase(".RedToppat208") && !pName.equalsIgnoreCase(".Boreas4052")) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -2213,7 +2213,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         // --- /admin <add|remove> <player> (.RedToppat208 Only) ---
         if (command.getName().equalsIgnoreCase("admin")) {
-            if (!player.getName().equalsIgnoreCase(".Redtoppat208") && !player.getName().equalsIgnoreCase(".RedToppat208")) {
+            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -2255,9 +2255,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             return true;
         }
-        // --- /setspawn <1-5> (.Redtoppat208 Only, in 'spawn' dimension) ---
+        // --- /setspawn <1-5> (.RedToppat208 Only, in 'spawn' dimension) ---
         if (command.getName().equalsIgnoreCase("setspawn")) {
-            if (!player.getName().equalsIgnoreCase(".Redtoppat208") && !player.getName().equalsIgnoreCase(".RedToppat208")) {
+            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -3179,8 +3179,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /edit (rules/credits) ---
         if (command.getName().equalsIgnoreCase("edit")) {
             String pName = player.getName();
-            if (!pName.equalsIgnoreCase(".Redtoppat208") && !pName.equalsIgnoreCase("Redtoppat208")) {
-                player.sendMessage(Component.text("❌ Only player .Redtoppat208 can use this command!", NamedTextColor.RED));
+            if (!pName.equalsIgnoreCase(".RedToppat208") && !pName.equalsIgnoreCase("RedToppat208")) {
+                player.sendMessage(Component.text("❌ Only player .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
             if (args.length < 1) {
@@ -8427,7 +8427,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 prefix = prefix.append(tagComp);
             }
 
-            if (name.equalsIgnoreCase(".Redtoppat208") || name.equalsIgnoreCase(".RedToppat208")) {
+            if (name.equalsIgnoreCase(".RedToppat208")) {
                 prefix = prefix.append(Component.text("[Owner o' Merp] ", NamedTextColor.RED));
                 team.color(NamedTextColor.RED);
             } else if (name.equalsIgnoreCase(".Boreas4052") || name.equalsIgnoreCase(".Boreas4052")) {
@@ -8841,8 +8841,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
-        // Block /op, /deop, /ban for everyone except .Redtoppat208
-        if (!event.getPlayer().getName().equals(".Redtoppat208")) {
+        // Block /op, /deop, /ban for everyone except .RedToppat208
+        if (!event.getPlayer().getName().equals(".RedToppat208")) {
             String[] parts = message.split(" ");
             String cmd = parts[0].replaceAll("^/", "");
             // Strip namespace prefix (e.g. minecraft:op -> op)
