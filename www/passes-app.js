@@ -1,14 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Passes products database
     const PRODUCTS = {
-        erpie: { name: 'Erp+', priceUSD: 14.99, pricePHP: 299.95, icon: 'fa-cube', color: '#f59e0b' },
-        erpiepro: { name: 'Erp++', priceUSD: 29.99, pricePHP: 599.95, icon: 'fa-circle-nodes', color: '#0066ff' },
-        erpiepromaxx: { name: 'Erp+++', priceUSD: 79.99, pricePHP: 1599.95, icon: 'fa-crown', color: '#a855f7' },
-        echokey: { name: 'Echo Key', priceUSD: 24.99, pricePHP: 500.00, icon: 'fa-key', color: '#22d3ee' },
-        crimsonkey: { name: 'Crimson Key', priceUSD: 22.49, pricePHP: 450.00, icon: 'fa-key', color: '#ef4444' },
-        endkey: { name: 'End Key', priceUSD: 14.99, pricePHP: 300.00, icon: 'fa-key', color: '#c084fc' },
-        amethystkey: { name: 'Amethyst Key', priceUSD: 12.49, pricePHP: 250.00, icon: 'fa-key', color: '#d946ef' },
-        basickey: { name: 'Basic Key', priceUSD: 4.99, pricePHP: 100.00, icon: 'fa-key', color: '#eab308' }
+        erpie: { name: 'Erp+', priceUSD: 7.49, pricePHP: 150.00, icon: 'fa-cube', color: '#f59e0b' },
+        erpiepro: { name: 'Erp+ Pro', priceUSD: 12.49, pricePHP: 250.00, icon: 'fa-circle-nodes', color: '#0066ff' },
+        erpiepromaxx: { name: 'Erp+ Pro Max', priceUSD: 24.99, pricePHP: 499.00, icon: 'fa-crown', color: '#a855f7' },
+        echokey: { name: 'Echo Key', priceUSD: 14.99, pricePHP: 299.00, icon: 'fa-key', color: '#22d3ee' },
+        crimsonkey: { name: 'Crimson Key', priceUSD: 9.99, pricePHP: 199.00, icon: 'fa-key', color: '#ef4444' },
+        endkey: { name: 'End Key', priceUSD: 3.75, pricePHP: 75.00, icon: 'fa-key', color: '#c084fc' },
+        amethystkey: { name: 'Amethyst Key', priceUSD: 4.99, pricePHP: 99.00, icon: 'fa-key', color: '#d946ef' },
+        basickey: { name: 'Basic Key', priceUSD: 2.49, pricePHP: 50.00, icon: 'fa-key', color: '#eab308' }
     };
 
     // State (isolated to passes store cart, or using shared cart)
