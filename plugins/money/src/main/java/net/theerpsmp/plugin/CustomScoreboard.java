@@ -7607,9 +7607,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_GENERIC_EXPLODE, 1.0f, 1.0f);
 
                         final Location center = targetLoc.clone();
+                        final List<org.bukkit.entity.TNTPrimed> activeTnts = new java.util.ArrayList<>();
+
+                        // Task 1: Spawns the TNT rings over 5 seconds (expanding radius)
                         new org.bukkit.scheduler.BukkitRunnable() {
                             int step = 0;
-                            final int maxSteps = 50; // 50 runs, every 2 ticks = 100 ticks (5 seconds)
+                            final int maxSteps = 50;
 
                             @Override
                             public void run() {
@@ -7617,25 +7620,45 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                     cancel();
                                     return;
                                 }
-
-                                // Radius grows from 1.5 to 15.0 blocks
-                                double radius = 1.5 + (step * (15.0 - 1.5) / (maxSteps - 1));
-                                
-                                // Spawn 4 TNT blocks per step in a circle pattern, rotated slightly based on step
-                                double angleOffset = step * 0.2; // Radians offset
-                                for (int i = 0; i < 4; i++) {
-                                    double angle = angleOffset + (i * Math.PI / 2.0);
+                                double radius = 1.0 + (step * 0.7); // grows up to 35 blocks radius
+                                int numBlocks = 6 + (int)(radius * 0.8);
+                                for (int i = 0; i < numBlocks; i++) {
+                                    double angle = (i * 2.0 * Math.PI / numBlocks) + (step * 0.05);
                                     double dx = radius * Math.cos(angle);
                                     double dz = radius * Math.sin(angle);
-                                    
-                                    Location tntLoc = center.clone().add(dx, 5.0, dz);
+                                    Location tntLoc = center.clone().add(dx, 30.0, dz);
                                     org.bukkit.entity.TNTPrimed tnt = tntLoc.getWorld().spawn(tntLoc, org.bukkit.entity.TNTPrimed.class);
                                     tnt.setSource(player);
+                                    tnt.setFuseTicks(160);
+                                    tnt.setGravity(false);
+                                    tnt.setVelocity(new org.bukkit.util.Vector(0, -0.12, 0));
+                                    synchronized (activeTnts) {
+                                        activeTnts.add(tnt);
+                                    }
                                 }
-
                                 step++;
                             }
-                        }.runTaskTimer(this, 0L, 2L);
+                        }.runTaskTimer(CustomScoreboard.this, 0L, 2L);
+
+                        // Task 2: Keeps all spawned TNT falling slowly by overriding velocity every tick
+                        new org.bukkit.scheduler.BukkitRunnable() {
+                            int ticks = 0;
+
+                            @Override
+                            public void run() {
+                                if (ticks > 240) { // run for 12 seconds
+                                    cancel();
+                                    return;
+                                }
+                                synchronized (activeTnts) {
+                                    activeTnts.removeIf(tnt -> !tnt.isValid());
+                                    for (org.bukkit.entity.TNTPrimed tnt : activeTnts) {
+                                        tnt.setVelocity(new org.bukkit.util.Vector(0, -0.12, 0));
+                                    }
+                                }
+                                ticks++;
+                            }
+                        }.runTaskTimer(CustomScoreboard.this, 0L, 1L);
                     }
                 } else if (customType.equals("lunge_spear")) {
                     if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
