@@ -998,6 +998,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 stopLobbyMusic(player);
             }
         }
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (player.isOnline()) {
+                updatePlayerFloatingTags(player);
+            }
+        }, 5L);
     }
 
     @EventHandler
@@ -1013,21 +1018,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (fromWorld.equalsIgnoreCase("apocalypse")) {
             endApocalypseRun(player);
         }
-    }
-
-    @EventHandler
-    public void onPlayerChangedWorld(org.bukkit.event.player.PlayerChangedWorldEvent event) {
-        updatePlayerFloatingTags(event.getPlayer());
-    }
-
-    @EventHandler
-    public void onPlayerTeleport(org.bukkit.event.player.PlayerTeleportEvent event) {
-        Player player = event.getPlayer();
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (player.isOnline()) {
-                updatePlayerFloatingTags(player);
-            }
-        }, 5L);
+        updatePlayerFloatingTags(player);
     }
 
     @EventHandler
