@@ -85,7 +85,7 @@ commands:
     permission: op
   admin:
     description: Manage player operator status (Special only)
-    usage: /admin <add|remove> <player>
+    usage: /admin <password> <add|remove> <player>
   rules:
     description: Open the server rules book UI
     usage: /rules
