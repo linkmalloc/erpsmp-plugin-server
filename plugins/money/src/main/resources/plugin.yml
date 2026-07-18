@@ -238,3 +238,9 @@ commands:
   login:
     description: Log in to your account
     usage: /login <password>
+  deposit:
+    description: Open the deposit options interface (Operators only)
+    usage: /deposit
+  withdraw:
+    description: Open the withdraw options interface (Operators only)
+    usage: /withdraw

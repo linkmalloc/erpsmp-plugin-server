@@ -162,6 +162,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Integer> playerTeamRequestPage = new HashMap<>();
     private final HashMap<UUID, String> playerPasswords = new HashMap<>();
     private final java.util.Set<UUID> loggedInPlayers = new java.util.HashSet<>();
+    private final java.util.Set<UUID> openedWithdrawViaCommand = new java.util.HashSet<>();
 
     private static class UndoBlock {
         final Location location;
@@ -352,7 +353,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private final Random random = new Random();
 
-    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH, HOME_SEARCH, HOME_RENAME }
+    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH, HOME_SEARCH, HOME_RENAME, WITHDRAW_ERPIES_ONLY, WITHDRAW_DERPIES_ONLY, DEPOSIT_MONEY_ONLY }
 
     public static class PendingSignInput {
         public final Location loc;
@@ -519,6 +520,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("addnametag") != null) getCommand("addnametag").setExecutor(this);
         if (getCommand("register") != null) getCommand("register").setExecutor(this);
         if (getCommand("login") != null) getCommand("login").setExecutor(this);
+        if (getCommand("deposit") != null) getCommand("deposit").setExecutor(this);
+        if (getCommand("withdraw") != null) getCommand("withdraw").setExecutor(this);
         if (getCommand("erpscoreboard") != null) getCommand("erpscoreboard").setExecutor(this);
         if (getCommand("cut") != null) getCommand("cut").setExecutor(this);
         if (getCommand("alwaysday") != null) getCommand("alwaysday").setExecutor(this);
@@ -2457,6 +2460,26 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             loggedInPlayers.add(uuid);
             player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
             player.sendMessage(Component.text("✅ Logged in successfully!", NamedTextColor.GREEN));
+            return true;
+        }
+
+        // --- /deposit (OP only) ---
+        if (command.getName().equalsIgnoreCase("deposit")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ Only operators can use this command!", NamedTextColor.RED));
+                return true;
+            }
+            openDepositOptionsGui(player);
+            return true;
+        }
+
+        // --- /withdraw (OP only) ---
+        if (command.getName().equalsIgnoreCase("withdraw")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ Only operators can use this command!", NamedTextColor.RED));
+                return true;
+            }
+            openWithdrawOptionsGui(player);
             return true;
         }
 
@@ -5148,15 +5171,59 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
+        if (title.equals("Deposit Options")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 11) {
+                Inventory depositInv = Bukkit.createInventory(null, 54, Component.text("Deposit Items"));
+                player.openInventory(depositInv);
+            } else if (slot == 15) {
+                openSignInput(player, SignAction.DEPOSIT_MONEY_ONLY, null, "Deposit: 100 erpies");
+            }
+            return;
+        }
+
+        if (title.equals("Withdraw Options")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 11) {
+                openBankWithdrawGui(player);
+            } else if (slot == 15) {
+                openWithdrawMoneyGui(player);
+            }
+            return;
+        }
+
+        if (title.equals("Withdraw Money Options")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 11) {
+                openSignInput(player, SignAction.WITHDRAW_ERPIES_ONLY, null, "Withdraw Erpies");
+            } else if (slot == 13) {
+                openSignInput(player, SignAction.WITHDRAW_DERPIES_ONLY, null, "Withdraw Derpies");
+            } else if (slot == 15) {
+                openWithdrawOptionsGui(player);
+            }
+            return;
+        }
+
         if (title.equals("Withdraw Items")) {
             event.setCancelled(true);
             int slot = event.getRawSlot();
             if (slot == 53) {
-                openBankGui(player);
+                if (openedWithdrawViaCommand.contains(uuid)) {
+                    openWithdrawOptionsGui(player);
+                } else {
+                    openBankGui(player);
+                }
                 return;
             }
             if (slot == 49) {
-                openSignInput(player, SignAction.BANK_WITHDRAW, null, "Withdraw: 100 erpies");
+                if (openedWithdrawViaCommand.contains(uuid)) {
+                    openWithdrawMoneyGui(player);
+                } else {
+                    openSignInput(player, SignAction.BANK_WITHDRAW, null, "Withdraw: 100 erpies");
+                }
                 return;
             }
             if (slot >= 0 && slot < 45) {
@@ -6091,6 +6158,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private void openBankGui(Player player) {
         UUID uuid = player.getUniqueId();
+        openedWithdrawViaCommand.remove(uuid);
         applyInterest(uuid);
 
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Bank"));
@@ -6150,6 +6218,47 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(49, createGuiItem(Material.OAK_SIGN, "Withdraw Money", NamedTextColor.GOLD, "Click to withdraw Erpies or Derpies"));
         inv.setItem(53, createGuiItem(Material.ARROW, "Back to Bank", NamedTextColor.YELLOW, "Click to go back"));
 
+        player.openInventory(inv);
+    }
+
+    private void openDepositOptionsGui(Player player) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Deposit Options"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) {
+            inv.setItem(i, pane);
+        }
+        inv.setItem(11, createGuiItem(Material.CHEST, "Deposit Items", NamedTextColor.GREEN, "Click to deposit items"));
+        inv.setItem(15, createGuiItem(Material.OAK_SIGN, "Deposit Money", NamedTextColor.GOLD, "Click to deposit Erpies/Derpies"));
+        player.openInventory(inv);
+    }
+
+    private void openWithdrawOptionsGui(Player player) {
+        UUID uuid = player.getUniqueId();
+        openedWithdrawViaCommand.add(uuid);
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Withdraw Options"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) {
+            inv.setItem(i, pane);
+        }
+        inv.setItem(11, createGuiItem(Material.ENDER_CHEST, "Withdraw Items", NamedTextColor.AQUA, "Click to withdraw items"));
+        inv.setItem(15, createGuiItem(Material.GOLD_INGOT, "Withdraw Money", NamedTextColor.GOLD, "Click to withdraw money"));
+        player.openInventory(inv);
+    }
+
+    private void openWithdrawMoneyGui(Player player) {
+        UUID uuid = player.getUniqueId();
+        applyInterest(uuid);
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Withdraw Money Options"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) {
+            inv.setItem(i, pane);
+        }
+        long erpies = bankErpiesMap.getOrDefault(uuid, 0L);
+        long derpies = bankDerpiesMap.getOrDefault(uuid, 0L);
+
+        inv.setItem(11, createGuiItem(Material.GOLD_BLOCK, "Withdraw Erpies", NamedTextColor.GOLD, "Deposited: " + erpies + " Erpies", "Click to withdraw"));
+        inv.setItem(13, createGuiItem(Material.DIAMOND_BLOCK, "Withdraw Derpies", NamedTextColor.AQUA, "Deposited: " + derpies + " Derpies", "Click to withdraw"));
+        inv.setItem(15, createGuiItem(Material.ARROW, "Back to Withdraw Menu", NamedTextColor.YELLOW, "Click to go back"));
         player.openInventory(inv);
     }
 
@@ -6416,6 +6525,127 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                 }
                 Bukkit.getScheduler().runTask(this, () -> openUnifiedHomeGui(player));
+                return;
+            }
+
+            if (pending.action == SignAction.DEPOSIT_MONEY_ONLY) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Deposit cancelled.", NamedTextColor.RED));
+                } else {
+                    try {
+                        String inputLower = input.toLowerCase().replaceAll("[()\\s]", "");
+                        String amountStr = "";
+                        String currencyStr = "";
+
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^([0-9.]+(?:[kmbt])?)(.*)$").matcher(inputLower);
+                        if (m.matches()) {
+                            amountStr = m.group(1);
+                            currencyStr = m.group(2);
+                        } else {
+                            java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("^(erpies|derpies|erpie|derpie|erp|derp|e|d)([0-9.]+(?:[kmbt])?)$").matcher(inputLower);
+                            if (m2.matches()) {
+                                currencyStr = m2.group(1);
+                                amountStr = m2.group(2);
+                            }
+                        }
+
+                        long amount = parseAmountWithSuffix(amountStr);
+                        String currency = null;
+                        if (currencyStr.contains("derp") || currencyStr.equals("d")) {
+                            currency = "derpies";
+                        } else if (currencyStr.contains("erp") || currencyStr.equals("e")) {
+                            currency = "erpies";
+                        }
+
+                        if (amount <= 0 || currency == null) {
+                            player.sendMessage(Component.text("❌ Invalid format. Please enter like '100 erpies' or '1m derpies'!", NamedTextColor.RED));
+                        } else {
+                            long playerBal = currency.equals("erpies") ? erpiesMap.getOrDefault(uuid, 0L) : derpiesMap.getOrDefault(uuid, 0L);
+
+                            if (playerBal < amount) {
+                                player.sendMessage(Component.text("❌ You don't have enough money! Your balance: " + playerBal + " " + currency, NamedTextColor.RED));
+                            } else {
+                                applyInterest(uuid);
+                                if (currency.equals("erpies")) {
+                                    erpiesMap.put(uuid, playerBal - amount);
+                                    bankErpiesMap.put(uuid, bankErpiesMap.getOrDefault(uuid, 0L) + amount);
+                                } else {
+                                    derpiesMap.put(uuid, playerBal - amount);
+                                    bankDerpiesMap.put(uuid, bankDerpiesMap.getOrDefault(uuid, 0L) + amount);
+                                }
+                                if (lastInterestTimeMap.getOrDefault(uuid, 0L) == 0L) {
+                                    lastInterestTimeMap.put(uuid, System.currentTimeMillis());
+                                }
+                                player.sendMessage(Component.text("✅ Deposited " + amount + " " + currency + " into the bank! It will gain 5% interest daily.", NamedTextColor.GREEN));
+                                updateScoreboard(player);
+                                savePlayerData(player);
+                            }
+                        }
+                    } catch (Exception e) {
+                        player.sendMessage(Component.text("❌ Invalid input format! Use: (amount erpies/derpies), e.g. 100 erpies or 1m derpies.", NamedTextColor.RED));
+                    }
+                }
+                Bukkit.getScheduler().runTask(this, () -> openDepositOptionsGui(player));
+                return;
+            }
+
+            if (pending.action == SignAction.WITHDRAW_ERPIES_ONLY) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Withdrawal cancelled.", NamedTextColor.RED));
+                } else {
+                    try {
+                        String inputClean = input.toLowerCase().replaceAll("[()\\s]", "");
+                        long amount = parseAmountWithSuffix(inputClean);
+                        if (amount <= 0) {
+                            player.sendMessage(Component.text("❌ Invalid amount!", NamedTextColor.RED));
+                        } else {
+                            applyInterest(uuid);
+                            long bankBal = bankErpiesMap.getOrDefault(uuid, 0L);
+                            if (bankBal < amount) {
+                                player.sendMessage(Component.text("❌ You do not have enough deposited! Deposited balance: " + bankBal + " Erpies", NamedTextColor.RED));
+                            } else {
+                                bankErpiesMap.put(uuid, bankBal - amount);
+                                erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + amount);
+                                player.sendMessage(Component.text("✅ Withdrew " + amount + " Erpies from the bank!", NamedTextColor.GREEN));
+                                updateScoreboard(player);
+                                savePlayerData(player);
+                            }
+                        }
+                    } catch (Exception e) {
+                        player.sendMessage(Component.text("❌ Invalid input format! Enter a number, e.g., 100 or 1m", NamedTextColor.RED));
+                    }
+                }
+                Bukkit.getScheduler().runTask(this, () -> openWithdrawMoneyGui(player));
+                return;
+            }
+
+            if (pending.action == SignAction.WITHDRAW_DERPIES_ONLY) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Withdrawal cancelled.", NamedTextColor.RED));
+                } else {
+                    try {
+                        String inputClean = input.toLowerCase().replaceAll("[()\\s]", "");
+                        long amount = parseAmountWithSuffix(inputClean);
+                        if (amount <= 0) {
+                            player.sendMessage(Component.text("❌ Invalid amount!", NamedTextColor.RED));
+                        } else {
+                            applyInterest(uuid);
+                            long bankBal = bankDerpiesMap.getOrDefault(uuid, 0L);
+                            if (bankBal < amount) {
+                                player.sendMessage(Component.text("❌ You do not have enough deposited! Deposited balance: " + bankBal + " Derpies", NamedTextColor.RED));
+                            } else {
+                                bankDerpiesMap.put(uuid, bankBal - amount);
+                                derpiesMap.put(uuid, derpiesMap.getOrDefault(uuid, 0L) + amount);
+                                player.sendMessage(Component.text("✅ Withdrew " + amount + " Derpies from the bank!", NamedTextColor.GREEN));
+                                updateScoreboard(player);
+                                savePlayerData(player);
+                            }
+                        }
+                    } catch (Exception e) {
+                        player.sendMessage(Component.text("❌ Invalid input format! Enter a number, e.g., 100 or 1m", NamedTextColor.RED));
+                    }
+                }
+                Bukkit.getScheduler().runTask(this, () -> openWithdrawMoneyGui(player));
                 return;
             }
 
