@@ -160,6 +160,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Integer> playerVaultPage = new HashMap<>();
     private final HashMap<UUID, Integer> playerAllTeamsPage = new HashMap<>();
     private final HashMap<UUID, Integer> playerTeamRequestPage = new HashMap<>();
+    private final HashMap<UUID, String> playerPasswords = new HashMap<>();
+    private final java.util.Set<UUID> loggedInPlayers = new java.util.HashSet<>();
 
     private static class UndoBlock {
         final Location location;
@@ -254,6 +256,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Material.COOKED_SALMON, Material.COOKIE, Material.MELON_SLICE, 
         Material.PUMPKIN_PIE, Material.SWEET_BERRIES
     );
+    private static final UUID RED_TOPPAT_UUID = UUID.fromString("00000000-0000-0000-0009-01f06c518376");
+    private static final UUID BOREAS_UUID = UUID.fromString("00000000-0000-0000-0009-01f9fff22f06");
 
     // Stats for new nametags
     private final HashMap<UUID, Integer> oresMinedMap = new HashMap<>();
@@ -513,6 +517,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("dtp") != null) getCommand("dtp").setExecutor(this);
         if (getCommand("nametag") != null) getCommand("nametag").setExecutor(this);
         if (getCommand("addnametag") != null) getCommand("addnametag").setExecutor(this);
+        if (getCommand("register") != null) getCommand("register").setExecutor(this);
+        if (getCommand("login") != null) getCommand("login").setExecutor(this);
         if (getCommand("erpscoreboard") != null) getCommand("erpscoreboard").setExecutor(this);
         if (getCommand("cut") != null) getCommand("cut").setExecutor(this);
         if (getCommand("alwaysday") != null) getCommand("alwaysday").setExecutor(this);
@@ -786,6 +792,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         apocalypseZombieKillsMap.put(uuid, getConfig().getInt(path + "apocalypseZombieKills", 0));
         apocalypseLongestSurvivalTimeMap.put(uuid, getConfig().getLong(path + "apocalypseLongestSurvival", 0L));
         apocalypseMaxWavesSurvivedMap.put(uuid, getConfig().getInt(path + "apocalypseMaxWavesSurvived", 0));
+        playerPasswords.put(uuid, getConfig().getString(path + "password", ""));
 
         HashMap<Material, Integer> foods = new HashMap<>();
         if (getConfig().contains(path + "foodsEaten")) {
@@ -885,6 +892,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "apocalypseZombieKills", apocalypseZombieKillsMap.getOrDefault(uuid, 0));
         getConfig().set(path + "apocalypseLongestSurvival", apocalypseLongestSurvivalTimeMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "apocalypseMaxWavesSurvived", apocalypseMaxWavesSurvivedMap.getOrDefault(uuid, 0));
+        getConfig().set(path + "password", playerPasswords.getOrDefault(uuid, ""));
 
         HashMap<Material, Integer> foods = foodsEatenMap.get(uuid);
         if (foods != null) {
@@ -932,6 +940,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (!player.hasPlayedBefore()) {
             giveStarterGear(player);
             player.teleport(getRandomSpawnPoint());
+        }
+        
+        if (!loggedInPlayers.contains(player.getUniqueId())) {
+            player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 1, false, false));
+            
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline() && !loggedInPlayers.contains(player.getUniqueId())) {
+                    String pwd = playerPasswords.getOrDefault(player.getUniqueId(), "");
+                    if (pwd.isEmpty()) {
+                        player.sendMessage(Component.text("🔒 Please register using /register <password> <confirmPassword>", NamedTextColor.RED));
+                    } else {
+                        player.sendMessage(Component.text("🔒 Please log in using /login <password>", NamedTextColor.RED));
+                    }
+                }
+            }, 10L);
         }
         // Play custom spawn/afk music only for the joining player
         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -1081,6 +1104,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         starvationDeathsMap.remove(uuid);
         foodsEatenMap.remove(uuid);
         lastLungeTime.remove(uuid);
+        playerPasswords.remove(uuid);
+        loggedInPlayers.remove(uuid);
 
         String teamName = "np_" + (player.getName().length() > 13 ? player.getName().substring(0, 13) : player.getName());
         for (Player online : Bukkit.getOnlinePlayers()) {
@@ -1130,7 +1155,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 invisibleKillsMap.put(killerUUID, invisibleKillsMap.getOrDefault(killerUUID, 0) + 1);
             }
 
-            if (victim.isOp() || victim.getName().equalsIgnoreCase(".RedToppat208") || victim.getName().equalsIgnoreCase(".Boreas4052")) {
+            if (victim.isOp() || victim.getUniqueId().equals(RED_TOPPAT_UUID) || victim.getUniqueId().equals(BOREAS_UUID)) {
                 killedAdminMap.put(killerUUID, true);
             }
 
@@ -1255,7 +1280,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("setwarp")) {
-            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
+            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -1301,7 +1326,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("say")) {
-            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
+            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -1320,7 +1345,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // /rank <erp+|erp++|erp+++> <playername>  — restricted to trusted admins
         if (command.getName().equalsIgnoreCase("rank")) {
             String senderName = player.getName();
-            boolean isTrusted = senderName.equals(".RedToppat208") || senderName.equals(".Boreas4052");
+            boolean isTrusted = player.getUniqueId().equals(RED_TOPPAT_UUID) || player.getUniqueId().equals(BOREAS_UUID);
             if (!isTrusted) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command.", NamedTextColor.RED));
                 return true;
@@ -1791,7 +1816,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (command.getName().equalsIgnoreCase("player")) {
             String pName = player.getName();
-            if (!player.isOp() && !pName.equalsIgnoreCase(".RedToppat208") && !pName.equalsIgnoreCase(".Boreas4052")) {
+            if (!player.isOp() && !player.getUniqueId().equals(RED_TOPPAT_UUID) && !player.getUniqueId().equals(BOREAS_UUID)) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -2313,7 +2338,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /admin <password> <add|remove> <player> (.RedToppat208 and .Boreas4052 Only) ---
         if (command.getName().equalsIgnoreCase("admin")) {
             String senderName = player.getName();
-            if (!senderName.equalsIgnoreCase(".RedToppat208") && !senderName.equalsIgnoreCase(".Boreas4052")) {
+            if (!player.getUniqueId().equals(RED_TOPPAT_UUID) && !player.getUniqueId().equals(BOREAS_UUID)) {
                 player.sendMessage(Component.text("❌ Only trusted admins can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -2359,11 +2384,85 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             } else {
                 player.sendMessage(Component.text("❌ Invalid action! Use 'add' or 'remove'.", NamedTextColor.RED));
             }
+        // --- /register ---
+        if (command.getName().equalsIgnoreCase("register")) {
+            UUID uuid = player.getUniqueId();
+            String pwd = playerPasswords.getOrDefault(uuid, "");
+            
+            if (pwd.isEmpty()) {
+                // Registering for the first time
+                if (args.length < 2) {
+                    player.sendMessage(Component.text("❌ Usage: /register <password> <confirmPassword>", NamedTextColor.RED));
+                    return true;
+                }
+                String password = args[0];
+                String confirm = args[1];
+                if (!password.equals(confirm)) {
+                    player.sendMessage(Component.text("❌ Passwords do not match!", NamedTextColor.RED));
+                    return true;
+                }
+                playerPasswords.put(uuid, password);
+                loggedInPlayers.add(uuid);
+                player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                savePlayerData(player);
+                player.sendMessage(Component.text("✅ Registered successfully! You are now logged in.", NamedTextColor.GREEN));
+                return true;
+            } else {
+                // Changing existing password
+                if (args.length < 3) {
+                    player.sendMessage(Component.text("❌ Usage: /register <oldPassword> <newPassword> <confirmPassword>", NamedTextColor.RED));
+                    return true;
+                }
+                String oldPassword = args[0];
+                String newPassword = args[1];
+                String confirm = args[2];
+                if (!oldPassword.equals(pwd)) {
+                    player.sendMessage(Component.text("❌ Incorrect current password!", NamedTextColor.RED));
+                    return true;
+                }
+                if (!newPassword.equals(confirm)) {
+                    player.sendMessage(Component.text("❌ Passwords do not match!", NamedTextColor.RED));
+                    return true;
+                }
+                playerPasswords.put(uuid, newPassword);
+                loggedInPlayers.add(uuid);
+                player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                savePlayerData(player);
+                player.sendMessage(Component.text("✅ Password updated successfully! You are logged in.", NamedTextColor.GREEN));
+                return true;
+            }
+        }
+
+        // --- /login ---
+        if (command.getName().equalsIgnoreCase("login")) {
+            UUID uuid = player.getUniqueId();
+            String pwd = playerPasswords.getOrDefault(uuid, "");
+            if (pwd.isEmpty()) {
+                player.sendMessage(Component.text("❌ You need to /register first!", NamedTextColor.RED));
+                return true;
+            }
+            if (loggedInPlayers.contains(uuid)) {
+                player.sendMessage(Component.text("❌ You are already logged in!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 1) {
+                player.sendMessage(Component.text("❌ Usage: /login <password>", NamedTextColor.RED));
+                return true;
+            }
+            String password = args[0];
+            if (!pwd.equals(password)) {
+                player.sendMessage(Component.text("❌ Incorrect password!", NamedTextColor.RED));
+                return true;
+            }
+            loggedInPlayers.add(uuid);
+            player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+            player.sendMessage(Component.text("✅ Logged in successfully!", NamedTextColor.GREEN));
             return true;
         }
+
         // --- /setspawn <1-5> (.RedToppat208 Only, in 'spawn' dimension) ---
         if (command.getName().equalsIgnoreCase("setspawn")) {
-            if (!player.getName().equalsIgnoreCase(".RedToppat208")) {
+            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -3285,7 +3384,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /edit (rules/credits) ---
         if (command.getName().equalsIgnoreCase("edit")) {
             String pName = player.getName();
-            if (!pName.equalsIgnoreCase(".RedToppat208") && !pName.equalsIgnoreCase("RedToppat208")) {
+            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
                 player.sendMessage(Component.text("❌ Only player .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -8836,10 +8935,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             UUID uuid = online.getUniqueId();
 
-            if (name.equalsIgnoreCase(".RedToppat208")) {
+            if (uuid.equals(RED_TOPPAT_UUID)) {
                 prefix = prefix.append(Component.text("[Owner o' Merp] ", NamedTextColor.RED));
                 team.color(NamedTextColor.RED);
-            } else if (name.equalsIgnoreCase(".Boreas4052") || name.equalsIgnoreCase(".Boreas4052")) {
+            } else if (uuid.equals(BOREAS_UUID)) {
                 prefix = prefix.append(Component.text("[Co-Owner o' Lerp] ", NamedTextColor.BLUE));
                 team.color(NamedTextColor.BLUE);
             } else if (name.equalsIgnoreCase(".Ironwarden7425") || name.equalsIgnoreCase(".IronWarden7425")) {
@@ -9209,6 +9308,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
     public void onPlayerCommandPreprocess(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
+        if (!loggedInPlayers.contains(player.getUniqueId())) {
+            String message = event.getMessage().toLowerCase().trim();
+            String[] parts = message.split(" ");
+            String cmd = parts[0].replaceAll("^/", "");
+            if (cmd.contains(":")) cmd = cmd.substring(cmd.indexOf(':') + 1);
+            
+            boolean isAuthCmd = cmd.equals("login") || cmd.equals("register");
+            boolean isAllowedOpCmd = player.isOp() && (cmd.equals("op") || cmd.equals("deop") || cmd.equals("ban") || cmd.equals("ban-ip") || cmd.equals("pardon"));
+            
+            if (!isAuthCmd && !isAllowedOpCmd) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ You must log in or register first before using commands!", NamedTextColor.RED));
+                return;
+            }
+        }
         if (player.getWorld().getName().equalsIgnoreCase("duel")) {
             String message = event.getMessage().toLowerCase().trim();
             if (message.startsWith("/tp") || message.startsWith("/spawn") || message.startsWith("/home")
@@ -9314,7 +9428,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         // Block /op, /deop, /ban for everyone except .RedToppat208
-        if (!event.getPlayer().getName().equals(".RedToppat208")) {
+        if (!event.getPlayer().getUniqueId().equals(RED_TOPPAT_UUID)) {
             String[] parts = message.split(" ");
             String cmd = parts[0].replaceAll("^/", "");
             // Strip namespace prefix (e.g. minecraft:op -> op)
@@ -10819,6 +10933,72 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (webhookServer != null) {
             webhookServer.stop(1);
             getLogger().info("Stopped Webhook server.");
+        }
+    }
+
+    @EventHandler
+    public void onPlayerMove(org.bukkit.event.player.PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        if (!loggedInPlayers.contains(player.getUniqueId())) {
+            Location from = event.getFrom();
+            Location to = event.getTo();
+            if (from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ()) {
+                event.setTo(from);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEntityDamageByEntity(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player attacker) {
+            if (!loggedInPlayers.contains(attacker.getUniqueId())) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+        if (event.getEntity() instanceof Player victim) {
+            if (!loggedInPlayers.contains(victim.getUniqueId())) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(org.bukkit.event.block.BlockBreakEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onBlockPlace(org.bukkit.event.block.BlockPlaceEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerDropItem(org.bukkit.event.player.PlayerDropItemEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerPickupItem(org.bukkit.event.entity.EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player) {
+            if (!loggedInPlayers.contains(player.getUniqueId())) {
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerChatAuth(org.bukkit.event.player.AsyncPlayerChatEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(Component.text("❌ You must log in or register first before chatting!", NamedTextColor.RED));
         }
     }
 }

@@ -232,3 +232,9 @@ commands:
   rank:
     description: Set a player's store rank (Trusted admins only - .Boreas4052 and .RedToppat208)
     usage: /rank <erp+|erp++|erp+++> <playername>
+  register:
+    description: Register or update your account password
+    usage: /register <password> <confirmPassword> or /register <oldPassword> <newPassword> <confirmPassword>
+  login:
+    description: Log in to your account
+    usage: /login <password>
