@@ -1417,9 +1417,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 player.sendMessage(Component.text("❌ Usage: /warp <name>", NamedTextColor.RED));
                 return true;
             }
-            String warpName = args[0].toLowerCase();
+            final String displayWarpName = args[0];
+            String warpName = displayWarpName.toLowerCase();
             if (!warps.containsKey(warpName)) {
-                player.sendMessage(Component.text("❌ Warp '" + args[0] + "' does not exist!", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Warp '" + displayWarpName + "' does not exist!", NamedTextColor.RED));
                 return true;
             }
 
@@ -1442,7 +1443,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 pendingWarpStartLocations.remove(uuid);
                 if (player.isOnline()) {
                     player.teleport(warps.get(warpName));
-                    player.sendMessage(Component.text("✨ Teleported to warp '" + args[0] + "'!", NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("✨ Teleported to warp '" + displayWarpName + "'!", NamedTextColor.GREEN));
                 }
             }, 100L); // 100 ticks = 5 seconds
 
