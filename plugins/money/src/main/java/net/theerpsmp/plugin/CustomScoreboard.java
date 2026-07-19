@@ -8897,7 +8897,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ShopCrateData data = shopCrates.get(loc);
 
         if (player.getGameMode() == GameMode.CREATIVE) {
-            openCrateSetupGui(player, data);
+            if (player.getUniqueId().equals(data.owner)) {
+                openCrateSetupGui(player, data);
+            } else {
+                player.sendMessage(Component.text("❌ Only the person who placed this crate can edit it!", NamedTextColor.RED));
+            }
         } else {
             boolean hasItems = false;
             if (data.items != null) {
