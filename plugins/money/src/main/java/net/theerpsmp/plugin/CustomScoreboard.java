@@ -164,6 +164,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final java.util.Set<UUID> loggedInPlayers = new java.util.HashSet<>();
     private final java.util.Set<UUID> openedWithdrawViaCommand = new java.util.HashSet<>();
     private final HashMap<UUID, Integer> erpItemPage = new HashMap<>();
+    private final HashMap<UUID, org.bukkit.scheduler.BukkitTask> pendingWarpTeleports = new HashMap<>();
+    private final HashMap<UUID, Location> pendingWarpStartLocations = new HashMap<>();
 
     private static class UndoBlock {
         final Location location;
@@ -1165,6 +1167,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         combatTagTicks.remove(uuid);
         duelQueue.remove(uuid);
+        org.bukkit.scheduler.BukkitTask warpTask = pendingWarpTeleports.remove(uuid);
+        if (warpTask != null) warpTask.cancel();
+        pendingWarpStartLocations.remove(uuid);
 
         savePlayerData(player);
 
@@ -1417,8 +1422,31 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 player.sendMessage(Component.text("❌ Warp '" + args[0] + "' does not exist!", NamedTextColor.RED));
                 return true;
             }
-            player.teleport(warps.get(warpName));
-            player.sendMessage(Component.text("✨ Teleported to warp '" + args[0] + "'!", NamedTextColor.GREEN));
+
+            UUID uuid = player.getUniqueId();
+            if (combatTagTicks.containsKey(uuid)) {
+                player.sendMessage(Component.text("❌ You cannot warp while in combat!", NamedTextColor.RED));
+                return true;
+            }
+
+            org.bukkit.scheduler.BukkitTask oldTask = pendingWarpTeleports.remove(uuid);
+            if (oldTask != null) {
+                oldTask.cancel();
+            }
+
+            pendingWarpStartLocations.put(uuid, player.getLocation());
+            player.sendMessage(Component.text("⏳ Warp teleporting in 5 seconds... Do not move!", NamedTextColor.YELLOW));
+
+            org.bukkit.scheduler.BukkitTask task = Bukkit.getScheduler().runTaskLater(this, () -> {
+                pendingWarpTeleports.remove(uuid);
+                pendingWarpStartLocations.remove(uuid);
+                if (player.isOnline()) {
+                    player.teleport(warps.get(warpName));
+                    player.sendMessage(Component.text("✨ Teleported to warp '" + args[0] + "'!", NamedTextColor.GREEN));
+                }
+            }, 100L); // 100 ticks = 5 seconds
+
+            pendingWarpTeleports.put(uuid, task);
             return true;
         }
 
@@ -11538,11 +11566,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerMove(org.bukkit.event.player.PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        if (!loggedInPlayers.contains(player.getUniqueId())) {
+        UUID uuid = player.getUniqueId();
+
+        if (!loggedInPlayers.contains(uuid)) {
             Location from = event.getFrom();
             Location to = event.getTo();
             if (from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ()) {
                 event.setTo(from);
+            }
+            return;
+        }
+
+        if (pendingWarpTeleports.containsKey(uuid)) {
+            Location from = event.getFrom();
+            Location to = event.getTo();
+            if (from.getBlockX() != to.getBlockX() || from.getBlockY() != to.getBlockY() || from.getBlockZ() != to.getBlockZ()) {
+                org.bukkit.scheduler.BukkitTask task = pendingWarpTeleports.remove(uuid);
+                if (task != null) {
+                    task.cancel();
+                }
+                pendingWarpStartLocations.remove(uuid);
+                player.sendMessage(Component.text("❌ Warp cancelled because you moved!", NamedTextColor.RED));
             }
         }
     }
