@@ -163,6 +163,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, String> playerPasswords = new HashMap<>();
     private final java.util.Set<UUID> loggedInPlayers = new java.util.HashSet<>();
     private final java.util.Set<UUID> openedWithdrawViaCommand = new java.util.HashSet<>();
+    private final HashMap<UUID, Integer> erpItemPage = new HashMap<>();
 
     private static class UndoBlock {
         final Location location;
@@ -330,6 +331,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Location> activeCrateSetup = new HashMap<>();
     private final HashMap<UUID, Location> activeCratePurchase = new HashMap<>();
     private final HashMap<UUID, ItemStack[]> pendingCrateItemsArray = new HashMap<>();
+    private final HashMap<UUID, Location> activeMobGeneratorSetup = new HashMap<>();
 
     // Custom Generators
     public static class GeneratorData {
@@ -688,6 +690,90 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }, 1200L, 1200L);
 
+        // Mob Generator 5-second production & Hopper pulling task
+        final int[] ticks = {0};
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            ticks[0] += 20;
+
+            // Every 5 seconds (100 ticks), spawn mob generator items
+            if (ticks[0] >= 100) {
+                ticks[0] = 0;
+                boolean generated = false;
+                for (GeneratorData gen : generators.values()) {
+                    ItemStack toAdd = null;
+                    if (gen.type.equals("iron_golem_generator")) {
+                        toAdd = new ItemStack(Material.IRON_INGOT);
+                    } else if (gen.type.equals("snow_golem_generator")) {
+                        toAdd = new ItemStack(Material.SNOWBALL);
+                    } else if (gen.type.equals("creeper_generator")) {
+                        toAdd = new ItemStack(Material.GUNPOWDER);
+                    } else if (gen.type.equals("skeleton_generator")) {
+                        toAdd = new ItemStack(Material.BONE);
+                    } else if (gen.type.equals("witch_generator")) {
+                        toAdd = new ItemStack(Material.POTION);
+                        org.bukkit.inventory.meta.PotionMeta pm = (org.bukkit.inventory.meta.PotionMeta) toAdd.getItemMeta();
+                        if (pm != null) {
+                            org.bukkit.potion.PotionType[] types = org.bukkit.potion.PotionType.values();
+                            org.bukkit.potion.PotionType randomType = types[random.nextInt(types.length)];
+                            try {
+                                pm.setBasePotionType(randomType);
+                            } catch (NoSuchMethodError e) {
+                                try {
+                                    java.lang.reflect.Constructor<?> dataConst = org.bukkit.potion.PotionData.class.getConstructor(org.bukkit.potion.PotionType.class);
+                                    pm.setBasePotionData((org.bukkit.potion.PotionData) dataConst.newInstance(randomType));
+                                } catch (Exception ex) {
+                                    // Fallback
+                                }
+                            }
+                            toAdd.setItemMeta(pm);
+                        }
+                    }
+
+                    if (toAdd != null) {
+                        gen.inventory.addItem(toAdd);
+                        generated = true;
+                    }
+                }
+                if (generated) {
+                    saveGenerators();
+                }
+            }
+
+            // Every 1 second (20 ticks), check for hoppers below ANY generator
+            boolean hopperMoved = false;
+            for (GeneratorData gen : generators.values()) {
+                Location loc = gen.loc;
+                Block blockBelow = loc.getBlock().getRelative(org.bukkit.block.BlockFace.DOWN);
+                if (blockBelow.getType() == Material.HOPPER) {
+                    org.bukkit.block.BlockState state = blockBelow.getState();
+                    if (state instanceof org.bukkit.block.Hopper) {
+                        org.bukkit.block.Hopper hopper = (org.bukkit.block.Hopper) state;
+                        Inventory hopperInv = hopper.getInventory();
+                        Inventory genInv = gen.inventory;
+
+                        // Find first item in generator inventory
+                        for (int i = 0; i < genInv.getSize(); i++) {
+                            ItemStack item = genInv.getItem(i);
+                            if (item != null && item.getType() != Material.AIR) {
+                                ItemStack toMove = item.clone();
+                                toMove.setAmount(1);
+                                HashMap<Integer, ItemStack> remaining = hopperInv.addItem(toMove);
+                                if (remaining.isEmpty()) {
+                                    item.setAmount(item.getAmount() - 1);
+                                    genInv.setItem(i, item.getAmount() <= 0 ? null : item);
+                                    hopperMoved = true;
+                                    break; // move 1 item per generator per tick
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (hopperMoved) {
+                saveGenerators();
+            }
+        }, 20L, 20L);
+
         loadShopCrates();
         loadTeams();
         loadCommandChests();
@@ -944,7 +1030,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             giveStarterGear(player);
             player.teleport(getRandomSpawnPoint());
         }
-        
+
+        player.sendMessage(Component.text(""));
+        player.sendMessage(Component.text("🔒 To start playing do ", NamedTextColor.YELLOW)
+            .append(Component.text("/register", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD))
+            .append(Component.text(" to make a password or ", NamedTextColor.YELLOW))
+            .append(Component.text("/login", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD))
+            .append(Component.text(" if you already have one", NamedTextColor.YELLOW)));
+        player.sendMessage(Component.text(""));
         if (!loggedInPlayers.contains(player.getUniqueId())) {
             player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 1, false, false));
             
@@ -1208,6 +1301,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             UUID targetUuid = target.getUniqueId();
+            int currentWeight = getRankWeight(targetUuid);
+            int newWeight = getRankWeightByName(rankArg);
+            if (!rankArg.equals("none") && newWeight <= currentWeight) {
+                sender.sendMessage("Error: " + target.getName() + " already has " + (currentWeight == newWeight ? "this rank" : "a higher rank") + "!");
+                return true;
+            }
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
@@ -1365,6 +1464,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             UUID targetUuid = target.getUniqueId();
+            int currentWeight = getRankWeight(targetUuid);
+            int newWeight = getRankWeightByName(rankArg);
+            if (newWeight <= currentWeight) {
+                player.sendMessage(Component.text("❌ " + target.getName() + " already has a higher or equal rank!", NamedTextColor.RED));
+                return true;
+            }
             // Clear all ranks first, then apply the chosen one
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
@@ -1424,6 +1529,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             teams.put(lowercaseName, data);
             playerTeams.put(uuid, lowercaseName);
             saveTeams();
+            updatePlayerFloatingTags(player);
             player.sendMessage(Component.text("🎉 Team \"" + teamName + "\" created successfully!", NamedTextColor.GREEN));
             return true;
         }
@@ -1497,6 +1603,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             data.members.add(uuid);
             playerTeams.put(uuid, teamNameLower);
             saveTeams();
+            updatePlayerFloatingTags(player);
             
             player.sendMessage(Component.text("🎉 You joined the team \"" + data.name + "\"!", NamedTextColor.GREEN));
             for (UUID memberUUID : data.members) {
@@ -2189,8 +2296,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "food_generator" -> item = createFoodGeneratorItem();
                 case "ore_generator" -> item = createOreGeneratorItem();
                 case "tools_generator" -> item = createToolsGeneratorItem();
+                case "mob_generator" -> item = createMobGeneratorItem();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -2387,6 +2495,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             } else {
                 player.sendMessage(Component.text("❌ Invalid action! Use 'add' or 'remove'.", NamedTextColor.RED));
             }
+            return true;
+        }
         // --- /register ---
         if (command.getName().equalsIgnoreCase("register")) {
             UUID uuid = player.getUniqueId();
@@ -3767,6 +3877,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
         Player player = event.getPlayer();
         Block block = event.getBlock();
 
@@ -3797,6 +3911,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 genItem = createOreGeneratorItem();
             } else if (data.type.equals("tools_generator")) {
                 genItem = createToolsGeneratorItem();
+            } else if (data.type.equals("mob_generator") || data.type.endsWith("_generator")) {
+                genItem = createMobGeneratorItem();
             }
 
             if (genItem != null) {
@@ -3813,7 +3929,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             saveGenerators();
 
             block.setType(Material.AIR);
-            player.sendMessage(Component.text("⚡ Generator removed successfully.", NamedTextColor.GREEN));
             return;
         }
 
@@ -3982,6 +4097,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
         if ((event.getBlock().getWorld().getName().equals("afk_zone") || event.getBlock().getWorld().getName().equals("afk")) && event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks in the AFK zone!", NamedTextColor.RED));
@@ -4053,7 +4172,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     Inventory genInv = Bukkit.createInventory(null, 27, Component.text(title));
                     generators.put(loc, new GeneratorData(loc, customItem, genInv));
                     saveGenerators();
-                    event.getPlayer().sendMessage(Component.text("⚡ You placed a " + title + "! Left-click it to open its inventory.", NamedTextColor.GREEN));
+                } else if (customItem.equals("mob_generator")) {
+                    Location loc = event.getBlock().getLocation();
+                    Inventory genInv = Bukkit.createInventory(null, 27, Component.text("Mob Generator"));
+                    generators.put(loc, new GeneratorData(loc, "mob_generator", genInv));
+                    saveGenerators();
                 }
             }
         }
@@ -4778,6 +4901,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         shop.setItem(19, createGuiItem(Material.SPAWNER, "Food Generator", NamedTextColor.GOLD, "Cost: 2000 Derpies", "Generates steak every minute when placed.", "Right-click placed block to open inventory."));
         shop.setItem(20, createGuiItem(Material.SPAWNER, "Ore Generator", NamedTextColor.AQUA, "Cost: 2000 Derpies", "Generates diamonds every minute when placed.", "Right-click placed block to open inventory."));
         shop.setItem(21, createGuiItem(Material.SPAWNER, "Tools Generator", NamedTextColor.LIGHT_PURPLE, "Cost: 2000 Derpies", "Generates tools & armor (except netherite) every minute when placed.", "Right-click placed block to open inventory."));
+        shop.setItem(22, createGuiItem(Material.SPAWNER, "Mob Generator", NamedTextColor.RED, "Cost: 2000 Derpies", "A custom spawner generator.", "Right-click placed block to open inventory."));
 
         player.openInventory(shop);
     }
@@ -4794,7 +4918,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 && !title.equals("Bank") && !title.equals("Deposit Items") && !title.equals("Withdraw Items") && !title.equals("Bank Stats")
                 && !title.equals("Duel Menu") && !title.startsWith("Select Player to Duel") && !title.startsWith("Challenge ")
                 && !title.equals("Apocalypse Menu") && !title.equals("Confirm Start?")
-                && !title.startsWith("Team Vault Page ") && !title.startsWith("Team Requests Page ") && !title.startsWith("All Teams Page ")) return;
+                && !title.startsWith("Team Vault Page ") && !title.startsWith("Team Requests Page ") && !title.startsWith("All Teams Page ")
+                && !title.equals("Choose Spawner Type")
+                && !title.equals("Deposit Options") && !title.equals("Withdraw Options")
+                && !title.equals("Withdraw Money")
+                && !title.startsWith("Custom Items - Page")) return;
 
         if (title.equals("Apocalypse Menu")) {
             event.setCancelled(true);
@@ -4926,6 +5054,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             Player kickedPlayer = Bukkit.getPlayer(targetUUID);
                             if (kickedPlayer != null && kickedPlayer.isOnline()) {
                                 kickedPlayer.sendMessage(Component.text("❌ You have been kicked from the team \"" + data.name + "\".", NamedTextColor.RED));
+                                updatePlayerFloatingTags(kickedPlayer);
                             }
                         }
                     }
@@ -4966,6 +5095,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     p.closeInventory();
                     for (UUID memberUUID : data.members) {
                         playerTeams.remove(memberUUID);
+                        Player memberPlayer = Bukkit.getPlayer(memberUUID);
+                        if (memberPlayer != null && memberPlayer.isOnline()) {
+                            updatePlayerFloatingTags(memberPlayer);
+                        }
                     }
                     teams.remove(teamLower);
                     saveTeams();
@@ -4975,6 +5108,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     data.members.remove(p.getUniqueId());
                     playerTeams.remove(p.getUniqueId());
                     saveTeams();
+                    updatePlayerFloatingTags(p);
                     p.sendMessage(Component.text("👋 You have left the team.", NamedTextColor.RED));
                     
                     Player leaderPlayer = Bukkit.getPlayer(data.leader);
@@ -5056,6 +5190,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                 Player targetOnline = Bukkit.getPlayer(targetUUID);
                                 if (targetOnline != null && targetOnline.isOnline()) {
                                     targetOnline.sendMessage(Component.text("👑 You have been accepted into team " + team.name + "!", NamedTextColor.GOLD));
+                                    updatePlayerFloatingTags(targetOnline);
                                 }
                             } else {
                                 p.sendMessage(Component.text("❌ That player is already in another team!", NamedTextColor.RED));
@@ -5167,6 +5302,62 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             int slot = event.getRawSlot();
             if (slot == 22) {
                 openBankGui(player);
+            }
+            return;
+        }
+
+        if (title.equals("Choose Spawner Type")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            Location loc = activeMobGeneratorSetup.remove(uuid);
+            if (loc == null) return;
+
+            String generatorType = null;
+            org.bukkit.entity.EntityType entityType = null;
+            String cleanName = "";
+
+            if (slot == 0) {
+                generatorType = "iron_golem_generator";
+                entityType = org.bukkit.entity.EntityType.IRON_GOLEM;
+                cleanName = "Iron Golem";
+            } else if (slot == 2) {
+                generatorType = "snow_golem_generator";
+                entityType = org.bukkit.entity.EntityType.SNOW_GOLEM;
+                cleanName = "Snow Golem";
+            } else if (slot == 4) {
+                generatorType = "creeper_generator";
+                entityType = org.bukkit.entity.EntityType.CREEPER;
+                cleanName = "Creeper";
+            } else if (slot == 6) {
+                generatorType = "skeleton_generator";
+                entityType = org.bukkit.entity.EntityType.SKELETON;
+                cleanName = "Skeleton";
+            } else if (slot == 8) {
+                generatorType = "witch_generator";
+                entityType = org.bukkit.entity.EntityType.WITCH;
+                cleanName = "Witch";
+            }
+
+            if (generatorType != null) {
+                // Clear the clicked item from the selection GUI
+                event.setCurrentItem(null);
+
+                Inventory genInv = Bukkit.createInventory(null, 27, Component.text(cleanName + " Generator"));
+                generators.put(loc, new GeneratorData(loc, generatorType, genInv));
+                saveGenerators();
+
+                if (loc.getBlock().getType() == Material.SPAWNER) {
+                    org.bukkit.block.BlockState state = loc.getBlock().getState();
+                    if (state instanceof org.bukkit.block.CreatureSpawner) {
+                        org.bukkit.block.CreatureSpawner spawner = (org.bukkit.block.CreatureSpawner) state;
+                        spawner.setSpawnedType(entityType);
+                        spawner.update(true);
+                    }
+                }
+
+                player.closeInventory();
+                player.sendMessage(Component.text("✅ Spawner converted to " + cleanName + " Generator!", NamedTextColor.GREEN));
+                player.sendMessage(Component.text("Right-click the spawner to open the " + cleanName + " Generator inventory.", NamedTextColor.GRAY));
             }
             return;
         }
@@ -5623,8 +5814,30 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
-        if (title.equals("Custom Items Admin Panel")) {
+        if (title.startsWith("Custom Items - Page")) {
             event.setCancelled(true);
+            int slot = event.getRawSlot();
+
+            // Navigation buttons
+            if (slot == 45) {
+                // Previous page
+                int currentPage = erpItemPage.getOrDefault(uuid, 0);
+                if (currentPage > 0) {
+                    openCustomItemsAdminPanel(player, currentPage - 1);
+                }
+                return;
+            }
+            if (slot == 53) {
+                // Next page
+                int currentPage = erpItemPage.getOrDefault(uuid, 0);
+                openCustomItemsAdminPanel(player, currentPage + 1);
+                return;
+            }
+            if (slot >= 45 && slot <= 53) {
+                // Other last-row slots (filler/page indicator) — ignore
+                return;
+            }
+
             if (clicked != null && clicked.getType() != Material.AIR) {
                 ItemStack clone = clicked.clone();
                 if (event.isShiftClick()) {
@@ -5818,6 +6031,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             else if (rawSlot == 19) derpCost = 2000;
             else if (rawSlot == 20) derpCost = 2000;
             else if (rawSlot == 21) derpCost = 2000;
+            else if (rawSlot == 22) derpCost = 2000;
 
             if (derpCost == -1) return;
 
@@ -5858,6 +6072,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             } else if (rawSlot == 21) {
                 HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createToolsGeneratorItem());
+                for (ItemStack left : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), left);
+                }
+            } else if (rawSlot == 22) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createMobGeneratorItem());
                 for (ItemStack left : remaining.values()) {
                     player.getWorld().dropItemNaturally(player.getLocation(), left);
                 }
@@ -6260,6 +6479,52 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(13, createGuiItem(Material.DIAMOND_BLOCK, "Withdraw Derpies", NamedTextColor.AQUA, "Deposited: " + derpies + " Derpies", "Click to withdraw"));
         inv.setItem(15, createGuiItem(Material.ARROW, "Back to Withdraw Menu", NamedTextColor.YELLOW, "Click to go back"));
         player.openInventory(inv);
+    }
+
+    private void openMobGeneratorTypeSelectionGui(Player player, Location loc) {
+        activeMobGeneratorSetup.put(player.getUniqueId(), loc);
+        Inventory inv = Bukkit.createInventory(null, 9, Component.text("Choose Spawner Type"));
+        inv.setItem(0, createGuiItem(Material.IRON_BLOCK, "Iron Golem", NamedTextColor.GRAY, "Click to select Iron Golem"));
+        inv.setItem(2, createGuiItem(Material.CARVED_PUMPKIN, "Snow Golem", NamedTextColor.WHITE, "Click to select Snow Golem"));
+        inv.setItem(4, createGuiItem(Material.GUNPOWDER, "Creeper", NamedTextColor.GREEN, "Click to select Creeper"));
+        inv.setItem(6, createGuiItem(Material.BONE, "Skeleton", NamedTextColor.YELLOW, "Click to select Skeleton"));
+        inv.setItem(8, createGuiItem(Material.POTION, "Witch", NamedTextColor.LIGHT_PURPLE, "Click to select Witch"));
+        player.openInventory(inv);
+    }
+
+    private ItemStack createMobGeneratorItem() {
+        ItemStack item = new ItemStack(Material.SPAWNER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Mob Generator", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("A custom spawner generator.", NamedTextColor.YELLOW),
+                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
+                Component.text("2. Right-click to configure spawner type.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "mob_generator");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private int getRankWeight(UUID uuid) {
+        if (hasErpProMaxMap.getOrDefault(uuid, false)) return 4;
+        if (hasErpProMap.getOrDefault(uuid, false)) return 3;
+        if (hasErpPlusMap.getOrDefault(uuid, false)) return 2;
+        if (hasVipMap.getOrDefault(uuid, false)) return 1;
+        return 0;
+    }
+
+    private int getRankWeightByName(String rankName) {
+        if (rankName == null) return 0;
+        rankName = rankName.toLowerCase().replace("+", "").replace(" ", "").trim();
+        if (rankName.equals("erp+++") || rankName.equals("erppromax") || rankName.equals("erpiepromaxx")) return 4;
+        if (rankName.equals("erp++") || rankName.equals("erppro") || rankName.equals("erpiepro")) return 3;
+        if (rankName.equals("erp+") || rankName.equals("erp") || rankName.equals("erpplus") || rankName.equals("erpie")) return 2;
+        if (rankName.equals("vip")) return 1;
+        return 0;
     }
 
     private ItemStack createGuiItem(Material material, String name, NamedTextColor color, String... descriptionLines) {
@@ -7286,6 +7551,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onPlayerDropItem(PlayerDropItemEvent event) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
         Player player = event.getPlayer();
         String title = player.getOpenInventory().getTitle();
         if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") 
@@ -7719,45 +7988,88 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         player.openInventory(inv);
     }
 
+    private List<ItemStack> getAllCustomItems() {
+        List<ItemStack> items = new java.util.ArrayList<>();
+        items.add(createEchoPickaxe());
+        items.add(createEchoShovel());
+        items.add(createEchoAxe());
+        items.add(createEchoBow());
+        items.add(createKnockbackStick());
+        items.add(createSwordDerp());
+        items.add(createPickaxeLerp());
+        items.add(createMaceMerp());
+        items.add(createEchoSword());
+        items.add(createLungeSpear());
+        items.add(createShopCrate());
+        items.add(createEchoCrate());
+        items.add(createCrimsonCrate());
+        items.add(createKeyCrate());
+        items.add(createEndCrate());
+        items.add(createAmethystCrate());
+        items.add(createEchoKey());
+        items.add(createCrimsonKey());
+        items.add(createEndKey());
+        items.add(createAmethystKey());
+        items.add(createEndGatewayItem());
+        items.add(createOrbitalStrike());
+        items.add(createWand());
+        items.add(createNpcEgg());
+        items.add(createFloatingTextItem());
+        items.add(createCommandChest());
+        items.add(createDivineFlame());
+        items.add(createFoodGeneratorItem());
+        items.add(createOreGeneratorItem());
+        items.add(createToolsGeneratorItem());
+        items.add(createMobGeneratorItem());
+        return items;
+    }
+
     private void openCustomItemsAdminPanel(Player player) {
-        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Custom Items Admin Panel"));
-        
-        // Row 1 & 2: Tools & Weapons
-        inv.setItem(0, createEchoPickaxe());
-        inv.setItem(1, createEchoAxe());
-        inv.setItem(2, createEchoBow());
-        inv.setItem(3, createKnockbackStick());
-        inv.setItem(4, createSwordDerp());
-        inv.setItem(5, createPickaxeLerp());
-        inv.setItem(6, createMaceMerp());
-        inv.setItem(7, createEchoSword());
-        inv.setItem(8, createLungeSpear());
-        inv.setItem(9, createEchoShovel());
-        
-        // Row 3: Crates
-        inv.setItem(18, createShopCrate());
-        inv.setItem(19, createEchoCrate());
-        inv.setItem(20, createCrimsonCrate());
-        inv.setItem(21, createKeyCrate());
-        inv.setItem(22, createEndCrate());
-        inv.setItem(23, createAmethystCrate());
-        
-        // Row 4: Keys
-        inv.setItem(27, createEchoKey());
-        inv.setItem(28, createCrimsonKey());
-        inv.setItem(29, createEndKey());
-        inv.setItem(30, createAmethystKey());
-        
-        // Row 5: Utility & Fun
-        inv.setItem(36, createEndGatewayItem());
-        inv.setItem(37, createOrbitalStrike());
-        inv.setItem(38, createWand());
-        inv.setItem(39, createNpcEgg());
-        inv.setItem(40, createFloatingTextItem());
-        inv.setItem(41, createFoodGeneratorItem());
-        inv.setItem(42, createOreGeneratorItem());
-        inv.setItem(43, createToolsGeneratorItem());
-        
+        openCustomItemsAdminPanel(player, 0);
+    }
+
+    private void openCustomItemsAdminPanel(Player player, int page) {
+        List<ItemStack> allItems = getAllCustomItems();
+        int itemsPerPage = 45; // slots 0-44, last row (45-53) for navigation
+        int totalPages = (int) Math.ceil((double) allItems.size() / itemsPerPage);
+        if (totalPages == 0) totalPages = 1;
+        if (page < 0) page = 0;
+        if (page >= totalPages) page = totalPages - 1;
+
+        erpItemPage.put(player.getUniqueId(), page);
+
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Custom Items - Page " + (page + 1) + "/" + totalPages));
+
+        int startIndex = page * itemsPerPage;
+        int endIndex = Math.min(startIndex + itemsPerPage, allItems.size());
+        for (int i = startIndex; i < endIndex; i++) {
+            inv.setItem(i - startIndex, allItems.get(i));
+        }
+
+        // Fill last row with glass panes
+        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta fillerMeta = filler.getItemMeta();
+        if (fillerMeta != null) {
+            fillerMeta.displayName(Component.text(" "));
+            filler.setItemMeta(fillerMeta);
+        }
+        for (int i = 45; i <= 53; i++) {
+            inv.setItem(i, filler);
+        }
+
+        // Previous Page button (slot 45)
+        if (page > 0) {
+            inv.setItem(45, createGuiItem(Material.ARROW, "◀ Previous Page", NamedTextColor.YELLOW, "Go to page " + page));
+        }
+
+        // Page indicator (slot 49)
+        inv.setItem(49, createGuiItem(Material.PAPER, "Page " + (page + 1) + " of " + totalPages, NamedTextColor.WHITE, allItems.size() + " total custom items"));
+
+        // Next Page button (slot 53)
+        if (page < totalPages - 1) {
+            inv.setItem(53, createGuiItem(Material.ARROW, "Next Page ▶", NamedTextColor.YELLOW, "Go to page " + (page + 2)));
+        }
+
         player.openInventory(inv);
     }
 
@@ -7766,33 +8078,29 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (isInSpawnRadius(centerLoc)) return;
 
         BlockFace face = player.getTargetBlockFace(6);
-        float pitch = player.getLocation().getPitch();
-        
+        if (face == null) face = BlockFace.UP;
+
         List<Block> blocksToBreak = new ArrayList<>();
-        blocksToBreak.add(centerBlock);
 
-        if (pitch > 55 || pitch < -55 || face == BlockFace.UP || face == BlockFace.DOWN) {
-            BlockFace playerDirection = player.getFacing();
-            blocksToBreak.add(centerBlock.getRelative(playerDirection));
-            blocksToBreak.add(centerBlock.getRelative(playerDirection.getOppositeFace()));
-        } else {
-            int dx1 = 0, dz1 = 0;
-            int dx2 = 0, dz2 = 0;
-            int dy1 = 0, dy2 = 0;
-
-            if (face == BlockFace.NORTH || face == BlockFace.SOUTH) {
-                dx1 = 1; dy2 = 1;
-            } else if (face == BlockFace.EAST || face == BlockFace.WEST) {
-                dz1 = 1; dy2 = 1;
-            } else {
-                dx1 = 1; dy2 = 1;
+        if (face == BlockFace.UP || face == BlockFace.DOWN) {
+            // Mining up or down: 3x3 horizontal plane based on player facing
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    blocksToBreak.add(centerBlock.getRelative(dx, 0, dz));
+                }
             }
-
-            for (int h = -1; h <= 1; h++) {
-                for (int v = -1; v <= 1; v++) {
-                    if (h == 0 && v == 0) continue;
-                    Block b = centerBlock.getRelative(h * dx1 + v * dx2, h * dy1 + v * dy2, h * dz1 + v * dz2);
-                    blocksToBreak.add(b);
+        } else if (face == BlockFace.NORTH || face == BlockFace.SOUTH) {
+            // Mining into a north/south wall: 3 wide (X) × 3 tall (Y)
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    blocksToBreak.add(centerBlock.getRelative(dx, dy, 0));
+                }
+            }
+        } else if (face == BlockFace.EAST || face == BlockFace.WEST) {
+            // Mining into an east/west wall: 3 wide (Z) × 3 tall (Y)
+            for (int dz = -1; dz <= 1; dz++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    blocksToBreak.add(centerBlock.getRelative(0, dy, dz));
                 }
             }
         }
@@ -8500,8 +8808,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     Player player = event.getPlayer();
                     if (!player.isSneaking()) {
                         GeneratorData data = generators.get(loc);
-                        player.openInventory(data.inventory);
-                        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CHEST_OPEN, 0.5f, 1.0f);
+                        if (data.type.equals("mob_generator")) {
+                            openMobGeneratorTypeSelectionGui(player, loc);
+                        } else {
+                            player.openInventory(data.inventory);
+                            player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CHEST_OPEN, 0.5f, 1.0f);
+                        }
                     }
                     return;
                 }
@@ -9216,20 +9528,35 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
         
-        // 2. Get active tags
-        java.util.Set<String> activeTags = activeNametags.getOrDefault(uuid, java.util.Collections.emptySet());
-        if (activeTags.isEmpty()) {
-            return;
+        // 2. Build list of all tag components to display
+        List<Component> allTags = new java.util.ArrayList<>();
+
+        // 2a. Admin tags
+        if (uuid.equals(RED_TOPPAT_UUID)) {
+            allTags.add(Component.text("Owner o' Merp", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
+        } else if (uuid.equals(BOREAS_UUID)) {
+            allTags.add(Component.text("Co-Owner o' Lerp", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
         }
-        
-        // 3. Create a list of text displays
-        List<org.bukkit.entity.TextDisplay> displays = new java.util.ArrayList<>();
-        
-        // Sort the tags so they stack consistently
+
+        // 2b. Team tag - "Leader of <team>" or "Member of <team>"
+        String teamNameLower = playerTeams.get(uuid);
+        if (teamNameLower != null) {
+            TeamData teamData = teams.get(teamNameLower);
+            if (teamData != null) {
+                if (teamData.leader.equals(uuid)) {
+                    allTags.add(Component.text("Leader of ", NamedTextColor.YELLOW)
+                        .append(Component.text(teamData.name, NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD)));
+                } else {
+                    allTags.add(Component.text("Member of ", NamedTextColor.GRAY)
+                        .append(Component.text(teamData.name, NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD)));
+                }
+            }
+        }
+
+        // 2c. Custom nametags from the nametag menu
+        java.util.Set<String> activeTags = activeNametags.getOrDefault(uuid, java.util.Collections.emptySet());
         List<String> sortedTags = new java.util.ArrayList<>(activeTags);
         java.util.Collections.sort(sortedTags);
-        
-        org.bukkit.entity.Entity currentVehicle = player;
         
         for (String tag : sortedTags) {
             Component tagComp = switch (tag) {
@@ -9245,9 +9572,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "Skin and Bones" -> Component.text("[Skin and Bones]", NamedTextColor.WHITE);
                 default -> Component.empty();
             };
-            
-            if (tagComp.equals(Component.empty())) continue;
-            
+            if (!tagComp.equals(Component.empty())) {
+                allTags.add(tagComp);
+            }
+        }
+
+        if (allTags.isEmpty()) {
+            return;
+        }
+        
+        // 3. Create text displays stacked on top of each other
+        List<org.bukkit.entity.TextDisplay> displays = new java.util.ArrayList<>();
+        org.bukkit.entity.Entity currentVehicle = player;
+        
+        for (Component tagComp : allTags) {
             Location spawnLoc = player.getLocation().add(0, 2.0, 0);
             org.bukkit.entity.TextDisplay display = player.getWorld().spawn(spawnLoc, org.bukkit.entity.TextDisplay.class);
             display.text(tagComp);
@@ -9657,16 +9995,36 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
-        // Block /op, /deop, /ban for everyone except .RedToppat208
-        if (!event.getPlayer().getUniqueId().equals(RED_TOPPAT_UUID)) {
-            String[] parts = message.split(" ");
-            String cmd = parts[0].replaceAll("^/", "");
-            // Strip namespace prefix (e.g. minecraft:op -> op)
-            if (cmd.contains(":")) cmd = cmd.substring(cmd.indexOf(':') + 1);
-            if (cmd.equals("op") || cmd.equals("deop") || cmd.equals("ban") || cmd.equals("ban-ip")) {
+        // Block /op, /deop for everyone except .RedToppat208
+        UUID senderUuid = event.getPlayer().getUniqueId();
+        String[] cmdParts = message.split(" ");
+        String baseCmd = cmdParts[0].replaceAll("^/", "");
+        if (baseCmd.contains(":")) baseCmd = baseCmd.substring(baseCmd.indexOf(':') + 1);
+
+        if (baseCmd.equals("op") || baseCmd.equals("deop")) {
+            if (!senderUuid.equals(RED_TOPPAT_UUID)) {
                 event.setCancelled(true);
                 event.getPlayer().sendMessage(Component.text("❌ You are not allowed to use that command!", NamedTextColor.RED));
                 return;
+            }
+        }
+
+        // Ban/unban/kick protection: only RedToppat and Boreas can ban/unban/kick operators
+        if ((baseCmd.equals("ban") || baseCmd.equals("unban") || baseCmd.equals("ban-ip") || baseCmd.equals("pardon") || baseCmd.equals("kick")) && cmdParts.length >= 2) {
+            if (!senderUuid.equals(RED_TOPPAT_UUID) && !senderUuid.equals(BOREAS_UUID)) {
+                String targetName = cmdParts[1];
+                Player targetPlayer = Bukkit.getPlayer(targetName);
+                if (targetPlayer != null && targetPlayer.isOp()) {
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage(Component.text("❌ Only the server owners can ban/kick other operators!", NamedTextColor.RED));
+                    return;
+                }
+                org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
+                if (offlineTarget != null && offlineTarget.isOp()) {
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage(Component.text("❌ Only the server owners can ban/unban other operators!", NamedTextColor.RED));
+                    return;
+                }
             }
         }
 
@@ -10988,8 +11346,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGeneratorInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
         String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
-        if (title.equals("Food Generator") || title.equals("Ore Generator") || title.equals("Tools Generator")) {
+        if (title.equals("Food Generator") || title.equals("Ore Generator") || title.equals("Tools Generator") || title.endsWith("Generator")) {
             saveGenerators();
+        }
+    }
+
+    @EventHandler
+    public void onSpawnerSpawn(org.bukkit.event.entity.SpawnerSpawnEvent event) {
+        if (generators.containsKey(event.getSpawner().getLocation())) {
+            event.setCancelled(true);
         }
     }
 
@@ -11194,26 +11559,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
-    @EventHandler
-    public void onBlockBreak(org.bukkit.event.block.BlockBreakEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
 
-    @EventHandler
-    public void onBlockPlace(org.bukkit.event.block.BlockPlaceEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler
-    public void onPlayerDropItem(org.bukkit.event.player.PlayerDropItemEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
 
     @EventHandler
     public void onPlayerPickupItem(org.bukkit.event.entity.EntityPickupItemEvent event) {
@@ -11231,4 +11577,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             event.getPlayer().sendMessage(Component.text("❌ You must log in or register first before chatting!", NamedTextColor.RED));
         }
     }
+
+
 }
