@@ -142,4 +142,56 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // 6. Launch Countdown Timer
+    // Target Date: August 11, 2026 4:00 PM
+    const targetDate = new Date('August 11, 2026 16:00:00').getTime();
+
+    const daysVal = document.getElementById('days');
+    const hoursVal = document.getElementById('hours');
+    const minutesVal = document.getElementById('minutes');
+    const secondsVal = document.getElementById('seconds');
+
+    const updateUnit = (element, newValue) => {
+        const oldValue = element.textContent;
+        const formattedValue = String(newValue).padStart(2, '0');
+        
+        if (oldValue !== formattedValue) {
+            element.textContent = formattedValue;
+            element.classList.remove('val-changed');
+            void element.offsetWidth; // Trigger reflow to restart CSS animation
+            element.classList.add('val-changed');
+        }
+    };
+
+    const updateCountdown = () => {
+        const now = new Date().getTime();
+        const difference = targetDate - now;
+
+        if (difference <= 0) {
+            if (daysVal) updateUnit(daysVal, 0);
+            if (hoursVal) updateUnit(hoursVal, 0);
+            if (minutesVal) updateUnit(minutesVal, 0);
+            if (secondsVal) updateUnit(secondsVal, 0);
+            
+            const titleEl = document.querySelector('.countdown-title');
+            if (titleEl) {
+                titleEl.innerHTML = '<i class="fa-solid fa-circle-check text-green"></i> We Are Live!';
+            }
+            return;
+        }
+
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+        if (daysVal) updateUnit(daysVal, days);
+        if (hoursVal) updateUnit(hoursVal, hours);
+        if (minutesVal) updateUnit(minutesVal, minutes);
+        if (secondsVal) updateUnit(secondsVal, seconds);
+    };
+
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
 });
