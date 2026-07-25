@@ -120,6 +120,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     // Command Chest fields
     private final HashMap<Location, String> commandChests = new HashMap<>();
     private final HashMap<UUID, Location> activeCommandChestSetup = new HashMap<>();
+    private final HashMap<UUID, Inventory> customEnderChests = new HashMap<>();
 
     // Divine Flame fields
     private final HashMap<UUID, Long> chargingDivineFlame = new HashMap<>();
@@ -316,6 +317,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Boolean> tpaDisabled = new HashMap<>();
     private final HashMap<UUID, Boolean> voiceChatEnabled = new HashMap<>();
     private final HashMap<UUID, Boolean> musicDisabled = new HashMap<>();
+    private final HashMap<UUID, Boolean> starterLootDisabled = new HashMap<>();
     private final HashMap<UUID, String> editingGlobalBook = new HashMap<>();
     private List<String> serverRules = new ArrayList<>();
     private List<String> serverCredits = new ArrayList<>();
@@ -818,6 +820,34 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         playerTagDisplays.clear();
     }
 
+    public Inventory getCustomEnderChest(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (customEnderChests.containsKey(uuid)) {
+            return customEnderChests.get(uuid);
+        }
+        
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Ender Chest", NamedTextColor.DARK_PURPLE));
+        String path = "players." + uuid.toString() + ".enderChest";
+        if (getConfig().contains(path)) {
+            org.bukkit.configuration.ConfigurationSection sec = getConfig().getConfigurationSection(path);
+            if (sec != null) {
+                for (String key : sec.getKeys(false)) {
+                    try {
+                        int slot = Integer.parseInt(key);
+                        if (slot >= 0 && slot < 54) {
+                            ItemStack item = sec.getItemStack(key);
+                            inv.setItem(slot, item);
+                        }
+                    } catch (NumberFormatException e) {
+                        // ignore
+                    }
+                }
+            }
+        }
+        customEnderChests.put(uuid, inv);
+        return inv;
+    }
+
     private void loadPlayerData(Player player) {
         UUID uuid = player.getUniqueId();
         String path = "players." + uuid.toString() + ".";
@@ -864,6 +894,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         tpaDisabled.put(uuid, getConfig().getBoolean(path + "tpaDisabled", false));
         voiceChatEnabled.put(uuid, getConfig().getBoolean(path + "voiceChatEnabled", false));
         musicDisabled.put(uuid, getConfig().getBoolean(path + "musicDisabled", false));
+        starterLootDisabled.put(uuid, getConfig().getBoolean(path + "starterLootDisabled", false));
 
         java.util.List<String> activeList = getConfig().getStringList(path + "activeNametagsList");
         if (activeList.isEmpty() && getConfig().contains(path + "activeNametag")) {
@@ -960,6 +991,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         getConfig().set(path + "tpaDisabled", tpaDisabled.getOrDefault(uuid, false));
         getConfig().set(path + "voiceChatEnabled", voiceChatEnabled.getOrDefault(uuid, false));
         getConfig().set(path + "musicDisabled", musicDisabled.getOrDefault(uuid, false));
+        getConfig().set(path + "starterLootDisabled", starterLootDisabled.getOrDefault(uuid, false));
 
         java.util.Set<String> activeSet = activeNametags.get(uuid);
         if (activeSet != null) {
@@ -1019,6 +1051,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
         
+        // Save custom ender chest
+        Inventory enderInv = customEnderChests.get(uuid);
+        if (enderInv != null) {
+            String enderPath = path + "enderChest";
+            getConfig().set(enderPath, null); // Clear existing values
+            for (int i = 0; i < 54; i++) {
+                ItemStack item = enderInv.getItem(i);
+                if (item != null && item.getType() != Material.AIR) {
+                    getConfig().set(enderPath + "." + i, item);
+                }
+            }
+        }
+
         saveConfig();
     }
 
@@ -1085,6 +1130,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void giveStarterGear(Player player) {
+        if (starterLootDisabled.getOrDefault(player.getUniqueId(), false)) {
+            return;
+        }
         org.bukkit.inventory.PlayerInventory inv = player.getInventory();
         inv.setHelmet(new ItemStack(Material.CHAINMAIL_HELMET));
         inv.setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
@@ -2546,6 +2594,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 playerPasswords.put(uuid, password);
                 loggedInPlayers.add(uuid);
                 player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    if (player.isOnline()) {
+                        player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                    }
+                }, 5L);
                 savePlayerData(player);
                 player.sendMessage(Component.text("✅ Registered successfully! You are now logged in.", NamedTextColor.GREEN));
                 return true;
@@ -2569,6 +2622,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 playerPasswords.put(uuid, newPassword);
                 loggedInPlayers.add(uuid);
                 player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    if (player.isOnline()) {
+                        player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                    }
+                }, 5L);
                 savePlayerData(player);
                 player.sendMessage(Component.text("✅ Password updated successfully! You are logged in.", NamedTextColor.GREEN));
                 return true;
@@ -2598,6 +2656,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             loggedInPlayers.add(uuid);
             player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.removePotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS);
+                }
+            }, 5L);
             player.sendMessage(Component.text("✅ Logged in successfully!", NamedTextColor.GREEN));
             return true;
         }
@@ -5825,11 +5888,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // C. Settings GUI
         if (title.equals("Settings")) {
+            event.setCancelled(true);
             int rawSlot = event.getRawSlot();
             if (rawSlot == 11) {
                 boolean current = chatSpamDisabled.getOrDefault(uuid, false);
                 chatSpamDisabled.put(uuid, !current);
                 player.sendMessage(Component.text("⚙️ Chat Spam disabled: " + (!current ? "ON" : "OFF"), NamedTextColor.YELLOW));
+                savePlayerData(player);
+                openSettingsGui(player);
+
+            } else if (rawSlot == 13) {
+                boolean current = starterLootDisabled.getOrDefault(uuid, false);
+                starterLootDisabled.put(uuid, !current);
+                player.sendMessage(Component.text("⚙️ Disable Starter Loot: " + (!current ? "ON" : "OFF"), NamedTextColor.YELLOW));
                 savePlayerData(player);
                 openSettingsGui(player);
 
@@ -7499,6 +7570,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGuiClose(InventoryCloseEvent event) {
         String title = event.getView().getTitle();
+        if (title.equals("Ender Chest")) {
+            Player player = (Player) event.getPlayer();
+            savePlayerData(player);
+            player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ENDER_CHEST_CLOSE, 1.0f, 1.0f);
+            return;
+        }
         if (title.startsWith("Team Vault Page ")) {
             Player player = (Player) event.getPlayer();
             UUID uuid = player.getUniqueId();
@@ -8441,7 +8518,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             inv.setItem(11, createGuiItem(Material.GREEN_WOOL, "Disable Chat Spam: OFF", NamedTextColor.GREEN, "Click to toggle (Currently shows alerts)"));
         }
 
-
+        boolean starter = starterLootDisabled.getOrDefault(uuid, false);
+        if (starter) {
+            inv.setItem(13, createGuiItem(Material.RED_WOOL, "Disable Starter Loot: ON", NamedTextColor.RED, "Click to toggle (No starter loot given)"));
+        } else {
+            inv.setItem(13, createGuiItem(Material.GREEN_WOOL, "Disable Starter Loot: OFF", NamedTextColor.GREEN, "Click to toggle (Gives starter loot)"));
+        }
 
         boolean tpa = tpaDisabled.getOrDefault(uuid, false);
         if (tpa) {
@@ -8830,6 +8912,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             Block block = event.getClickedBlock();
+            if (block != null && block.getType() == Material.ENDER_CHEST) {
+                Player player = event.getPlayer();
+                if (player.isSneaking() && player.getInventory().getItemInMainHand().getType() != Material.AIR) {
+                    return;
+                }
+                event.setCancelled(true);
+                player.openInventory(getCustomEnderChest(player));
+                player.playSound(block.getLocation(), org.bukkit.Sound.BLOCK_ENDER_CHEST_OPEN, 1.0f, 1.0f);
+                return;
+            }
             if (block != null && block.getType() == Material.SPAWNER) {
                 Location loc = block.getLocation();
                 if (generators.containsKey(loc)) {
@@ -10412,6 +10504,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String worldName = player.getWorld().getName();
             if (worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone")) {
                 event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onApocalypseZombieDamage(org.bukkit.event.entity.EntityDamageEvent event) {
+        if (event.getEntity() instanceof org.bukkit.entity.Zombie) {
+            if (event.getEntity().getWorld().getName().equalsIgnoreCase("apocalypse")) {
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause cause = event.getCause();
+                if (cause == org.bukkit.event.entity.EntityDamageEvent.DamageCause.LAVA ||
+                    cause == org.bukkit.event.entity.EntityDamageEvent.DamageCause.FIRE ||
+                    cause == org.bukkit.event.entity.EntityDamageEvent.DamageCause.FIRE_TICK ||
+                    cause == org.bukkit.event.entity.EntityDamageEvent.DamageCause.HOT_FLOOR) {
+                    event.setCancelled(true);
+                }
             }
         }
     }
