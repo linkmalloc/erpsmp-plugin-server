@@ -1,0 +1,6 @@
+{
+  "pack": {
+    "pack_format": 48,
+    "description": "Increases Nether height limit to the game's maximum stable limit (4096 blocks)"
+  }
+}

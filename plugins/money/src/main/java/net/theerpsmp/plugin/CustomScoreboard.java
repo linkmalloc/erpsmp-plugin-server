@@ -117,6 +117,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Location> wandPoint1 = new HashMap<>();
     private final HashMap<UUID, Location> wandPoint2 = new HashMap<>();
 
+    // Custom Protection fields
+    private String protectionWorld = null;
+    private double protectionMinX = 0;
+    private double protectionMinY = 0;
+    private double protectionMinZ = 0;
+    private double protectionMaxX = 0;
+    private double protectionMaxY = 0;
+    private double protectionMaxZ = 0;
+    private boolean protectionEnabled = false;
+
     // Command Chest fields
     private final HashMap<Location, String> commandChests = new HashMap<>();
     private final HashMap<UUID, Location> activeCommandChestSetup = new HashMap<>();
@@ -313,6 +323,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, BlockBackup> originalBlockState = new HashMap<>();
     private final HashMap<Location, BlockBackup> duelBlockChanges = new HashMap<>();
     private final HashMap<UUID, String> activeFloatingTextContent = new HashMap<>();
+    private final HashMap<UUID, Boolean> activeFloatingTextIsLeaderboard = new HashMap<>();
     private final HashMap<UUID, Boolean> chatSpamDisabled = new HashMap<>();
     private final HashMap<UUID, Boolean> tpaDisabled = new HashMap<>();
     private final HashMap<UUID, Boolean> voiceChatEnabled = new HashMap<>();
@@ -482,9 +493,22 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }
         }
+
+        // Load custom protection settings
+        if (getConfig().contains("protection.enabled")) {
+            protectionEnabled = getConfig().getBoolean("protection.enabled");
+            protectionWorld = getConfig().getString("protection.world");
+            protectionMinX = getConfig().getDouble("protection.minX");
+            protectionMinY = getConfig().getDouble("protection.minY");
+            protectionMinZ = getConfig().getDouble("protection.minZ");
+            protectionMaxX = getConfig().getDouble("protection.maxX");
+            protectionMaxY = getConfig().getDouble("protection.maxY");
+            protectionMaxZ = getConfig().getDouble("protection.maxZ");
+        }
         
         if (getCommand("warp") != null) getCommand("warp").setExecutor(this);
         if (getCommand("setwarp") != null) getCommand("setwarp").setExecutor(this);
+        if (getCommand("setprotection") != null) getCommand("setprotection").setExecutor(this);
         if (getCommand("store") != null) getCommand("store").setExecutor(this);
         if (getCommand("setspawn") != null) getCommand("setspawn").setExecutor(this);
         if (getCommand("sell") != null) getCommand("sell").setExecutor(this);
@@ -566,6 +590,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             }
             updateCustomCrateHolograms();
+            updateLeaderboardFloatingTexts();
 
             // Combat tag countdown
             java.util.Iterator<java.util.Map.Entry<UUID, Integer>> iterator = combatTagTicks.entrySet().iterator();
@@ -964,7 +989,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private void savePlayerData(Player player) {
         UUID uuid = player.getUniqueId();
         String path = "players." + uuid.toString() + ".";
-        
+        getConfig().set(path + "lastKnownName", player.getName());
         getConfig().set(path + "timePlayed", timePlayedMap.getOrDefault(uuid, 0));
         getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 0L));
@@ -1067,6 +1092,36 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         saveConfig();
     }
 
+    private boolean isBedrockPlayer(Player player) {
+        if (player == null) return false;
+        String name = player.getName();
+        if (name.startsWith(".") || name.startsWith("*") || name.startsWith("_") || name.toLowerCase().startsWith("bedrock")) return true;
+        UUID uuid = player.getUniqueId();
+        if (uuid.toString().startsWith("00000000-0000-0000-") || uuid.getMostSignificantBits() == 0L) return true;
+        
+        // Floodgate API check via reflection
+        try {
+            Class<?> floodgateApiClass = Class.forName("org.geysermc.floodgate.api.FloodgateApi");
+            Object floodgateApiInstance = floodgateApiClass.getMethod("getInstance").invoke(null);
+            Object isFloodgatePlayer = floodgateApiClass.getMethod("isFloodgatePlayer", UUID.class).invoke(floodgateApiInstance, uuid);
+            if (isFloodgatePlayer instanceof Boolean && (Boolean) isFloodgatePlayer) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+        
+        // Geyser API check via reflection
+        try {
+            Class<?> geyserApiClass = Class.forName("org.geysermc.geyser.api.GeyserApi");
+            Object geyserApiInstance = geyserApiClass.getMethod("api").invoke(null);
+            Object isBedrockGeyser = geyserApiClass.getMethod("isBedrockPlayer", UUID.class).invoke(geyserApiInstance, uuid);
+            if (isBedrockGeyser instanceof Boolean && (Boolean) isBedrockGeyser) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+
+        return false;
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -1078,26 +1133,30 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             player.teleport(getRandomSpawnPoint());
         }
 
-        player.sendMessage(Component.text(""));
-        player.sendMessage(Component.text("🔒 To start playing do ", NamedTextColor.YELLOW)
-            .append(Component.text("/register", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD))
-            .append(Component.text(" to make a password or ", NamedTextColor.YELLOW))
-            .append(Component.text("/login", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD))
-            .append(Component.text(" if you already have one", NamedTextColor.YELLOW)));
-        player.sendMessage(Component.text(""));
-        if (!loggedInPlayers.contains(player.getUniqueId())) {
-            player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 1, false, false));
-            
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline() && !loggedInPlayers.contains(player.getUniqueId())) {
-                    String pwd = playerPasswords.getOrDefault(player.getUniqueId(), "");
-                    if (pwd.isEmpty()) {
-                        player.sendMessage(Component.text("🔒 Please register using /register <password> <confirmPassword>", NamedTextColor.RED));
-                    } else {
-                        player.sendMessage(Component.text("🔒 Please log in using /login <password>", NamedTextColor.RED));
+        if (isBedrockPlayer(player)) {
+            loggedInPlayers.add(player.getUniqueId());
+        } else {
+            player.sendMessage(Component.text(""));
+            player.sendMessage(Component.text("🔒 To start playing do ", NamedTextColor.YELLOW)
+                .append(Component.text("/register", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD))
+                .append(Component.text(" to make a password or ", NamedTextColor.YELLOW))
+                .append(Component.text("/login", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD))
+                .append(Component.text(" if you already have one", NamedTextColor.YELLOW)));
+            player.sendMessage(Component.text(""));
+            if (!loggedInPlayers.contains(player.getUniqueId())) {
+                player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS, Integer.MAX_VALUE, 1, false, false));
+                
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    if (player.isOnline() && !loggedInPlayers.contains(player.getUniqueId())) {
+                        String pwd = playerPasswords.getOrDefault(player.getUniqueId(), "");
+                        if (pwd.isEmpty()) {
+                            player.sendMessage(Component.text("🔒 Please register using /register <password> <confirmPassword>", NamedTextColor.RED));
+                        } else {
+                            player.sendMessage(Component.text("🔒 Please log in using /login <password>", NamedTextColor.RED));
+                        }
                     }
-                }
-            }, 10L);
+                }, 10L);
+            }
         }
         // Play custom spawn/afk music only for the joining player
         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -1278,6 +1337,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 loc.getBlock().setBlockData(backup.data, false);
             }
             activeFloatingTextContent.remove(uuid);
+            activeFloatingTextIsLeaderboard.remove(uuid);
         }
     }
 
@@ -1989,6 +2049,30 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
+        if (command.getName().equalsIgnoreCase("event")) {
+            UUID uuid = player.getUniqueId();
+            if (combatTagTicks.containsKey(uuid)) {
+                player.sendMessage(Component.text("❌ You cannot teleport to the event while in combat!", NamedTextColor.RED));
+                return true;
+            }
+            Location eventLoc = warps.get("event");
+            if (eventLoc == null) {
+                World mainWorld = Bukkit.getWorld("world");
+                if (mainWorld == null && !Bukkit.getWorlds().isEmpty()) {
+                    mainWorld = Bukkit.getWorlds().get(0);
+                }
+                if (mainWorld != null) {
+                    eventLoc = new Location(mainWorld, 35.5, 68.0, 4.5);
+                }
+            }
+            if (eventLoc == null) {
+                player.sendMessage(Component.text("❌ Event warp location could not be determined!", NamedTextColor.RED));
+                return true;
+            }
+            performTeleportCountdown(player, eventLoc, "Event Area");
+            return true;
+        }
+
         if (command.getName().equalsIgnoreCase("auction")) {
             String query = args.length > 0 ? String.join(" ", args) : null;
             openAuctionGui(player, query);
@@ -2353,6 +2437,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "pickaxe_lerp" -> item = createPickaxeLerp();
                 case "mace" -> item = createMaceMerp();
                 case "echo_sword" -> item = createEchoSword();
+                case "ender_sword" -> item = createEnderSword();
+                case "zeus_sword" -> item = createZeusSword();
                 case "gateway" -> item = createEndGatewayItem();
                 case "echo_crate" -> item = createEchoCrate();
                 case "crimson_crate" -> item = createCrimsonCrate();
@@ -2368,6 +2454,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "amethyst_key" -> item = createAmethystKey();
                 case "npc_egg" -> item = createNpcEgg();
                 case "floating_text" -> item = createFloatingTextItem();
+                case "leaderboard_text" -> item = createLeaderboardTextItem();
                 case "command_chest" -> item = createCommandChest();
                 case "divine_flame" -> item = createDivineFlame();
                 case "food_generator" -> item = createFoodGeneratorItem();
@@ -2375,7 +2462,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "tools_generator" -> item = createToolsGeneratorItem();
                 case "mob_generator" -> item = createMobGeneratorItem();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -2576,6 +2663,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         // --- /register ---
         if (command.getName().equalsIgnoreCase("register")) {
+            if (isBedrockPlayer(player)) {
+                player.sendMessage(Component.text("❌ This command is only for Java players!", NamedTextColor.RED));
+                return true;
+            }
             UUID uuid = player.getUniqueId();
             String pwd = playerPasswords.getOrDefault(uuid, "");
             
@@ -2635,6 +2726,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // --- /login ---
         if (command.getName().equalsIgnoreCase("login")) {
+            if (isBedrockPlayer(player)) {
+                player.sendMessage(Component.text("❌ This command is only for Java players!", NamedTextColor.RED));
+                return true;
+            }
             UUID uuid = player.getUniqueId();
             String pwd = playerPasswords.getOrDefault(uuid, "");
             if (pwd.isEmpty()) {
@@ -2723,6 +2818,79 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             return true;
         }
+        // --- /setprotection (OP only) ---
+        if (command.getName().equalsIgnoreCase("setprotection")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+
+            UUID uuid = player.getUniqueId();
+            Location p1 = wandPoint1.get(uuid);
+            Location p2 = wandPoint2.get(uuid);
+            if (p1 == null || p2 == null) {
+                player.sendMessage(Component.text("❌ Select two points with the Wand first!", NamedTextColor.RED));
+                return true;
+            }
+
+            if (!p1.getWorld().equals(p2.getWorld())) {
+                player.sendMessage(Component.text("❌ The two wand points must be in the same world!", NamedTextColor.RED));
+                return true;
+            }
+
+            protectionWorld = p1.getWorld().getName();
+            protectionMinX = Math.min(p1.getX(), p2.getX());
+            protectionMinY = Math.min(p1.getY(), p2.getY());
+            protectionMinZ = Math.min(p1.getZ(), p2.getZ());
+            protectionMaxX = Math.max(p1.getX(), p2.getX());
+            protectionMaxY = Math.max(p1.getY(), p2.getY());
+            protectionMaxZ = Math.max(p1.getZ(), p2.getZ());
+            protectionEnabled = true;
+
+            getConfig().set("protection.enabled", true);
+            getConfig().set("protection.world", protectionWorld);
+            getConfig().set("protection.minX", protectionMinX);
+            getConfig().set("protection.minY", protectionMinY);
+            getConfig().set("protection.minZ", protectionMinZ);
+            getConfig().set("protection.maxX", protectionMaxX);
+            getConfig().set("protection.maxY", protectionMaxY);
+            getConfig().set("protection.maxZ", protectionMaxZ);
+            saveConfig();
+
+            // Delete any explosive or fire related blocks in the area
+            int x1 = p1.getBlockX();
+            int y1 = p1.getBlockY();
+            int z1 = p1.getBlockZ();
+            int x2 = p2.getBlockX();
+            int y2 = p2.getBlockY();
+            int z2 = p2.getBlockZ();
+
+            int minX = Math.min(x1, x2);
+            int maxX = Math.max(x1, x2);
+            int minY = Math.min(y1, y2);
+            int maxY = Math.max(y1, y2);
+            int minZ = Math.min(z1, z2);
+            int maxZ = Math.max(z1, z2);
+
+            World world = p1.getWorld();
+            int deletedCount = 0;
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = minY; y <= maxY; y++) {
+                    for (int z = minZ; z <= maxZ; z++) {
+                        Block block = world.getBlockAt(x, y, z);
+                        Material type = block.getType();
+                        if (type == Material.TNT || type == Material.LAVA || type == Material.FIRE || type == Material.SOUL_FIRE) {
+                            block.setType(Material.AIR);
+                            deletedCount++;
+                        }
+                    }
+                }
+            }
+
+            player.sendMessage(Component.text("✅ Spawn protection successfully set! Removed " + deletedCount + " explosive/fire blocks.", NamedTextColor.GREEN));
+            return true;
+        }
+
         // --- /cut (OP only) ---
         if (command.getName().equalsIgnoreCase("cut")) {
             if (!player.isOp()) {
@@ -3956,7 +4124,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return spots[random.nextInt(spots.length)];
     }
 
+    private boolean isInCustomProtection(Location loc) {
+        if (!protectionEnabled || protectionWorld == null) return false;
+        if (!loc.getWorld().getName().equalsIgnoreCase(protectionWorld)) return false;
+        double x = loc.getX();
+        double y = loc.getY();
+        double z = loc.getZ();
+        return x >= protectionMinX && x <= protectionMaxX &&
+               y >= protectionMinY && y <= protectionMaxY &&
+               z >= protectionMinZ && z <= protectionMaxZ;
+    }
+
     private boolean isInSpawnRadius(Location loc) {
+        if (isInCustomProtection(loc)) return true;
+
         Location spawn = getSpawnLocation();
         if (!loc.getWorld().equals(spawn.getWorld())) return false;
         double x = loc.getX();
@@ -3969,7 +4150,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId()) && !isBedrockPlayer(event.getPlayer())) {
             event.setCancelled(true);
             return;
         }
@@ -4189,7 +4370,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId()) && !isBedrockPlayer(event.getPlayer())) {
             event.setCancelled(true);
             return;
         }
@@ -4206,10 +4387,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
-            if (isInSpawnRadius(event.getBlock().getLocation())) {
-                event.setCancelled(true);
-                event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks at spawn!", NamedTextColor.RED));
-                return;
+            Location blockLoc = event.getBlock().getLocation();
+            if (isInSpawnRadius(blockLoc)) {
+                if (isInCustomProtection(blockLoc)) {
+                    Material placedType = event.getBlockPlaced().getType();
+                    if (placedType == Material.TNT || placedType == Material.LAVA || placedType == Material.FIRE || placedType == Material.SOUL_FIRE) {
+                        event.setCancelled(true);
+                        event.getPlayer().sendMessage(Component.text("❌ You cannot place destructive blocks here!", NamedTextColor.RED));
+                        return;
+                    }
+                } else {
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks at spawn!", NamedTextColor.RED));
+                    return;
+                }
             }
         }
         ItemStack item = event.getItemInHand();
@@ -4319,6 +4510,31 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 String customItem = weapon.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
                 if (customItem != null && customItem.equals("divine_flame")) {
                     event.getEntity().setFireTicks(160);
+                }
+                
+                if (customItem != null && customItem.equals("ender_sword") && event.getDamager() instanceof Player) {
+                    ItemMeta weaponMeta = weapon.getItemMeta();
+                    NamespacedKey hitKey = new NamespacedKey(this, "ender_sword_hits");
+                    int hits = weaponMeta.getPersistentDataContainer().getOrDefault(hitKey, PersistentDataType.INTEGER, 0);
+                    hits++;
+                    if (hits >= 10) {
+                        hits = 0;
+                        if (random.nextDouble() < 0.5) {
+                            org.bukkit.entity.Entity target = event.getEntity();
+                            org.bukkit.entity.AreaEffectCloud cloud = target.getWorld().spawn(target.getLocation(), org.bukkit.entity.AreaEffectCloud.class);
+                            cloud.setParticle(Particle.DRAGON_BREATH);
+                            cloud.setRadius(1.5f);
+                            cloud.setDuration(200);
+                            cloud.setRadiusOnUse(0.0f);
+                            cloud.setRadiusPerTick(-0.0075f);
+                            cloud.setSource(attacker);
+                            cloud.addCustomEffect(new PotionEffect(PotionEffectType.INSTANT_DAMAGE, 1, 0), true);
+                            
+                            target.getWorld().playSound(target.getLocation(), org.bukkit.Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f);
+                        }
+                    }
+                    weaponMeta.getPersistentDataContainer().set(hitKey, PersistentDataType.INTEGER, hits);
+                    weapon.setItemMeta(weaponMeta);
                 }
             }
         }
@@ -5962,6 +6178,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             
             Location loc = activeFloatingTextPlacement.remove(uuid);
             String text = activeFloatingTextContent.remove(uuid);
+            Boolean isLbObj = activeFloatingTextIsLeaderboard.remove(uuid);
+            boolean isLeaderboard = isLbObj != null && isLbObj;
             originalBlockState.remove(uuid);
             
             if (loc == null || text == null) return;
@@ -5983,13 +6201,37 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             
             Component textComp;
-            if (rainbow) {
+            if (isLeaderboard) {
+                textComp = getLeaderboardText(text.toLowerCase().trim(), color.toString());
+            } else if (rainbow) {
                 textComp = createRainbowComponent(text);
             } else {
                 Component parsed = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(text);
                 textComp = parsed.colorIfAbsent(color).decorate(net.kyori.adventure.text.format.TextDecoration.BOLD);
             }
             
+            if (player.getGameMode() != org.bukkit.GameMode.CREATIVE) {
+                String searchType = isLeaderboard ? "leaderboard_text" : "floating_text";
+                ItemStack foundItem = null;
+                for (ItemStack invItem : player.getInventory().getContents()) {
+                    if (invItem != null && invItem.hasItemMeta()) {
+                        ItemMeta itemMeta = invItem.getItemMeta();
+                        String customItem = itemMeta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                        if (customItem != null && customItem.equals(searchType)) {
+                            foundItem = invItem;
+                            break;
+                        }
+                    }
+                }
+                
+                if (foundItem == null) {
+                    player.sendMessage(Component.text("❌ You do not have the required floating text item in your inventory to spawn this!", NamedTextColor.RED));
+                    return;
+                }
+                
+                foundItem.setAmount(foundItem.getAmount() - 1);
+            }
+
             org.bukkit.entity.TextDisplay textDisplay = loc.getWorld().spawn(loc.clone().add(0, 0.5, 0), org.bukkit.entity.TextDisplay.class);
             textDisplay.text(textComp);
             textDisplay.setBillboard(org.bukkit.entity.Display.Billboard.CENTER);
@@ -5998,11 +6240,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             textDisplay.setShadowed(true);
             textDisplay.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
             
-            textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "is_floating_text"), PersistentDataType.BOOLEAN, true);
-            textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "floating_text_placer"), PersistentDataType.STRING, uuid.toString());
+            if (isLeaderboard) {
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "is_leaderboard_text"), PersistentDataType.BOOLEAN, true);
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "leaderboard_stat_type"), PersistentDataType.STRING, text.toLowerCase().trim());
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "leaderboard_color"), PersistentDataType.STRING, color.toString());
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "floating_text_placer"), PersistentDataType.STRING, uuid.toString());
+            } else {
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "is_floating_text"), PersistentDataType.BOOLEAN, true);
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "floating_text_placer"), PersistentDataType.STRING, uuid.toString());
+            }
             
             player.playSound(loc, org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
-            player.sendMessage(Component.text("✅ Spawned floating text!", NamedTextColor.GREEN));
+            player.sendMessage(Component.text(isLeaderboard ? "✅ Spawned leaderboard text!" : "✅ Spawned floating text!", NamedTextColor.GREEN));
             return;
         }
 
@@ -6784,6 +7033,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (activeFloatingTextPlacement.containsKey(uuid)) {
             Location loc = activeFloatingTextPlacement.get(uuid);
+            boolean isLeaderboard = activeFloatingTextIsLeaderboard.getOrDefault(uuid, false);
             
             List<Component> lines = event.lines();
             List<String> textLines = new ArrayList<>();
@@ -6804,17 +7054,72 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (joinedText.isEmpty()) {
                 player.sendMessage(Component.text("❌ Floating text cannot be empty!", NamedTextColor.RED));
                 activeFloatingTextPlacement.remove(uuid);
-                
-                ItemStack returned = createFloatingTextItem();
-                java.util.HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(returned);
-                for (ItemStack drop : remaining.values()) {
-                    player.getWorld().dropItemNaturally(player.getLocation(), drop);
-                }
+                activeFloatingTextIsLeaderboard.remove(uuid);
                 return;
             }
+
+            if (isLeaderboard) {
+                String typeLower = joinedText.toLowerCase().trim();
+                if (!typeLower.equals("kills") && !typeLower.equals("erpies") && !typeLower.equals("derpies")) {
+                    player.sendMessage(Component.text("❌ Invalid leaderboard type! Use: kills, erpies, or derpies.", NamedTextColor.RED));
+                    return;
+                }
+            }
             
-            activeFloatingTextContent.put(uuid, joinedText);
-            openColorSelectionGui(player);
+            activeFloatingTextPlacement.remove(uuid);
+            activeFloatingTextIsLeaderboard.remove(uuid);
+            
+            if (player.getGameMode() != org.bukkit.GameMode.CREATIVE) {
+                String searchType = isLeaderboard ? "leaderboard_text" : "floating_text";
+                ItemStack foundItem = null;
+                for (ItemStack invItem : player.getInventory().getContents()) {
+                    if (invItem != null && invItem.hasItemMeta()) {
+                        ItemMeta itemMeta = invItem.getItemMeta();
+                        String customItem = itemMeta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                        if (customItem != null && customItem.equals(searchType)) {
+                            foundItem = invItem;
+                            break;
+                        }
+                    }
+                }
+                
+                if (foundItem == null) {
+                    player.sendMessage(Component.text("❌ You do not have the required floating text item in your inventory to spawn this!", NamedTextColor.RED));
+                    return;
+                }
+                
+                foundItem.setAmount(foundItem.getAmount() - 1);
+            }
+
+            NamedTextColor color = NamedTextColor.WHITE;
+            Component textComp;
+            if (isLeaderboard) {
+                textComp = getLeaderboardText(joinedText.toLowerCase().trim(), color.toString());
+            } else {
+                Component parsed = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(joinedText);
+                textComp = parsed.colorIfAbsent(color).decorate(net.kyori.adventure.text.format.TextDecoration.BOLD);
+            }
+            
+            org.bukkit.entity.TextDisplay textDisplay = loc.getWorld().spawn(loc.clone().add(0, 0.5, 0), org.bukkit.entity.TextDisplay.class);
+            textDisplay.text(textComp);
+            textDisplay.setBillboard(org.bukkit.entity.Display.Billboard.CENTER);
+            textDisplay.setInvulnerable(true);
+            textDisplay.setSeeThrough(false);
+            textDisplay.setShadowed(true);
+            textDisplay.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
+            
+            if (isLeaderboard) {
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "is_leaderboard_text"), PersistentDataType.BOOLEAN, true);
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "leaderboard_stat_type"), PersistentDataType.STRING, joinedText.toLowerCase().trim());
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "leaderboard_color"), PersistentDataType.STRING, color.toString());
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "floating_text_placer"), PersistentDataType.STRING, uuid.toString());
+            } else {
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "is_floating_text"), PersistentDataType.BOOLEAN, true);
+                textDisplay.getPersistentDataContainer().set(new NamespacedKey(this, "floating_text_placer"), PersistentDataType.STRING, uuid.toString());
+            }
+            
+            player.playSound(loc, org.bukkit.Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
+            player.sendMessage(Component.text(isLeaderboard ? "✅ Spawned leaderboard text!" : "✅ Spawned floating text!", NamedTextColor.GREEN));
             return;
         }
 
@@ -7928,6 +8233,24 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return sign;
     }
 
+    private ItemStack createLeaderboardTextItem() {
+        ItemStack sign = new ItemStack(Material.OAK_SIGN);
+        ItemMeta meta = sign.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Leaderboard Text", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.lore(List.of(
+                Component.text("Place to create a leaderboard floating text.", NamedTextColor.YELLOW),
+                Component.text("1. Place on the ground or a wall.", NamedTextColor.GRAY),
+                Component.text("2. Type 'kills', 'erpies', or 'derpies' in the sign.", NamedTextColor.GRAY),
+                Component.text("3. Choose a color in the GUI.", NamedTextColor.GRAY),
+                Component.text("4. Shift+Left-click the block to remove.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "leaderboard_text");
+            sign.setItemMeta(meta);
+        }
+        return sign;
+    }
+
     private ItemStack createCommandChest() {
         ItemStack chest = new ItemStack(Material.CHEST);
         ItemMeta meta = chest.getItemMeta();
@@ -8105,6 +8428,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         items.add(createPickaxeLerp());
         items.add(createMaceMerp());
         items.add(createEchoSword());
+        items.add(createEnderSword());
+        items.add(createZeusSword());
         items.add(createLungeSpear());
         items.add(createShopCrate());
         items.add(createEchoCrate());
@@ -8121,6 +8446,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         items.add(createWand());
         items.add(createNpcEgg());
         items.add(createFloatingTextItem());
+        items.add(createLeaderboardTextItem());
         items.add(createCommandChest());
         items.add(createDivineFlame());
         items.add(createFoodGeneratorItem());
@@ -8857,7 +9183,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         player.playSound(spawnLoc, org.bukkit.Sound.ENTITY_CHICKEN_EGG, 1.0f, 1.0f);
                         player.sendMessage(Component.text("✅ Spawned NPC of player " + targetName + "!", NamedTextColor.GREEN));
                     }
-                } else if (customType.equals("floating_text")) {
+                } else if (customType.equals("floating_text") || customType.equals("leaderboard_text")) {
                     if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
                         event.setCancelled(true);
                         
@@ -8880,10 +9206,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             player.openSign(sign);
                             activeFloatingTextPlacement.put(player.getUniqueId(), targetBlock.getLocation());
                             originalBlockState.put(player.getUniqueId(), new BlockBackup(originalType, originalData));
-                            
-                            if (player.getGameMode() != org.bukkit.GameMode.CREATIVE) {
-                                item.setAmount(item.getAmount() - 1);
-                            }
+                            activeFloatingTextIsLeaderboard.put(player.getUniqueId(), customType.equals("leaderboard_text"));
                         } else {
                             targetBlock.setType(originalType, false);
                             targetBlock.setBlockData(originalData, false);
@@ -8910,6 +9233,51 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            ItemStack item = event.getItem();
+            if (item != null && item.hasItemMeta()) {
+                ItemMeta meta = item.getItemMeta();
+                String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && customItem.equals("ender_sword")) {
+                    Player player = event.getPlayer();
+                    event.setCancelled(true);
+                    
+                    if (player.hasCooldown(Material.NETHERITE_SWORD)) {
+                        player.sendMessage(Component.text("❌ Ender Sword is on cooldown!", NamedTextColor.RED));
+                        return;
+                    }
+                    
+                    org.bukkit.entity.EnderPearl pearl = player.launchProjectile(org.bukkit.entity.EnderPearl.class);
+                    ItemStack representation = new ItemStack(Material.NETHERITE_SWORD);
+                    pearl.setItem(representation);
+                    
+                    player.setCooldown(Material.NETHERITE_SWORD, 60); // 3 seconds cooldown
+                    player.getWorld().playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDER_PEARL_THROW, 1.0f, 1.0f);
+                    return;
+                }
+                
+                if (customItem != null && customItem.equals("zeus_sword")) {
+                    Player player = event.getPlayer();
+                    event.setCancelled(true);
+                    
+                    if (player.hasCooldown(Material.NETHERITE_SWORD)) {
+                        player.sendMessage(Component.text("❌ Zeus Sword is on cooldown!", NamedTextColor.RED));
+                        return;
+                    }
+                    
+                    Block targetBlock = player.getTargetBlockExact(100);
+                    if (targetBlock != null && targetBlock.getType() != Material.AIR) {
+                        Location strikeLoc = targetBlock.getLocation();
+                        strikeLoc.getWorld().strikeLightning(strikeLoc);
+                        player.setCooldown(Material.NETHERITE_SWORD, 60); // 3 seconds cooldown
+                    } else {
+                        player.sendMessage(Component.text("❌ No target block in sight!", NamedTextColor.RED));
+                    }
+                    return;
+                }
+            }
+        }
+
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             Block block = event.getClickedBlock();
             if (block != null && block.getType() == Material.ENDER_CHEST) {
@@ -9051,8 +9419,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (clickedBlock == null || clickedBlock.getY() < 127) return;
         
         // Check if player is a Bedrock player
-        boolean isBedrock = player.getName().startsWith(".") || player.getUniqueId().toString().startsWith("00000000-0000-0000-");
-        if (!isBedrock) return;
+        if (!isBedrockPlayer(player)) return;
 
         ItemStack mainItem = player.getInventory().getItemInMainHand();
         if (mainItem == null || !mainItem.getType().isBlock()) return;
@@ -9191,7 +9558,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Location holoLoc = data.loc.clone().add(0.5, 1.2, 0.5);
         TextDisplay display = holoLoc.getWorld().spawn(holoLoc, TextDisplay.class, entity -> {
             entity.setBillboard(Display.Billboard.CENTER);
-            entity.setBackgroundColor(Color.fromARGB(100, 0, 0, 0));
+            entity.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
             entity.setShadowed(true);
             Component line1 = Component.text("🛒 " + data.ownerName + "'s Crate Shop", NamedTextColor.GOLD);
             Component line2 = Component.text("Selling: " + finalItemsStr, NamedTextColor.WHITE);
@@ -9552,6 +9919,35 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return sword;
     }
 
+    private ItemStack createEnderSword() {
+        ItemStack sword = new ItemStack(Material.NETHERITE_SWORD);
+        ItemMeta meta = sword.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Ender Sword", NamedTextColor.LIGHT_PURPLE).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
+            meta.lore(List.of(
+                Component.text("Right-click to throw a teleporting ender pearl.", NamedTextColor.GRAY),
+                Component.text("Every 10 hits spawns Dragon's Breath.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "ender_sword");
+            sword.setItemMeta(meta);
+        }
+        return sword;
+    }
+
+    private ItemStack createZeusSword() {
+        ItemStack sword = new ItemStack(Material.NETHERITE_SWORD);
+        ItemMeta meta = sword.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Zeus Sword", NamedTextColor.GOLD).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
+            meta.lore(List.of(
+                Component.text("Right-click to strike lightning where you look.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "zeus_sword");
+            sword.setItemMeta(meta);
+        }
+        return sword;
+    }
+
     private ItemStack createEndGatewayItem() {
         ItemStack item = new ItemStack(Material.END_PORTAL_FRAME);
         ItemMeta meta = item.getItemMeta();
@@ -9702,6 +10098,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
+        // 2d. Leaderboard tags
+        int killsRank = getPlayerLeaderboardRank(uuid, "kills");
+        if (killsRank >= 1 && killsRank <= 10) {
+            allTags.add(Component.text("🏆 #" + killsRank + " Kills", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
+        }
+        int erpiesRank = getPlayerLeaderboardRank(uuid, "erpies");
+        if (erpiesRank >= 1 && erpiesRank <= 10) {
+            allTags.add(Component.text("🪙 #" + erpiesRank + " Erpies", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD));
+        }
+        int derpiesRank = getPlayerLeaderboardRank(uuid, "derpies");
+        if (derpiesRank >= 1 && derpiesRank <= 10) {
+            allTags.add(Component.text("💎 #" + derpiesRank + " Derpies", NamedTextColor.LIGHT_PURPLE, net.kyori.adventure.text.format.TextDecoration.BOLD));
+        }
+
         if (allTags.isEmpty()) {
             return;
         }
@@ -9726,6 +10136,62 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         
         playerTagDisplays.put(uuid, displays);
+    }
+
+    private int getPlayerLeaderboardRank(UUID uuid, String statType) {
+        java.util.List<java.util.Map.Entry<UUID, Long>> list = new ArrayList<>();
+        java.util.Set<UUID> allUuids = new java.util.HashSet<>();
+        org.bukkit.configuration.ConfigurationSection playersSec = getConfig().getConfigurationSection("players");
+        if (playersSec != null) {
+            for (String key : playersSec.getKeys(false)) {
+                try {
+                    allUuids.add(UUID.fromString(key));
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+        if (statType.equalsIgnoreCase("kills")) {
+            allUuids.addAll(killsMap.keySet());
+        } else if (statType.equalsIgnoreCase("erpies")) {
+            allUuids.addAll(erpiesMap.keySet());
+        } else if (statType.equalsIgnoreCase("derpies")) {
+            allUuids.addAll(derpiesMap.keySet());
+        }
+
+        for (UUID u : allUuids) {
+            long val = 0;
+            String key = u.toString();
+            if (statType.equalsIgnoreCase("kills")) {
+                if (killsMap.containsKey(u)) {
+                    val = killsMap.get(u).longValue();
+                } else {
+                    val = getConfig().getLong("players." + key + ".kills", 0L);
+                }
+            } else if (statType.equalsIgnoreCase("erpies")) {
+                if (erpiesMap.containsKey(u)) {
+                    val = erpiesMap.get(u);
+                } else {
+                    val = getConfig().getLong("players." + key + ".erpies", 0L);
+                }
+            } else if (statType.equalsIgnoreCase("derpies")) {
+                if (derpiesMap.containsKey(u)) {
+                    val = derpiesMap.get(u);
+                } else {
+                    val = getConfig().getLong("players." + key + ".derpies", 0L);
+                }
+            }
+            if (val > 0) {
+                list.add(new java.util.AbstractMap.SimpleEntry<>(u, val));
+            }
+        }
+
+        list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getKey().equals(uuid)) {
+                return i + 1;
+            }
+        }
+        return -1;
     }
 
     private ItemStack createEchoCrate() {
@@ -10001,7 +10467,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
     public void onPlayerCommandPreprocess(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        if (!loggedInPlayers.contains(player.getUniqueId())) {
+        if (!loggedInPlayers.contains(player.getUniqueId()) && !isBedrockPlayer(player)) {
             String message = event.getMessage().toLowerCase().trim();
             String[] parts = message.split(" ");
             String cmd = parts[0].replaceAll("^/", "");
@@ -10479,22 +10945,135 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     java.util.Collection<org.bukkit.entity.TextDisplay> displays = center.getNearbyEntitiesByType(org.bukkit.entity.TextDisplay.class, 1.5);
                     for (org.bukkit.entity.TextDisplay display : displays) {
                         NamespacedKey key = new NamespacedKey(this, "is_floating_text");
-                        if (display.getPersistentDataContainer().has(key, PersistentDataType.BOOLEAN)) {
+                        NamespacedKey lbKey = new NamespacedKey(this, "is_leaderboard_text");
+                        boolean hasNormal = display.getPersistentDataContainer().has(key, PersistentDataType.BOOLEAN);
+                        boolean hasLeaderboard = display.getPersistentDataContainer().has(lbKey, PersistentDataType.BOOLEAN);
+                        if (hasNormal || hasLeaderboard) {
                             String placerUuidStr = display.getPersistentDataContainer().get(new NamespacedKey(this, "floating_text_placer"), PersistentDataType.STRING);
                             boolean canRemove = player.isOp() || (placerUuidStr != null && placerUuidStr.equals(player.getUniqueId().toString()));
                             if (canRemove) {
                                 display.remove();
                                 event.setCancelled(true);
                                 
-                                player.getWorld().dropItemNaturally(display.getLocation(), createFloatingTextItem());
+                                ItemStack toDrop = hasLeaderboard ? createLeaderboardTextItem() : createFloatingTextItem();
+                                player.getWorld().dropItemNaturally(display.getLocation(), toDrop);
                                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f);
-                                player.sendMessage(Component.text("✅ Removed floating text.", NamedTextColor.GREEN));
+                                player.sendMessage(Component.text(hasLeaderboard ? "✅ Removed leaderboard text." : "✅ Removed floating text.", NamedTextColor.GREEN));
                                 break;
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    private Component getLeaderboardText(String statType, String colorName) {
+        NamedTextColor color = NamedTextColor.WHITE;
+        try {
+            if (colorName != null) {
+                color = NamedTextColor.NAMES.value(colorName.toLowerCase());
+            }
+        } catch (Exception e) {}
+        if (color == null) color = NamedTextColor.WHITE;
+
+        String title = "";
+        java.util.List<java.util.Map.Entry<UUID, Long>> list = new ArrayList<>();
+
+        if (statType.equalsIgnoreCase("kills")) {
+            title = "🏆 KILLS LEADERBOARD 🏆";
+        } else if (statType.equalsIgnoreCase("erpies")) {
+            title = "🪙 ERPIES LEADERBOARD 🪙";
+        } else if (statType.equalsIgnoreCase("derpies")) {
+            title = "💎 DERPIES LEADERBOARD 💎";
+        }
+
+        java.util.Set<UUID> allUuids = new java.util.HashSet<>();
+        org.bukkit.configuration.ConfigurationSection playersSec = getConfig().getConfigurationSection("players");
+        if (playersSec != null) {
+            for (String key : playersSec.getKeys(false)) {
+                try {
+                    allUuids.add(UUID.fromString(key));
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+        if (statType.equalsIgnoreCase("kills")) {
+            allUuids.addAll(killsMap.keySet());
+        } else if (statType.equalsIgnoreCase("erpies")) {
+            allUuids.addAll(erpiesMap.keySet());
+        } else if (statType.equalsIgnoreCase("derpies")) {
+            allUuids.addAll(derpiesMap.keySet());
+        }
+
+        for (UUID uuid : allUuids) {
+            long val = 0;
+            String key = uuid.toString();
+            if (statType.equalsIgnoreCase("kills")) {
+                if (killsMap.containsKey(uuid)) {
+                    val = killsMap.get(uuid).longValue();
+                } else {
+                    val = getConfig().getLong("players." + key + ".kills", 0L);
+                }
+            } else if (statType.equalsIgnoreCase("erpies")) {
+                if (erpiesMap.containsKey(uuid)) {
+                    val = erpiesMap.get(uuid);
+                } else {
+                    val = getConfig().getLong("players." + key + ".erpies", 0L);
+                }
+            } else if (statType.equalsIgnoreCase("derpies")) {
+                if (derpiesMap.containsKey(uuid)) {
+                    val = derpiesMap.get(uuid);
+                } else {
+                    val = getConfig().getLong("players." + key + ".derpies", 0L);
+                }
+            }
+            list.add(new java.util.AbstractMap.SimpleEntry<>(uuid, val));
+        }
+
+        list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+        Component comp = Component.text(title, color, net.kyori.adventure.text.format.TextDecoration.BOLD);
+        int rank = 1;
+        for (java.util.Map.Entry<UUID, Long> entry : list) {
+            if (rank > 10) break;
+            org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(entry.getKey());
+            String name = op.getName();
+            if (name == null) {
+                name = getConfig().getString("players." + entry.getKey().toString() + ".lastKnownName");
+            }
+            if (name == null) {
+                name = "Unknown";
+            }
+            Component line = Component.text("\n" + rank + ". " + name + ": ", NamedTextColor.GRAY)
+                .append(Component.text(formatValue(entry.getValue()), NamedTextColor.GOLD));
+            comp = comp.append(line);
+            rank++;
+        }
+        if (rank == 1) {
+            comp = comp.append(Component.text("\nNo data yet.", NamedTextColor.GRAY));
+        }
+        return comp;
+    }
+
+    private int leaderboardUpdateTicks = 0;
+    private void updateLeaderboardFloatingTexts() {
+        leaderboardUpdateTicks++;
+        if (leaderboardUpdateTicks % 10 != 0) { // Every 10 seconds (ticks run every 1 second)
+            return;
+        }
+        for (World world : Bukkit.getWorlds()) {
+            for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                if (display.getPersistentDataContainer().has(new NamespacedKey(this, "is_leaderboard_text"), PersistentDataType.BOOLEAN)) {
+                    String statType = display.getPersistentDataContainer().get(new NamespacedKey(this, "leaderboard_stat_type"), PersistentDataType.STRING);
+                    String colorName = display.getPersistentDataContainer().get(new NamespacedKey(this, "leaderboard_color"), PersistentDataType.STRING);
+                    if (statType != null) {
+                        display.text(getLeaderboardText(statType, colorName));
+                    }
+                }
+            }
+        }
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            updatePlayerFloatingTags(p);
         }
     }
 
@@ -11024,6 +11603,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     @EventHandler
+    public void onProtectionExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
+        event.blockList().removeIf(block -> isInCustomProtection(block.getLocation()));
+    }
+
+    @EventHandler
+    public void onProtectionBlockExplode(org.bukkit.event.block.BlockExplodeEvent event) {
+        event.blockList().removeIf(block -> isInCustomProtection(block.getLocation()));
+    }
+
+    @EventHandler
     public void onCrystalPlace(org.bukkit.event.player.PlayerInteractEvent event) {
         Player player = event.getPlayer();
         String worldName = player.getWorld().getName();
@@ -11036,6 +11625,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (item != null && item.getType() == Material.END_CRYSTAL) {
                     event.setCancelled(true);
                     player.sendMessage(Component.text("❌ You cannot place End Crystals in the Spawn dimension!", NamedTextColor.RED));
+                    return;
+                }
+            }
+        }
+        if (player.getGameMode() != org.bukkit.GameMode.CREATIVE && event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
+            Block clickedBlock = event.getClickedBlock();
+            if (clickedBlock != null && isInCustomProtection(clickedBlock.getLocation())) {
+                ItemStack item = event.getItem();
+                if (item != null && item.getType() == Material.END_CRYSTAL) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text("❌ You cannot place End Crystals here!", NamedTextColor.RED));
                     return;
                 }
             }
@@ -11065,6 +11665,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (bucket == Material.WATER_BUCKET || bucket == Material.LAVA_BUCKET) {
                 event.setCancelled(true);
                 player.sendMessage(Component.text("❌ You cannot place water or lava in the Spawn dimension!", NamedTextColor.RED));
+                return;
+            }
+        }
+        if (isInCustomProtection(event.getBlock().getLocation())) {
+            Material bucket = event.getBucket();
+            if (bucket == Material.LAVA_BUCKET) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ You cannot place lava here!", NamedTextColor.RED));
             }
         }
     }
@@ -11676,7 +12284,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
-        if (!loggedInPlayers.contains(uuid)) {
+        if (!loggedInPlayers.contains(uuid) && !isBedrockPlayer(player)) {
             Location from = event.getFrom();
             Location to = event.getTo();
             if (from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ()) {
@@ -11702,13 +12310,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onEntityDamageByEntity(org.bukkit.event.entity.EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Player attacker) {
-            if (!loggedInPlayers.contains(attacker.getUniqueId())) {
+            if (!loggedInPlayers.contains(attacker.getUniqueId()) && !isBedrockPlayer(attacker)) {
                 event.setCancelled(true);
                 return;
             }
         }
         if (event.getEntity() instanceof Player victim) {
-            if (!loggedInPlayers.contains(victim.getUniqueId())) {
+            if (!loggedInPlayers.contains(victim.getUniqueId()) && !isBedrockPlayer(victim)) {
                 event.setCancelled(true);
                 return;
             }
@@ -11720,7 +12328,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerPickupItem(org.bukkit.event.entity.EntityPickupItemEvent event) {
         if (event.getEntity() instanceof Player player) {
-            if (!loggedInPlayers.contains(player.getUniqueId())) {
+            if (!loggedInPlayers.contains(player.getUniqueId()) && !isBedrockPlayer(player)) {
                 event.setCancelled(true);
             }
         }
@@ -11728,7 +12336,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onPlayerChatAuth(org.bukkit.event.player.AsyncPlayerChatEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId()) && !isBedrockPlayer(event.getPlayer())) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("❌ You must log in or register first before chatting!", NamedTextColor.RED));
         }
