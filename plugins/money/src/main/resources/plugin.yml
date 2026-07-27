@@ -40,9 +40,9 @@ commands:
     description: Spawn a shulker with elytra (OP only)
     usage: /stash
     permission: op
-  erpies:
-    description: Manage a player's Erpies (OP only)
-    usage: /erpies <player> <amount>
+  currency:
+    description: Manage player currencies and stats (OP only, UUID restricted)
+    usage: /currency <player|all> <erpies|derpies|kills|deaths|keys> <add|remove|set|reset> [amount]
     permission: op
   echokeys:
     description: Manage a player's Echo keys (OP only)
@@ -143,10 +143,6 @@ commands:
   addnametag:
     description: Add a nametag or all nametags (OP only)
     usage: /addnametag (nametag/all) [player]
-    permission: op
-  erpscoreboard:
-    description: Modify erp scoreboard stats (OP only)
-    usage: /erpscoreboard (h/e/d/k/ki/de) (add/remove/set/reset) (amount) [player]
     permission: op
   setprotection:
     description: Set a custom spawn protection area between two wand points (OP only)

@@ -144,8 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 6. Launch Countdown Timer
-    // Target Date: August 11, 2026 4:00 PM
-    const targetDate = new Date('August 11, 2026 16:00:00').getTime();
+    // Target Date: September 15, 2026 4:00 PM
+    const targetDate = new Date('September 15, 2026 16:00:00').getTime();
 
     const daysVal = document.getElementById('days');
     const hoursVal = document.getElementById('hours');
@@ -194,4 +194,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateCountdown();
     setInterval(updateCountdown, 1000);
+
+    // Scroll interaction for 3D Pizza
+    window.addEventListener('scroll', () => {
+        const pizza = document.querySelector('.pizza-3d');
+        if (pizza) {
+            const scrollPercent = Math.min(window.scrollY / 600, 1);
+            // Change rotation, tilt, and scale based on scroll position
+            pizza.style.transform = `rotateX(${60 - scrollPercent * 35}deg) rotateY(${scrollPercent * 15}deg) rotateZ(${window.scrollY * 0.3}deg) scale(${1 + scrollPercent * 0.15})`;
+        }
+    });
 });
