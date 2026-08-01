@@ -510,6 +510,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             spawnWorld = Bukkit.createWorld(creator);
         }
 
+        // Ensure "echo_valley" world is loaded/created
+        World echoValleyWorld = Bukkit.getWorld("echo_valley");
+        if (echoValleyWorld == null) {
+            WorldCreator creator = new WorldCreator("echo_valley");
+            creator.environment(World.Environment.NORMAL);
+            echoValleyWorld = Bukkit.createWorld(creator);
+        }
+
         // Load custom spawnpoints from config
         for (int i = 0; i < 5; i++) {
             String spawnPath = "spawnpoints." + i;
@@ -1397,6 +1405,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerTeleport(org.bukkit.event.player.PlayerTeleportEvent event) {
         Player player = event.getPlayer();
+        if (event.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY) {
+            Location from = event.getFrom();
+            if (from.getWorld() != null) {
+                Block b = from.getBlock();
+                if (isEchoPortalGateway(b)) {
+                    event.setCancelled(true);
+                    if (player.getWorld().getName().equals("echo_valley")) {
+                        teleportFromEchoValley(player);
+                    } else {
+                        teleportToEchoValley(player);
+                    }
+                    return;
+                }
+            }
+        }
         if (event.getFrom().getWorld() != null && event.getTo().getWorld() != null) {
             String fromWorld = event.getFrom().getWorld().getName();
             String toWorld = event.getTo().getWorld().getName();
@@ -2812,8 +2835,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "ore_generator" -> item = createOreGeneratorItem();
                 case "tools_generator" -> item = createToolsGeneratorItem();
                 case "mob_generator" -> item = createMobGeneratorItem();
+                case "echo_frame" -> item = createEchoFrameItem();
+                case "echo_starter" -> item = createEchoStarterItem();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator, echo_frame, echo_starter", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -9656,6 +9681,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             Block block = event.getClickedBlock();
+            ItemStack itemInHand = event.getItem();
+            if (block != null && block.getType() == Material.REINFORCED_DEEPSLATE && itemInHand != null && itemInHand.hasItemMeta()) {
+                ItemMeta meta = itemInHand.getItemMeta();
+                String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && customItem.equals("echo_starter")) {
+                    Player player = event.getPlayer();
+                    event.setCancelled(true);
+                    activateEchoPortal(player, block);
+                    return;
+                }
+            }
             if (block != null && block.getType() == Material.ENDER_CHEST) {
                 Player player = event.getPlayer();
                 if (player.isSneaking() && player.getInventory().getItemInMainHand().getType() != Material.AIR) {
@@ -10341,6 +10377,278 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private ItemStack createEchoFrameItem() {
+        ItemStack item = new ItemStack(Material.REINFORCED_DEEPSLATE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Echo Frame", NamedTextColor.DARK_PURPLE).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
+            meta.lore(List.of(
+                Component.text("Build a vertical rectangular frame of any size,", NamedTextColor.GRAY),
+                Component.text("then right-click it with an Echo Starter to activate.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_frame");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createEchoStarterItem() {
+        ItemStack item = new ItemStack(Material.ECHO_SHARD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Echo Starter", NamedTextColor.AQUA).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
+            meta.lore(List.of(
+                Component.text("Right-click on an Echo Frame to activate the Echo Portal.", NamedTextColor.GRAY)
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_starter");
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private void activateEchoPortal(Player player, Block clickedBlock) {
+        Location clickedLoc = clickedBlock.getLocation();
+        
+        // 1. Try X-Y plane (constant Z)
+        PortalResult result = checkPortalPlane(clickedBlock, true);
+        if (result == null) {
+            // 2. Try Z-Y plane (constant X)
+            result = checkPortalPlane(clickedBlock, false);
+        }
+        
+        if (result != null) {
+            result.spawnGateways();
+            player.sendMessage(Component.text("🌀 The Echo Portal has been activated!", NamedTextColor.DARK_PURPLE));
+            clickedBlock.getWorld().playSound(clickedLoc, org.bukkit.Sound.BLOCK_PORTAL_TRIGGER, 1.0f, 1.0f);
+        } else {
+            player.sendMessage(Component.text("❌ Invalid portal frame configuration!", NamedTextColor.RED));
+        }
+    }
+
+    private static class PortalResult {
+        World world;
+        int minCoord;
+        int maxCoord;
+        int minY;
+        int maxY;
+        int constantCoord;
+        boolean isXY;
+
+        public PortalResult(World world, int minCoord, int maxCoord, int minY, int maxY, int constantCoord, boolean isXY) {
+            this.world = world;
+            this.minCoord = minCoord;
+            this.maxCoord = maxCoord;
+            this.minY = minY;
+            this.maxY = maxY;
+            this.constantCoord = constantCoord;
+            this.isXY = isXY;
+        }
+
+        public void spawnGateways() {
+            for (int coord = minCoord; coord <= maxCoord; coord++) {
+                for (int y = minY; y <= maxY; y++) {
+                    Block b;
+                    if (isXY) {
+                        b = world.getBlockAt(coord, y, constantCoord);
+                    } else {
+                        b = world.getBlockAt(constantCoord, y, coord);
+                    }
+                    if (b.getType().isAir() || !b.getType().isSolid()) {
+                        b.setType(Material.END_GATEWAY);
+                    }
+                }
+            }
+        }
+    }
+
+    private PortalResult checkPortalPlane(Block clickedBlock, boolean isXY) {
+        World world = clickedBlock.getWorld();
+        int constantCoord = isXY ? clickedBlock.getZ() : clickedBlock.getX();
+        int clickCoord = isXY ? clickedBlock.getX() : clickedBlock.getZ();
+        int clickY = clickedBlock.getY();
+
+        int[][] dirs = {
+            {-1, 0}, {1, 0}, {0, -1}, {0, 1}
+        };
+
+        for (int[] dir : dirs) {
+            int startC = clickCoord + dir[0];
+            int startY = clickY + dir[1];
+
+            Block startBlock = getBlockAtPlane(world, startC, startY, constantCoord, isXY);
+            if (!isReplaceable(startBlock)) continue;
+
+            int minC = startC;
+            while (minC >= startC - 21) {
+                Block b = getBlockAtPlane(world, minC, startY, constantCoord, isXY);
+                if (b.getType() == Material.REINFORCED_DEEPSLATE) {
+                    minC = minC + 1;
+                    break;
+                }
+                if (!isReplaceable(b)) {
+                    minC = -999;
+                    break;
+                }
+                minC--;
+            }
+            if (minC == -999 || minC < startC - 20) continue;
+
+            int maxC = startC;
+            while (maxC <= startC + 21) {
+                Block b = getBlockAtPlane(world, maxC, startY, constantCoord, isXY);
+                if (b.getType() == Material.REINFORCED_DEEPSLATE) {
+                    maxC = maxC - 1;
+                    break;
+                }
+                if (!isReplaceable(b)) {
+                    maxC = -999;
+                    break;
+                }
+                maxC++;
+            }
+            if (maxC == -999 || maxC > startC + 20 || maxC < minC) continue;
+
+            int minY = startY;
+            while (minY >= startY - 21) {
+                Block b = getBlockAtPlane(world, startC, minY, constantCoord, isXY);
+                if (b.getType() == Material.REINFORCED_DEEPSLATE) {
+                    minY = minY + 1;
+                    break;
+                }
+                if (!isReplaceable(b)) {
+                    minY = -999;
+                    break;
+                }
+                minY--;
+            }
+            if (minY == -999 || minY < startY - 20) continue;
+
+            int maxY = startY;
+            while (maxY <= startY + 21) {
+                Block b = getBlockAtPlane(world, startC, maxY, constantCoord, isXY);
+                if (b.getType() == Material.REINFORCED_DEEPSLATE) {
+                    maxY = maxY - 1;
+                    break;
+                }
+                if (!isReplaceable(b)) {
+                    maxY = -999;
+                    break;
+                }
+                maxY++;
+            }
+            if (maxY == -999 || maxY > startY + 20 || maxY < minY) continue;
+
+            boolean valid = true;
+
+            for (int c = minC; c <= maxC; c++) {
+                Block bottom = getBlockAtPlane(world, c, minY - 1, constantCoord, isXY);
+                Block top = getBlockAtPlane(world, c, maxY + 1, constantCoord, isXY);
+                if (bottom.getType() != Material.REINFORCED_DEEPSLATE || top.getType() != Material.REINFORCED_DEEPSLATE) {
+                    valid = false;
+                    break;
+                }
+            }
+            if (!valid) continue;
+
+            for (int y = minY; y <= maxY; y++) {
+                Block left = getBlockAtPlane(world, minC - 1, y, constantCoord, isXY);
+                Block right = getBlockAtPlane(world, maxC + 1, y, constantCoord, isXY);
+                if (left.getType() != Material.REINFORCED_DEEPSLATE || right.getType() != Material.REINFORCED_DEEPSLATE) {
+                    valid = false;
+                    break;
+                }
+            }
+            if (!valid) continue;
+
+            for (int c = minC; c <= maxC; c++) {
+                for (int y = minY; y <= maxY; y++) {
+                    Block inner = getBlockAtPlane(world, c, y, constantCoord, isXY);
+                    if (!isReplaceable(inner)) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (!valid) break;
+            }
+
+            if (valid) {
+                return new PortalResult(world, minC, maxC, minY, maxY, constantCoord, isXY);
+            }
+        }
+        return null;
+    }
+
+    private Block getBlockAtPlane(World world, int c, int y, int constantCoord, boolean isXY) {
+        if (isXY) {
+            return world.getBlockAt(c, y, constantCoord);
+        } else {
+            return world.getBlockAt(constantCoord, y, c);
+        }
+    }
+
+    private boolean isReplaceable(Block b) {
+        Material t = b.getType();
+        return t == Material.AIR || t == Material.CAVE_AIR || t == Material.VOID_AIR || t == Material.WATER || t == Material.SEAGRASS || t == Material.TALL_SEAGRASS || t == Material.SHORT_GRASS || t == Material.FERN || t == Material.TALL_GRASS || t == Material.LARGE_FERN || t == Material.END_GATEWAY;
+    }
+
+    private boolean isEchoPortalGateway(Block block) {
+        if (block.getType() != Material.END_GATEWAY) return false;
+        
+        boolean hasReinforcedX = false;
+        for (int dx = -1; dx >= -22; dx--) {
+            Block b = block.getRelative(dx, 0, 0);
+            if (b.getType() == Material.REINFORCED_DEEPSLATE) {
+                hasReinforcedX = true;
+                break;
+            }
+            if (b.getType() != Material.AIR && b.getType() != Material.END_GATEWAY) break;
+        }
+        
+        if (hasReinforcedX) return true;
+        
+        boolean hasReinforcedZ = false;
+        for (int dz = -1; dz >= -22; dz--) {
+            Block b = block.getRelative(0, 0, dz);
+            if (b.getType() == Material.REINFORCED_DEEPSLATE) {
+                hasReinforcedZ = true;
+                break;
+            }
+            if (b.getType() != Material.AIR && b.getType() != Material.END_GATEWAY) break;
+        }
+        
+        return hasReinforcedZ;
+    }
+
+    private void teleportToEchoValley(Player player) {
+        World echoValley = Bukkit.getWorld("echo_valley");
+        if (echoValley == null) {
+            WorldCreator creator = new WorldCreator("echo_valley");
+            creator.environment(World.Environment.NORMAL);
+            echoValley = Bukkit.createWorld(creator);
+        }
+
+        if (echoValley != null) {
+            Location spawn = echoValley.getSpawnLocation();
+            int safeY = echoValley.getHighestBlockYAt(spawn.getBlockX(), spawn.getBlockZ());
+            Location dest = new Location(echoValley, spawn.getX() + 0.5, safeY + 1, spawn.getZ() + 0.5);
+            player.teleport(dest);
+            player.sendMessage(Component.text("🌀 Teleported to the Echo Valley!", NamedTextColor.DARK_PURPLE));
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
+        } else {
+            player.sendMessage(Component.text("❌ Echo Valley dimension is not available!", NamedTextColor.RED));
+        }
+    }
+
+    private void teleportFromEchoValley(Player player) {
+        World overworld = Bukkit.getWorlds().get(0);
+        Location spawn = overworld.getSpawnLocation();
+        int safeY = overworld.getHighestBlockYAt(spawn.getBlockX(), spawn.getBlockZ());
+        Location dest = new Location(overworld, spawn.getX() + 0.5, safeY + 1, spawn.getZ() + 0.5);
+        player.teleport(dest);
+        player.sendMessage(Component.text("🌀 Teleported back to the Overworld!", NamedTextColor.DARK_PURPLE));
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f);
     }
 
     private void updateNameplateTeams(Scoreboard board) {
@@ -12808,100 +13116,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return false;
     }
 
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
-    public void onBedrockBlockBreakHighest(BlockBreakEvent event) {
-        Player player = event.getPlayer();
-        if (isBedrockPlayer(player) && (player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE || player.getGameMode() == GameMode.CREATIVE)) {
-            if (event.isCancelled()) {
-                Block block = event.getBlock();
-                Location loc = block.getLocation();
-                if (!isProtectedLocation(loc) && !isUnbreakableMaterial(block.getType())) {
-                    event.setCancelled(false);
-                }
-            }
-        }
-    }
-
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
-    public void onBedrockBlockPlaceHighest(BlockPlaceEvent event) {
-        Player player = event.getPlayer();
-        if (isBedrockPlayer(player) && (player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE || player.getGameMode() == GameMode.CREATIVE)) {
-            if (event.isCancelled()) {
-                Block block = event.getBlock();
-                Location loc = block.getLocation();
-                if (!isProtectedLocation(loc) && !isUnbreakableMaterial(block.getType())) {
-                    event.setCancelled(false);
-                }
-            }
-        }
-    }
-
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
-    public void onBedrockInventoryCreative(org.bukkit.event.inventory.InventoryCreativeEvent event) {
-        if (event.getWhoClicked() instanceof Player player) {
-            if (isBedrockPlayer(player)) {
-                if (event.isCancelled()) {
-                    event.setCancelled(false);
-                }
-            }
-        }
-    }
-
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
-    public void onBedrockInteractHighest(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-        if (isBedrockPlayer(player)) {
-            if (event.isCancelled()) {
-                Action action = event.getAction();
-                if (action == Action.RIGHT_CLICK_BLOCK || action == Action.RIGHT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
-                    Block block = event.getClickedBlock();
-                    if (block == null || !isProtectedLocation(block.getLocation())) {
-                        event.setCancelled(false);
-                    }
-                }
-            }
-        }
-    }
-
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = false)
-    public void onBedrockBlockBreakMonitor(BlockBreakEvent event) {
-        Player player = event.getPlayer();
-        if (isBedrockPlayer(player)) {
-            Block block = event.getBlock();
-            Location loc = block.getLocation();
-            // Force client visual synchronization after a tiny delay to fix any client-side ghost blocks
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline()) {
-                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
-                }
-            }, 1L);
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline()) {
-                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
-                }
-            }, 3L);
-        }
-    }
-
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = false)
-    public void onBedrockBlockPlaceMonitor(BlockPlaceEvent event) {
-        Player player = event.getPlayer();
-        if (isBedrockPlayer(player)) {
-            Block block = event.getBlock();
-            Location loc = block.getLocation();
-            // Force client visual synchronization after a tiny delay to fix any client-side placement glitches
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline()) {
-                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
-                }
-            }, 1L);
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (player.isOnline()) {
-                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
-                }
-            }, 3L);
-        }
-    }
 
     private Location findNearestSafeLocation(Location start) {
         World world = start.getWorld();
