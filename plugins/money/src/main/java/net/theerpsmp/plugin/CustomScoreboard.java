@@ -1600,7 +1600,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 2) {
-                sender.sendMessage("Usage: /setrank <playername> <erp+|erp++|erp+++|none> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)");
+                sender.sendMessage("Usage: /setrank <playername> <erp+|erp++|erp+++|vip|none|reset> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)");
                 return true;
             }
             String targetName = args[0];
@@ -1627,7 +1627,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             
             int currentWeight = getRankWeight(targetUuid);
             int newWeight = getRankWeightByName(rankArg);
-            if (!rankArg.equals("none") && newWeight <= currentWeight) {
+            if (!rankArg.equals("none") && !rankArg.equals("reset") && newWeight <= currentWeight) {
                 sender.sendMessage("Error: " + targetDisplayName + " already has " + (currentWeight == newWeight ? "this rank" : "a higher rank") + "!");
                 if (!isOnline) {
                     unloadPlayerData(targetUuid);
@@ -1658,9 +1658,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     rankLabel = "VIP";
                     break;
                 case "none":
+                case "reset":
                     break;
                 default:
-                    sender.sendMessage("Error: Invalid rank. Use: erp+, erp++, erp+++, vip, or none");
+                    sender.sendMessage("Error: Invalid rank. Use: erp+, erp++, erp+++, vip, none, or reset");
                     if (!isOnline) {
                         unloadPlayerData(targetUuid);
                     }
@@ -1803,7 +1804,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        // /rank <erp+|erp++|erp+++> <playername>  — restricted to trusted admins
+        // /rank <erp+|erp++|erp+++|vip|reset> <playername> or /rank <playername> reset — restricted to trusted admins
         if (command.getName().equalsIgnoreCase("rank")) {
             String senderName = player.getName();
             boolean isTrusted = player.getUniqueId().equals(RED_TOPPAT_UUID) || player.getUniqueId().equals(BOREAS_UUID);
@@ -1812,11 +1813,22 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 2) {
-                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++|vip> <playername> (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++|vip|reset> <playername> or /rank <playername> reset (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)", NamedTextColor.RED));
                 return true;
             }
-            String rankArg = args[0].toLowerCase();
-            String targetName = args[1];
+            String rankArg;
+            String targetName;
+            if (args[0].equalsIgnoreCase("reset")) {
+                rankArg = "reset";
+                targetName = args[1];
+            } else if (args[1].equalsIgnoreCase("reset")) {
+                rankArg = "reset";
+                targetName = args[0];
+            } else {
+                rankArg = args[0].toLowerCase();
+                targetName = args[1];
+            }
+
             Player target = Bukkit.getPlayer(targetName);
             UUID targetUuid;
             String targetDisplayName;
@@ -1839,14 +1851,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             
             int currentWeight = getRankWeight(targetUuid);
             int newWeight = getRankWeightByName(rankArg);
-            if (newWeight <= currentWeight) {
+            if (!rankArg.equals("reset") && newWeight <= currentWeight) {
                 player.sendMessage(Component.text("❌ " + targetDisplayName + " already has a higher or equal rank!", NamedTextColor.RED));
                 if (!isOnline) {
                     unloadPlayerData(targetUuid);
                 }
                 return true;
             }
-            // Clear all ranks first, then apply the chosen one
+            // Clear all ranks first
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
@@ -1869,8 +1881,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     hasVipMap.put(targetUuid, true);
                     rankLabel = "VIP";
                     break;
+                case "reset":
+                    rankLabel = "None";
+                    break;
                 default:
-                    player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, erp+++, or vip", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, erp+++, vip, or reset", NamedTextColor.RED));
                     if (!isOnline) {
                         unloadPlayerData(targetUuid);
                     }
@@ -1880,7 +1895,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (isOnline) {
                 updateScoreboard(target);
                 player.sendMessage(Component.text("✅ Set " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
-                target.sendMessage(Component.text("🌟 You have been given the " + rankLabel + " rank!", NamedTextColor.GOLD));
+                target.sendMessage(Component.text("🌟 Your rank has been set to " + rankLabel + "!", NamedTextColor.GOLD));
             } else {
                 player.sendMessage(Component.text("✅ Set offline player " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
                 unloadPlayerData(targetUuid);
