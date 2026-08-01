@@ -13335,14 +13335,28 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             Bukkit.getScheduler().runTask(this, () -> {
                 if (!player.isOnline()) return;
 
-                getLogger().info("[TeleportAsync] Performing sync teleport for " + player.getName() + " to " + world.getName() + " " + dest.getBlockX() + "," + dest.getBlockY() + "," + dest.getBlockZ());
-                boolean success = player.teleport(dest);
+                boolean success = false;
+                try {
+                    success = player.teleport(dest);
+                } catch (Exception e) {
+                    getLogger().severe("[TeleportAsync] Exception during teleport for " + player.getName() + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
                 getLogger().info("[TeleportAsync] Teleport result for " + player.getName() + ": " + success);
                 if (success) {
                     if (successMessage != null && !successMessage.isEmpty()) {
                         player.sendMessage(net.kyori.adventure.text.Component.text(successMessage, net.kyori.adventure.text.format.NamedTextColor.GREEN));
                     }
                 } else {
+                    getLogger().warning("[TeleportAsync] Teleport failed for " + player.getName() + ". Details: " 
+                        + "Online=" + player.isOnline() 
+                        + ", Dead=" + player.isDead() 
+                        + ", Vehicle=" + player.isInsideVehicle() 
+                        + ", GameMode=" + player.getGameMode()
+                        + ", TargetWorld=" + world.getName() 
+                        + ", TargetLoc=[" + dest.getX() + "," + dest.getY() + "," + dest.getZ() + "]"
+                        + ", CurrentWorld=" + player.getWorld().getName()
+                        + ", CurrentLoc=[" + player.getLocation().getX() + "," + player.getLocation().getY() + "," + player.getLocation().getZ() + "]");
                     player.sendMessage(net.kyori.adventure.text.Component.text("❌ Teleportation failed! Please try again.", net.kyori.adventure.text.format.NamedTextColor.RED));
                 }
             });
