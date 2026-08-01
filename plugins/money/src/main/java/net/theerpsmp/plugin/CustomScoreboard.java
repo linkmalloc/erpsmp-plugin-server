@@ -8101,92 +8101,87 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         final int fMin = rangeMin;
         final int fMax = rangeMax;
 
-        // Find safe location asynchronously, teleport on main thread
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                int attempts = 0;
-                Location safe = null;
-                while (attempts < 100) {
-                    int x, z;
-                    if (finalWorld.getEnvironment() == World.Environment.THE_END) {
-                        double angle = random.nextDouble() * 2 * Math.PI;
-                        double radius = fMin + random.nextInt(fMax - fMin);
-                        x = (int) (Math.cos(angle) * radius);
-                        z = (int) (Math.sin(angle) * radius);
-                    } else {
-                        x = random.nextInt(fMax - fMin) + fMin;
-                        z = random.nextInt(fMax - fMin) + fMin;
-                    }
-                    int y = finalWorld.getHighestBlockYAt(x, z);
+        findSafeRtpLocationAndTeleport(player, finalWorld, fMin, fMax, dimension, 0);
+    }
 
-                    if (finalWorld.getEnvironment() == World.Environment.NETHER) {
-                        boolean foundY = false;
+    private void findSafeRtpLocationAndTeleport(Player player, World world, int minRange, int maxRange, String dimension, int attempt) {
+        if (!player.isOnline()) return;
+        if (attempt >= 50) {
+            Location fallback;
+            if (world.getEnvironment() == World.Environment.NETHER) {
+                fallback = new Location(world, 0.5, 64, 0.5);
+            } else if (world.getEnvironment() == World.Environment.THE_END) {
+                fallback = new Location(world, 100.5, 49.0, 0.5); // End obsidian platform
+            } else {
+                fallback = world.getSpawnLocation();
+            }
+            teleportPlayerSafelyAsync(player, fallback, "🌍 Teleported to a random location in the " + dimension + " (Fallback)!");
+            return;
+        }
+
+        int x, z;
+        if (world.getEnvironment() == World.Environment.THE_END) {
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double radius = minRange + random.nextInt(maxRange - minRange);
+            x = (int) (Math.cos(angle) * radius);
+            z = (int) (Math.sin(angle) * radius);
+        } else {
+            x = random.nextInt(maxRange - minRange) + minRange;
+            z = random.nextInt(maxRange - minRange) + minRange;
+        }
+
+        world.getChunkAtAsync(x >> 4, z >> 4).thenAccept(chunk -> {
+            chunk.setForceLoaded(true);
+            Bukkit.getScheduler().runTask(this, () -> {
+                try {
+                    if (!player.isOnline()) return;
+
+                    int y = world.getHighestBlockYAt(x, z);
+                    boolean isSafe = false;
+
+                    if (world.getEnvironment() == World.Environment.NETHER) {
                         for (int testY = 120; testY > 30; testY--) {
-                            Block footBlock = finalWorld.getBlockAt(x, testY, z);
-                            Block headBlock = finalWorld.getBlockAt(x, testY + 1, z);
-                            Block standBlock = finalWorld.getBlockAt(x, testY - 1, z);
+                            Block footBlock = world.getBlockAt(x, testY, z);
+                            Block headBlock = world.getBlockAt(x, testY + 1, z);
+                            Block standBlock = world.getBlockAt(x, testY - 1, z);
                             if (footBlock.getType() == Material.AIR &&
                                 headBlock.getType() == Material.AIR &&
                                 standBlock.getType().isSolid() &&
                                 standBlock.getType() != Material.LAVA &&
                                 standBlock.getType() != Material.FIRE) {
                                 y = testY;
-                                foundY = true;
+                                isSafe = true;
                                 break;
                             }
                         }
-                        if (!foundY) {
-                            attempts++;
-                            continue;
-                        }
-                    } else if (finalWorld.getEnvironment() == World.Environment.THE_END) {
-                        if (y <= 10) {
-                            attempts++;
-                            continue;
-                        }
-                        Block standBlock = finalWorld.getBlockAt(x, y - 1, z);
-                        if (!standBlock.getType().isSolid()) {
-                            attempts++;
-                            continue;
+                    } else if (world.getEnvironment() == World.Environment.THE_END) {
+                        if (y > 10) {
+                            Block standBlock = world.getBlockAt(x, y - 1, z);
+                            if (standBlock.getType().isSolid()) {
+                                isSafe = true;
+                            }
                         }
                     } else {
-                        // Overworld: allow land or water surface, avoid lava and void
-                        if (y <= 50) {
-                            attempts++;
-                            continue;
-                        }
-                        Block standBlock = finalWorld.getBlockAt(x, y - 1, z);
-                        if (standBlock.getType() == Material.LAVA || !standBlock.getType().isSolid()) {
-                            attempts++;
-                            continue;
+                        // Overworld
+                        if (y > 50) {
+                            Block standBlock = world.getBlockAt(x, y - 1, z);
+                            if (standBlock.getType() != Material.LAVA && standBlock.getType().isSolid()) {
+                                isSafe = true;
+                            }
                         }
                     }
 
-                    Location loc = new Location(finalWorld, x + 0.5, y, z + 0.5);
-                    safe = loc;
-                    break;
-                }
-
-                if (safe == null) {
-                    if (finalWorld.getEnvironment() == World.Environment.NETHER) {
-                        safe = new Location(finalWorld, 0.5, 64, 0.5);
-                    } else if (finalWorld.getEnvironment() == World.Environment.THE_END) {
-                        safe = new Location(finalWorld, 1000.5, 60, 0.5);
-                    } else {
-                        safe = finalWorld.getSpawnLocation();
-                    }
-                }
-
-                final Location dest = safe;
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        if (!player.isOnline()) return;
+                    if (isSafe) {
+                        Location dest = new Location(world, x + 0.5, y, z + 0.5);
                         teleportPlayerSafelyAsync(player, dest, "🌍 Teleported to a random location in the " + dimension + "!");
+                    } else {
+                        findSafeRtpLocationAndTeleport(player, world, minRange, maxRange, dimension, attempt + 1);
                     }
-                }.runTask(CustomScoreboard.this);
-            }
-        }.runTaskAsynchronously(this);
+                } finally {
+                    chunk.setForceLoaded(false);
+                }
+            });
+        });
     }
 
     // --- TPA System ---
