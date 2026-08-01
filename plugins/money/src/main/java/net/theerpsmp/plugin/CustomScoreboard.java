@@ -4113,8 +4113,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             Location dest = targetWorld.getSpawnLocation();
-            player.teleport(dest);
-            player.sendMessage(Component.text("🚀 Teleported to the " + cleanName + " dimension!", NamedTextColor.GREEN));
+            teleportPlayerSafelyAsync(player, dest, "🚀 Teleported to the " + cleanName + " dimension!");
             return true;
         }
 
@@ -6303,8 +6302,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             Location dest = homes[homeIdx];
                             if (dest != null) {
                                 player.closeInventory();
-                                player.teleport(dest);
-                                player.sendMessage(Component.text("🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!", NamedTextColor.GREEN));
+                                teleportPlayerSafelyAsync(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
                             }
                         }
                     }
@@ -8251,8 +8249,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         if (adminWorld != null) {
             Location spawn = new Location(adminWorld, 0.5, adminWorld.getHighestBlockYAt(0, 0) + 1, 0.5);
-            player.teleport(spawn);
-            player.sendMessage(Component.text("🏠 Welcome to the Admin Room!", NamedTextColor.GOLD));
+            teleportPlayerSafelyAsync(player, spawn, "🏠 Welcome to the Admin Room!");
         } else {
             player.sendMessage(Component.text("❌ Failed to create admin room!", NamedTextColor.RED));
         }
