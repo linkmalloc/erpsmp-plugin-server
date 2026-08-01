@@ -13367,5 +13367,34 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             });
         });
     }
+    @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+    public void onTeleportLowest(org.bukkit.event.player.PlayerTeleportEvent event) {
+        getLogger().info("[TeleportDebug] LOWEST - Player: " + event.getPlayer().getName() + ", Cancelled: " + event.isCancelled() + ", Cause: " + event.getCause() + ", From: " + event.getFrom().getWorld().getName() + " " + event.getFrom().getX() + "," + event.getFrom().getY() + "," + event.getFrom().getZ() + " -> To: " + event.getTo().getWorld().getName() + " " + event.getTo().getX() + "," + event.getTo().getY() + "," + event.getTo().getZ());
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.LOW)
+    public void onTeleportLow(org.bukkit.event.player.PlayerTeleportEvent event) {
+        getLogger().info("[TeleportDebug] LOW - Cancelled: " + event.isCancelled());
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.NORMAL)
+    public void onTeleportNormal(org.bukkit.event.player.PlayerTeleportEvent event) {
+        getLogger().info("[TeleportDebug] NORMAL - Cancelled: " + event.isCancelled());
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.HIGH)
+    public void onTeleportHigh(org.bukkit.event.player.PlayerTeleportEvent event) {
+        getLogger().info("[TeleportDebug] HIGH - Cancelled: " + event.isCancelled());
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
+    public void onTeleportHighest(org.bukkit.event.player.PlayerTeleportEvent event) {
+        getLogger().info("[TeleportDebug] HIGHEST - Cancelled: " + event.isCancelled());
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+    public void onTeleportMonitor(org.bukkit.event.player.PlayerTeleportEvent event) {
+        getLogger().info("[TeleportDebug] MONITOR - Cancelled: " + event.isCancelled());
+    }
 
 }
