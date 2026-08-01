@@ -8041,28 +8041,42 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void doRtpTeleport(Player player, String dimension) {
-        World target;
+        World target = null;
         int rangeMin, rangeMax;
 
-        switch (dimension) {
-            case "nether" -> {
-                target = Bukkit.getWorld("world_nether");
-                if (target == null) target = Bukkit.getWorlds().stream()
+        if (dimension.equalsIgnoreCase("nether")) {
+            target = Bukkit.getWorld("world_nether");
+            if (target == null) {
+                target = Bukkit.getWorlds().stream()
                         .filter(w -> w.getEnvironment() == World.Environment.NETHER)
                         .findFirst().orElse(null);
-                rangeMin = -500; rangeMax = 500;
             }
-            case "end" -> {
-                target = Bukkit.getWorld("world_the_end");
-                if (target == null) target = Bukkit.getWorlds().stream()
+            rangeMin = -500; rangeMax = 500;
+        } else if (dimension.equalsIgnoreCase("end")) {
+            target = Bukkit.getWorld("world_the_end");
+            if (target == null) {
+                target = Bukkit.getWorlds().stream()
                         .filter(w -> w.getEnvironment() == World.Environment.THE_END)
                         .findFirst().orElse(null);
-                rangeMin = 1000; rangeMax = 5000;
             }
-            default -> {
+            rangeMin = 1000; rangeMax = 5000;
+        } else {
+            // Overworld
+            target = Bukkit.getWorld("world");
+            if (target == null) {
+                target = Bukkit.getWorlds().stream()
+                        .filter(w -> w.getEnvironment() == World.Environment.NORMAL 
+                            && !w.getName().equalsIgnoreCase("spawn") 
+                            && !w.getName().equalsIgnoreCase("duel") 
+                            && !w.getName().equalsIgnoreCase("afk") 
+                            && !w.getName().equalsIgnoreCase("afk_zone") 
+                            && !w.getName().equalsIgnoreCase("echo_valley"))
+                        .findFirst().orElse(null);
+            }
+            if (target == null && !Bukkit.getWorlds().isEmpty()) {
                 target = Bukkit.getWorlds().get(0);
-                rangeMin = -5000; rangeMax = 5000;
             }
+            rangeMin = -5000; rangeMax = 5000;
         }
 
         if (target == null) {
