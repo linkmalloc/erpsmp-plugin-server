@@ -358,6 +358,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     // TPA tracking (requester UUID -> target UUID)
     private final HashMap<UUID, UUID> tpaRequests = new HashMap<>();
+    private final HashMap<UUID, UUID> tpahereRequests = new HashMap<>();
 
     // Homes & Settings
     private final HashMap<UUID, Location[]> playerHomes = new HashMap<>();
@@ -572,6 +573,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("bh") != null) getCommand("bh").setExecutor(this);
         if (getCommand("rtp") != null) getCommand("rtp").setExecutor(this);
         if (getCommand("tpa") != null) getCommand("tpa").setExecutor(this);
+        if (getCommand("tpahere") != null) getCommand("tpahere").setExecutor(this);
         if (getCommand("tpaccept") != null) getCommand("tpaccept").setExecutor(this);
         if (getCommand("pay") != null) getCommand("pay").setExecutor(this);
         if (getCommand("stash") != null) getCommand("stash").setExecutor(this);
@@ -926,7 +928,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void loadPlayerData(Player player) {
-        UUID uuid = player.getUniqueId();
+        loadPlayerData(player.getUniqueId());
+    }
+
+    private void loadPlayerData(UUID uuid) {
         String path = "players." + uuid.toString() + ".";
         
         int seconds = getConfig().getInt(path + "timePlayed", -1);
@@ -1008,26 +1013,28 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         foodsEatenMap.put(uuid, foods);
 
-        Location[] homes = new Location[36];
-        for (int i = 0; i < 36; i++) {
+        Location[] homes = new Location[54];
+        for (int i = 0; i < 54; i++) {
             String homePath = path + "homes." + i;
             if (getConfig().contains(homePath)) {
                 String worldName = getConfig().getString(homePath + ".world");
-                double x = getConfig().getDouble(homePath + ".x");
-                double y = getConfig().getDouble(homePath + ".y");
-                double z = getConfig().getDouble(homePath + ".z");
-                float pitch = (float) getConfig().getDouble(homePath + ".pitch");
-                float yaw = (float) getConfig().getDouble(homePath + ".yaw");
-                World w = Bukkit.getWorld(worldName);
-                if (w != null) {
-                    homes[i] = new Location(w, x, y, z, yaw, pitch);
+                if (worldName != null) {
+                    double x = getConfig().getDouble(homePath + ".x");
+                    double y = getConfig().getDouble(homePath + ".y");
+                    double z = getConfig().getDouble(homePath + ".z");
+                    float pitch = (float) getConfig().getDouble(homePath + ".pitch");
+                    float yaw = (float) getConfig().getDouble(homePath + ".yaw");
+                    World w = Bukkit.getWorld(worldName);
+                    if (w != null) {
+                        homes[i] = new Location(w, x, y, z, yaw, pitch);
+                    }
                 }
             }
         }
         playerHomes.put(uuid, homes);
 
-        String[] homeNames = new String[36];
-        for (int i = 0; i < 36; i++) {
+        String[] homeNames = new String[54];
+        for (int i = 0; i < 54; i++) {
             String homePath = path + "homes." + i;
             if (getConfig().contains(homePath + ".name")) {
                 homeNames[i] = getConfig().getString(homePath + ".name");
@@ -1039,9 +1046,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void savePlayerData(Player player) {
-        UUID uuid = player.getUniqueId();
+        savePlayerData(player.getUniqueId());
+    }
+
+    private void savePlayerData(UUID uuid) {
         String path = "players." + uuid.toString() + ".";
-        getConfig().set(path + "lastKnownName", player.getName());
+        org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
+        String name = offline != null ? offline.getName() : null;
+        if (name != null) {
+            getConfig().set(path + "lastKnownName", name);
+        }
         getConfig().set(path + "timePlayed", timePlayedMap.getOrDefault(uuid, 0));
         getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 0L));
         getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 0L));
@@ -1102,27 +1116,40 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         Location[] homes = playerHomes.get(uuid);
+        String[] homeNames = playerHomeNames.get(uuid);
         if (homes != null) {
-            for (int i = 0; i < 36; i++) {
+            for (int i = 0; i < 54; i++) {
                 String homePath = path + "homes." + i;
                 if (homes[i] != null) {
+                    // Write the home location
                     getConfig().set(homePath + ".world", homes[i].getWorld().getName());
                     getConfig().set(homePath + ".x", homes[i].getX());
                     getConfig().set(homePath + ".y", homes[i].getY());
                     getConfig().set(homePath + ".z", homes[i].getZ());
                     getConfig().set(homePath + ".pitch", homes[i].getPitch());
                     getConfig().set(homePath + ".yaw", homes[i].getYaw());
-                } else {
-                    getConfig().set(homePath, null);
+                    // Also save name if available
+                    if (homeNames != null && homeNames[i] != null) {
+                        getConfig().set(homePath + ".name", homeNames[i]);
+                    }
+                } else if (getConfig().contains(homePath + ".world")) {
+                    // Only explicitly delete the home if we actually loaded it (it was in memory as null because the player deleted it)
+                    // If homes array exists but slot is null and there was a location in config, it means the player explicitly removed it
+                    getConfig().set(homePath + ".world", null);
+                    getConfig().set(homePath + ".x", null);
+                    getConfig().set(homePath + ".y", null);
+                    getConfig().set(homePath + ".z", null);
+                    getConfig().set(homePath + ".pitch", null);
+                    getConfig().set(homePath + ".yaw", null);
+                    // Keep the name entry intact
                 }
             }
         }
-
-        String[] homeNames = playerHomeNames.get(uuid);
+        // Save any remaining home names for slots without locations
         if (homeNames != null) {
-            for (int i = 0; i < 36; i++) {
+            for (int i = 0; i < 54; i++) {
                 String homePath = path + "homes." + i;
-                if (homeNames[i] != null) {
+                if ((homes == null || homes[i] == null) && homeNames[i] != null && !getConfig().contains(homePath + ".world")) {
                     getConfig().set(homePath + ".name", homeNames[i]);
                 }
             }
@@ -1142,6 +1169,49 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         saveConfig();
+    }
+
+    private void unloadPlayerData(UUID uuid) {
+        timePlayedMap.remove(uuid);
+        erpiesMap.remove(uuid);
+        derpiesMap.remove(uuid);
+        keysMap.remove(uuid);
+        killsMap.remove(uuid);
+        deathsMap.remove(uuid);
+        regularKeysMap.remove(uuid);
+        crimsonKeysMap.remove(uuid);
+        echoKeysMap.remove(uuid);
+        endKeysMap.remove(uuid);
+        amethystKeysMap.remove(uuid);
+        hasErpPlusMap.remove(uuid);
+        hasErpProMap.remove(uuid);
+        hasErpProMaxMap.remove(uuid);
+        hasVipMap.remove(uuid);
+        bankErpiesMap.remove(uuid);
+        bankDerpiesMap.remove(uuid);
+        lastInterestTimeMap.remove(uuid);
+        bankItemsMap.remove(uuid);
+        chatSpamDisabled.remove(uuid);
+        tpaDisabled.remove(uuid);
+        voiceChatEnabled.remove(uuid);
+        musicDisabled.remove(uuid);
+        starterLootDisabled.remove(uuid);
+        activeNametags.remove(uuid);
+        killedAdminMap.remove(uuid);
+        killedDragonMap.remove(uuid);
+        manuallyUnlockedNametags.remove(uuid);
+        oresMinedMap.remove(uuid);
+        invisibleKillsMap.remove(uuid);
+        blocksPlacedMap.remove(uuid);
+        starvationDeathsMap.remove(uuid);
+        apocalypseZombieKillsMap.remove(uuid);
+        apocalypseLongestSurvivalTimeMap.remove(uuid);
+        apocalypseMaxWavesSurvivedMap.remove(uuid);
+        playerPasswords.remove(uuid);
+        foodsEatenMap.remove(uuid);
+        playerHomes.remove(uuid);
+        playerHomeNames.remove(uuid);
+        customEnderChests.remove(uuid);
     }
 
     private boolean isBedrockPlayer(Player player) {
@@ -1187,6 +1257,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (isBedrockPlayer(player)) {
             loggedInPlayers.add(player.getUniqueId());
+            try {
+                org.bukkit.permissions.PermissionAttachment attachment = player.addAttachment(this);
+                attachment.setPermission("vulcan.bypass", true);
+                attachment.setPermission("matrix.bypass", true);
+                attachment.setPermission("grim.bypass", true);
+                attachment.setPermission("grimac.bypass", true);
+                attachment.setPermission("spartan.bypass", true);
+                attachment.setPermission("nocheatplus.bypass", true);
+                attachment.setPermission("nocheatplus.shortcut.safeactive", true);
+            } catch (Exception ignored) {}
         } else {
             player.sendMessage(Component.text(""));
             player.sendMessage(Component.text("🔒 To start playing do ", NamedTextColor.YELLOW)
@@ -1240,17 +1320,54 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }, 10L);
     }
 
+    private boolean isStarterLoot(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        NamespacedKey key = new NamespacedKey(this, "starter_loot");
+        return item.getItemMeta().getPersistentDataContainer().has(key, PersistentDataType.BYTE);
+    }
+
+    private void markAsStarterLoot(ItemStack item) {
+        if (item == null) return;
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            NamespacedKey key = new NamespacedKey(this, "starter_loot");
+            meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+            
+            List<Component> lore = meta.lore();
+            if (lore == null) lore = new ArrayList<>();
+            lore.add(Component.text("⚠️ Starter Loot (Cannot be sold)", NamedTextColor.RED));
+            meta.lore(lore);
+            
+            item.setItemMeta(meta);
+        }
+    }
+
     private void giveStarterGear(Player player) {
         if (starterLootDisabled.getOrDefault(player.getUniqueId(), false)) {
             return;
         }
         org.bukkit.inventory.PlayerInventory inv = player.getInventory();
-        inv.setHelmet(new ItemStack(Material.CHAINMAIL_HELMET));
-        inv.setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
-        inv.setLeggings(new ItemStack(Material.CHAINMAIL_LEGGINGS));
-        inv.setBoots(new ItemStack(Material.CHAINMAIL_BOOTS));
-        inv.addItem(new ItemStack(Material.IRON_SWORD));
-        inv.addItem(new ItemStack(Material.BREAD, 20));
+        
+        ItemStack helmet = new ItemStack(Material.CHAINMAIL_HELMET);
+        ItemStack chest = new ItemStack(Material.CHAINMAIL_CHESTPLATE);
+        ItemStack leggings = new ItemStack(Material.CHAINMAIL_LEGGINGS);
+        ItemStack boots = new ItemStack(Material.CHAINMAIL_BOOTS);
+        ItemStack sword = new ItemStack(Material.IRON_SWORD);
+        ItemStack bread = new ItemStack(Material.BREAD, 20);
+        
+        markAsStarterLoot(helmet);
+        markAsStarterLoot(chest);
+        markAsStarterLoot(leggings);
+        markAsStarterLoot(boots);
+        markAsStarterLoot(sword);
+        markAsStarterLoot(bread);
+        
+        inv.setHelmet(helmet);
+        inv.setChestplate(chest);
+        inv.setLeggings(leggings);
+        inv.setBoots(boots);
+        inv.addItem(sword);
+        inv.addItem(bread);
     }
 
     private void checkAndTrackMinedOre(Player player, Block block) {
@@ -1270,6 +1387,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
         return count;
+    }
+
+    @EventHandler
+    public void onChunkUnload(org.bukkit.event.world.ChunkUnloadEvent event) {
+        event.getChunk().setForceLoaded(true);
     }
 
     @EventHandler
@@ -1461,17 +1583,35 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String targetName = args[0];
             String rankArg = args[1].toLowerCase();
             Player target = Bukkit.getPlayer(targetName);
-            if (target == null) {
-                sender.sendMessage("Error: Player '" + targetName + "' is not online.");
-                return true;
+            UUID targetUuid;
+            String targetDisplayName;
+            boolean isOnline = (target != null);
+            if (isOnline) {
+                targetUuid = target.getUniqueId();
+                targetDisplayName = target.getName();
+            } else {
+                org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
+                if (offlineTarget == null || offlineTarget.getUniqueId() == null) {
+                    sender.sendMessage("Error: Player '" + targetName + "' was never found.");
+                    return true;
+                }
+                targetUuid = offlineTarget.getUniqueId();
+                targetDisplayName = offlineTarget.getName() != null ? offlineTarget.getName() : targetName;
+                
+                // Load existing data for offline player to prevent overwriting other stats/homes!
+                loadPlayerData(targetUuid);
             }
-            UUID targetUuid = target.getUniqueId();
+            
             int currentWeight = getRankWeight(targetUuid);
             int newWeight = getRankWeightByName(rankArg);
             if (!rankArg.equals("none") && newWeight <= currentWeight) {
-                sender.sendMessage("Error: " + target.getName() + " already has " + (currentWeight == newWeight ? "this rank" : "a higher rank") + "!");
+                sender.sendMessage("Error: " + targetDisplayName + " already has " + (currentWeight == newWeight ? "this rank" : "a higher rank") + "!");
+                if (!isOnline) {
+                    unloadPlayerData(targetUuid);
+                }
                 return true;
             }
+            
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
@@ -1498,12 +1638,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     break;
                 default:
                     sender.sendMessage("Error: Invalid rank. Use: erp+, erp++, erp+++, vip, or none");
+                    if (!isOnline) {
+                        unloadPlayerData(targetUuid);
+                    }
                     return true;
             }
-            savePlayerData(target);
-            updateScoreboard(target);
-            sender.sendMessage("Success: Set " + target.getName() + "'s rank to " + rankLabel);
-            target.sendMessage(Component.text("🌟 Your rank has been updated to " + rankLabel + "!", NamedTextColor.GOLD));
+            savePlayerData(targetUuid);
+            if (isOnline) {
+                updateScoreboard(target);
+                sender.sendMessage("Success: Set " + targetDisplayName + "'s rank to " + rankLabel);
+                target.sendMessage(Component.text("🌟 Your rank has been updated to " + rankLabel + "!", NamedTextColor.GOLD));
+            } else {
+                sender.sendMessage("Success: Set offline player " + targetDisplayName + "'s rank to " + rankLabel);
+                unloadPlayerData(targetUuid);
+            }
             return true;
         }
 
@@ -1602,8 +1750,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 pendingWarpTeleports.remove(uuid);
                 pendingWarpStartLocations.remove(uuid);
                 if (player.isOnline()) {
-                    player.teleport(warps.get(warpName));
-                    player.sendMessage(Component.text("✨ Teleported to warp '" + displayWarpName + "'!", NamedTextColor.GREEN));
+                    teleportPlayerSafelyAsync(player, warps.get(warpName), "✨ Teleported to warp '" + displayWarpName + "'!");
                 }
             }, 100L); // 100 ticks = 5 seconds
 
@@ -1648,15 +1795,32 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String rankArg = args[0].toLowerCase();
             String targetName = args[1];
             Player target = Bukkit.getPlayer(targetName);
-            if (target == null) {
-                player.sendMessage(Component.text("❌ Player '" + targetName + "' is not online.", NamedTextColor.RED));
-                return true;
+            UUID targetUuid;
+            String targetDisplayName;
+            boolean isOnline = (target != null);
+            if (isOnline) {
+                targetUuid = target.getUniqueId();
+                targetDisplayName = target.getName();
+            } else {
+                org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
+                if (offlineTarget == null || offlineTarget.getUniqueId() == null) {
+                    player.sendMessage(Component.text("❌ Player '" + targetName + "' was never found.", NamedTextColor.RED));
+                    return true;
+                }
+                targetUuid = offlineTarget.getUniqueId();
+                targetDisplayName = offlineTarget.getName() != null ? offlineTarget.getName() : targetName;
+                
+                // Load existing data for offline player to prevent overwriting other stats/homes!
+                loadPlayerData(targetUuid);
             }
-            UUID targetUuid = target.getUniqueId();
+            
             int currentWeight = getRankWeight(targetUuid);
             int newWeight = getRankWeightByName(rankArg);
             if (newWeight <= currentWeight) {
-                player.sendMessage(Component.text("❌ " + target.getName() + " already has a higher or equal rank!", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ " + targetDisplayName + " already has a higher or equal rank!", NamedTextColor.RED));
+                if (!isOnline) {
+                    unloadPlayerData(targetUuid);
+                }
                 return true;
             }
             // Clear all ranks first, then apply the chosen one
@@ -1684,12 +1848,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     break;
                 default:
                     player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, erp+++, or vip", NamedTextColor.RED));
+                    if (!isOnline) {
+                        unloadPlayerData(targetUuid);
+                    }
                     return true;
             }
-            savePlayerData(target);
-            updateScoreboard(target);
-            player.sendMessage(Component.text("✅ Set " + target.getName() + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
-            target.sendMessage(Component.text("🌟 You have been given the " + rankLabel + " rank!", NamedTextColor.GOLD));
+            savePlayerData(targetUuid);
+            if (isOnline) {
+                updateScoreboard(target);
+                player.sendMessage(Component.text("✅ Set " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
+                target.sendMessage(Component.text("🌟 You have been given the " + rankLabel + " rank!", NamedTextColor.GOLD));
+            } else {
+                player.sendMessage(Component.text("✅ Set offline player " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
+                unloadPlayerData(targetUuid);
+            }
             return true;
         }
 
@@ -2032,6 +2204,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     targetUUIDs.add(p.getUniqueId());
                     onlineMap.put(p.getUniqueId(), p);
                 }
+                org.bukkit.configuration.ConfigurationSection playersSec = getConfig().getConfigurationSection("players");
+                if (playersSec != null) {
+                    for (String key : playersSec.getKeys(false)) {
+                        try {
+                            UUID uuid = UUID.fromString(key);
+                            if (!onlineMap.containsKey(uuid)) {
+                                targetUUIDs.add(uuid);
+                            }
+                        } catch (IllegalArgumentException ignored) {}
+                    }
+                }
             } else {
                 Player onlineTarget = Bukkit.getPlayer(targetArg);
                 if (onlineTarget != null) {
@@ -2141,7 +2324,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }
             
-            sender.sendMessage(Component.text("✅ Successfully updated " + currencyArg + " for " + (targetArg.equalsIgnoreCase("all") ? "all online players" : targetArg) + " to the new value(s).", NamedTextColor.GREEN));
+            sender.sendMessage(Component.text("✅ Successfully updated " + currencyArg + " for " + (targetArg.equalsIgnoreCase("all") ? "all players" : targetArg) + " to the new value(s).", NamedTextColor.GREEN));
             return true;
         }
 
@@ -2312,8 +2495,40 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             tpaRequests.put(player.getUniqueId(), target.getUniqueId());
+            // Clear any old tpahere requests between them to prevent conflicts
+            tpahereRequests.remove(player.getUniqueId());
             player.sendMessage(Component.text("📨 Teleport request sent to " + target.getName() + "!", NamedTextColor.GREEN));
             target.sendMessage(Component.text("📨 " + player.getName() + " wants to teleport to you!", NamedTextColor.YELLOW)
+                    .append(Component.text("\nType ", NamedTextColor.GOLD))
+                    .append(Component.text("/tpaccept", NamedTextColor.GREEN))
+                    .append(Component.text(" to accept!", NamedTextColor.GOLD)));
+            return true;
+        }
+
+        // --- /tpahere <player> ---
+        if (command.getName().equalsIgnoreCase("tpahere")) {
+            if (args.length == 0) {
+                player.sendMessage(Component.text("❌ Usage: /tpahere <player>", NamedTextColor.RED));
+                return true;
+            }
+            Player target = Bukkit.getPlayer(args[0]);
+            if (target == null) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+            if (target.equals(player)) {
+                player.sendMessage(Component.text("❌ You cannot teleport yourself to yourself!", NamedTextColor.RED));
+                return true;
+            }
+            if (tpaDisabled.getOrDefault(target.getUniqueId(), false)) {
+                player.sendMessage(Component.text("❌ " + target.getName() + " has disabled TPA requests!", NamedTextColor.RED));
+                return true;
+            }
+            tpahereRequests.put(player.getUniqueId(), target.getUniqueId());
+            // Clear any old tpa requests between them to prevent conflicts
+            tpaRequests.remove(player.getUniqueId());
+            player.sendMessage(Component.text("📨 Teleport-here request sent to " + target.getName() + "!", NamedTextColor.GREEN));
+            target.sendMessage(Component.text("📨 " + player.getName() + " wants you to teleport to them!", NamedTextColor.YELLOW)
                     .append(Component.text("\nType ", NamedTextColor.GOLD))
                     .append(Component.text("/tpaccept", NamedTextColor.GREEN))
                     .append(Component.text(" to accept!", NamedTextColor.GOLD)));
@@ -2324,26 +2539,64 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (command.getName().equalsIgnoreCase("tpaccept")) {
             UUID accepterUUID = player.getUniqueId();
             UUID requesterUUID = null;
+            boolean isTpaHere = false;
+
+            // Check regular TPA requests first
             for (var entry : tpaRequests.entrySet()) {
                 if (entry.getValue().equals(accepterUUID)) {
                     requesterUUID = entry.getKey();
                     break;
                 }
             }
+
+            // Check TPAHere requests if no regular TPA found
+            if (requesterUUID == null) {
+                for (var entry : tpahereRequests.entrySet()) {
+                    if (entry.getValue().equals(accepterUUID)) {
+                        requesterUUID = entry.getKey();
+                        isTpaHere = true;
+                        break;
+                    }
+                }
+            }
+
             if (requesterUUID == null) {
                 player.sendMessage(Component.text("❌ You have no pending teleport requests!", NamedTextColor.RED));
                 return true;
             }
+
             Player requester = Bukkit.getPlayer(requesterUUID);
             if (requester == null) {
-                tpaRequests.remove(requesterUUID);
+                if (isTpaHere) {
+                    tpahereRequests.remove(requesterUUID);
+                } else {
+                    tpaRequests.remove(requesterUUID);
+                }
                 player.sendMessage(Component.text("❌ The requester is no longer online!", NamedTextColor.RED));
                 return true;
             }
-            tpaRequests.remove(requesterUUID);
-            player.sendMessage(Component.text("✅ Teleport request accepted! " + requester.getName() + " will arrive in 5 seconds.", NamedTextColor.GREEN));
-            requester.sendMessage(Component.text("✅ " + player.getName() + " accepted your request! Teleporting in 5 seconds...", NamedTextColor.GREEN));
-            performTpaCountdown(requester, player);
+
+            if (isTpaHere) {
+                tpahereRequests.remove(requesterUUID);
+                if (combatTagTicks.containsKey(accepterUUID)) {
+                    player.sendMessage(Component.text("❌ You cannot teleport while in combat!", NamedTextColor.RED));
+                    requester.sendMessage(Component.text("❌ " + player.getName() + " cannot teleport while in combat!", NamedTextColor.RED));
+                    return true;
+                }
+                player.sendMessage(Component.text("✅ Teleport request accepted! You will teleport to " + requester.getName() + " in 5 seconds.", NamedTextColor.GREEN));
+                requester.sendMessage(Component.text("✅ " + player.getName() + " accepted your request! Teleporting in 5 seconds...", NamedTextColor.GREEN));
+                performTpaCountdown(player, requester);
+            } else {
+                tpaRequests.remove(requesterUUID);
+                if (combatTagTicks.containsKey(requesterUUID)) {
+                    player.sendMessage(Component.text("❌ " + requester.getName() + " cannot teleport while in combat!", NamedTextColor.RED));
+                    requester.sendMessage(Component.text("❌ You cannot teleport while in combat!", NamedTextColor.RED));
+                    return true;
+                }
+                player.sendMessage(Component.text("✅ Teleport request accepted! " + requester.getName() + " will arrive in 5 seconds.", NamedTextColor.GREEN));
+                requester.sendMessage(Component.text("✅ " + player.getName() + " accepted your request! Teleporting in 5 seconds...", NamedTextColor.GREEN));
+                performTpaCountdown(requester, player);
+            }
             return true;
         }
 
@@ -4120,12 +4373,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // --- /keys (keys/echo/crimson) (add/remove/reset) (amount) (playername) ---
         if (command.getName().equalsIgnoreCase("keys")) {
-            if (!player.isOp()) {
-                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+            UUID senderUuid = player.getUniqueId();
+            boolean isOwnerOrCoOwner = senderUuid.equals(RED_TOPPAT_UUID) || senderUuid.equals(BOREAS_UUID);
+            if (!isOwnerOrCoOwner) {
+                player.sendMessage(Component.text("❌ Only the owner and co-owner can use this command!", NamedTextColor.RED));
                 return true;
             }
             if (args.length < 4) {
-                player.sendMessage(Component.text("❌ Usage: /keys (keys/echo/crimson/end/amethyst) (add/remove/reset) (amount) (playername)", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /keys (keys/echo/crimson/end/amethyst) (add/remove/reset) (amount) (playername/all)", NamedTextColor.RED));
                 return true;
             }
             String keyType = args[0].toLowerCase();
@@ -4137,13 +4392,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 player.sendMessage(Component.text("❌ Invalid amount!", NamedTextColor.RED));
                 return true;
             }
-            Player target = Bukkit.getPlayer(args[3]);
-            if (target == null) {
-                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
-                return true;
-            }
-            UUID targetUUID = target.getUniqueId();
-            
+
             HashMap<UUID, Integer> targetMap;
             String keyLabel;
             if (keyType.equals("keys")) {
@@ -4166,21 +4415,51 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
 
-            int current = targetMap.getOrDefault(targetUUID, 0);
-            switch (action) {
-                case "reset" -> {
-                    targetMap.put(targetUUID, amount);
-                    player.sendMessage(Component.text("✅ Set " + target.getName() + "'s " + keyLabel + " to " + amount, NamedTextColor.GREEN));
+            String targetArg = args[3];
+            if (targetArg.equalsIgnoreCase("all")) {
+                // Apply to all online players
+                java.util.Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
+                for (Player t : onlinePlayers) {
+                    UUID tid = t.getUniqueId();
+                    int current = targetMap.getOrDefault(tid, 0);
+                    switch (action) {
+                        case "reset" -> targetMap.put(tid, amount);
+                        case "remove" -> targetMap.put(tid, Math.max(0, current - amount));
+                        case "add"   -> targetMap.put(tid, current + amount);
+                        default -> { /* handled below */ }
+                    }
+                    savePlayerData(tid);
                 }
-                case "remove" -> {
-                    targetMap.put(targetUUID, Math.max(0, current - amount));
-                    player.sendMessage(Component.text("✅ Removed " + amount + " " + keyLabel + " from " + target.getName() + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
+                if (action.equals("reset") || action.equals("remove") || action.equals("add")) {
+                    player.sendMessage(Component.text("✅ Applied " + action + " " + amount + " " + keyLabel + " to all " + onlinePlayers.size() + " online players.", NamedTextColor.GREEN));
+                } else {
+                    player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
                 }
-                case "add" -> {
-                    targetMap.put(targetUUID, current + amount);
-                    player.sendMessage(Component.text("✅ Added " + amount + " " + keyLabel + " to " + target.getName() + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
+            } else {
+                // Single player target
+                Player target = Bukkit.getPlayer(targetArg);
+                if (target == null) {
+                    player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                    return true;
                 }
-                default -> player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
+                UUID targetUUID = target.getUniqueId();
+                int current = targetMap.getOrDefault(targetUUID, 0);
+                switch (action) {
+                    case "reset" -> {
+                        targetMap.put(targetUUID, amount);
+                        player.sendMessage(Component.text("✅ Set " + target.getName() + "'s " + keyLabel + " to " + amount, NamedTextColor.GREEN));
+                    }
+                    case "remove" -> {
+                        targetMap.put(targetUUID, Math.max(0, current - amount));
+                        player.sendMessage(Component.text("✅ Removed " + amount + " " + keyLabel + " from " + target.getName() + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
+                    }
+                    case "add" -> {
+                        targetMap.put(targetUUID, current + amount);
+                        player.sendMessage(Component.text("✅ Added " + amount + " " + keyLabel + " to " + target.getName() + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
+                    }
+                    default -> player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
+                }
+                savePlayerData(targetUUID);
             }
             return true;
         }
@@ -4363,18 +4642,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
-        if (loc.getWorld().getName().equalsIgnoreCase("spawn") && player.getGameMode() == GameMode.SURVIVAL) {
+        if (player.getGameMode() == GameMode.SURVIVAL && (loc.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(loc))) {
             event.setCancelled(true);
-            player.sendMessage(Component.text("❌ You cannot break blocks in the Spawn world!", NamedTextColor.RED));
+            player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
             return;
-        }
-
-        if (player.getGameMode() == GameMode.SURVIVAL) {
-            if (isInSpawnRadius(loc)) {
-                event.setCancelled(true);
-                player.sendMessage(Component.text("❌ You cannot break blocks at spawn!", NamedTextColor.RED));
-                return;
-            }
         }
 
         if (breakingCustom) return;
@@ -4478,28 +4749,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
-        if (event.getBlock().getWorld().getName().equalsIgnoreCase("spawn") && event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
+        if (event.getPlayer().getGameMode() == GameMode.SURVIVAL && (event.getBlock().getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getBlock().getLocation()))) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks in the Spawn world!", NamedTextColor.RED));
+            event.getPlayer().sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
             return;
-        }
-
-        if (event.getPlayer().getGameMode() == GameMode.SURVIVAL) {
-            Location blockLoc = event.getBlock().getLocation();
-            if (isInSpawnRadius(blockLoc)) {
-                if (isInCustomProtection(blockLoc)) {
-                    Material placedType = event.getBlockPlaced().getType();
-                    if (placedType == Material.TNT || placedType == Material.LAVA || placedType == Material.FIRE || placedType == Material.SOUL_FIRE) {
-                        event.setCancelled(true);
-                        event.getPlayer().sendMessage(Component.text("❌ You cannot place destructive blocks here!", NamedTextColor.RED));
-                        return;
-                    }
-                } else {
-                    event.setCancelled(true);
-                    event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks at spawn!", NamedTextColor.RED));
-                    return;
-                }
-            }
         }
         ItemStack item = event.getItemInHand();
         if (item != null && item.hasItemMeta()) {
@@ -4677,6 +4930,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         for (ItemStack item : inv.getContents()) {
             if (item == null || item.getType() == Material.AIR) continue;
+
+            if (isStarterLoot(item)) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(item);
+                for (ItemStack left : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), left);
+                }
+                player.sendMessage(Component.text("❌ You cannot sell starter loot!", NamedTextColor.RED));
+                continue;
+            }
 
             int valueMultiplier = item.getAmount();
             int baseValue = getItemRarityValue(item.getType());
@@ -6008,8 +6270,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                 if (w != null) {
                                     Location dest = new Location(w, x, y, z, yaw, pitch);
                                     player.closeInventory();
-                                    player.teleport(dest);
-                                    player.sendMessage(Component.text("🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!", NamedTextColor.GREEN));
+                                    teleportPlayerSafelyAsync(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
                                 }
                             }
                         } else {
@@ -6098,10 +6359,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (title.equals("Homes Menu")) {
             event.setCancelled(true);
             int rawSlot = event.getRawSlot();
-            Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[36]);
+            Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[54]);
             String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
-                String[] names = new String[36];
-                for (int i = 0; i < 36; i++) {
+                String[] names = new String[54];
+                for (int i = 0; i < 54; i++) {
                     names[i] = "Home " + (i + 1);
                 }
                 return names;
@@ -6110,7 +6371,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             boolean renameMode = renameModeActive.getOrDefault(uuid, false);
             boolean deleteMode = deleteModeActive.getOrDefault(uuid, false);
 
-            if (rawSlot >= 0 && rawSlot <= 35) {
+            if (rawSlot >= 0 && rawSlot <= 44) {
                 int limit = getPlayerMaxHomes(player);
                 if (rawSlot >= limit) {
                     player.sendMessage(Component.text("❌ This home slot is locked! Upgrade your store rank to unlock.", NamedTextColor.RED));
@@ -6353,13 +6614,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
-        // 0. RTP GUI
+        // 0. RTP GUI — use raw slot number so null items (Geyser) don't cause NPE
         if (title.equals("Random Teleport")) {
+            event.setCancelled(true);
             player.closeInventory();
+            int rawSlot = event.getRawSlot();
             String dimension = null;
-            if (clicked.getType() == Material.GRASS_BLOCK) dimension = "overworld";
-            else if (clicked.getType() == Material.NETHERRACK) dimension = "nether";
-            else if (clicked.getType() == Material.END_STONE) dimension = "end";
+            if (rawSlot == 11) dimension = "overworld";
+            else if (rawSlot == 13) dimension = "nether";
+            else if (rawSlot == 15) dimension = "end";
+            // Also accept by item type in case slot doesn't match (fallback for Java players)
+            if (dimension == null && clicked != null && clicked.getType() != Material.AIR) {
+                if (clicked.getType() == Material.GRASS_BLOCK) dimension = "overworld";
+                else if (clicked.getType() == Material.NETHERRACK) dimension = "nether";
+                else if (clicked.getType() == Material.END_STONE) dimension = "end";
+            }
             if (dimension != null) performRtp(player, dimension);
             return;
         }
@@ -7158,8 +7427,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             if (isLeaderboard) {
                 String typeLower = joinedText.toLowerCase().trim();
-                if (!typeLower.equals("kills") && !typeLower.equals("erpies") && !typeLower.equals("derpies")) {
-                    player.sendMessage(Component.text("❌ Invalid leaderboard type! Use: kills, erpies, or derpies.", NamedTextColor.RED));
+                if (!typeLower.equals("kills") && !typeLower.equals("erpies") && !typeLower.equals("derpies") && !typeLower.equals("time")) {
+                    player.sendMessage(Component.text("❌ Invalid leaderboard type! Use: kills, erpies, derpies, or time.", NamedTextColor.RED));
                     return;
                 }
             }
@@ -7286,7 +7555,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     if (input.isEmpty()) {
                         player.sendMessage(Component.text("❌ Rename cancelled.", NamedTextColor.RED));
                     } else {
-                        String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> new String[]{"Home 1", "Home 2", "Home 3", "Home 4", "Home 5"});
+                        String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
+                            String[] names = new String[54];
+                            for (int idx = 0; idx < 54; idx++) {
+                                names[idx] = "Home " + (idx + 1);
+                            }
+                            return names;
+                        });
                         homeNames[homeIdx] = input;
                         player.sendMessage(Component.text("✅ Renamed Home " + (homeIdx + 1) + " to '" + input + "'!", NamedTextColor.GREEN));
                         savePlayerData(player);
@@ -7733,11 +8008,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     countdown--;
                 } else {
                     cancel();
-                    player.sendTitle(
-                        "§a Teleporting!",
-                        "",
-                        0, 20, 10
-                    );
+                    player.sendTitle("§a Teleporting!", "", 0, 20, 10);
                     doRtpTeleport(player, dimension);
                 }
             }
@@ -7828,13 +8099,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             continue;
                         }
                     } else {
-                        // Overworld: avoid water, lava, and voids
+                        // Overworld: allow land or water surface, avoid lava and void
                         if (y <= 50) {
                             attempts++;
                             continue;
                         }
                         Block standBlock = finalWorld.getBlockAt(x, y - 1, z);
-                        if (standBlock.getType() == Material.WATER || standBlock.getType() == Material.LAVA || !standBlock.getType().isSolid()) {
+                        if (standBlock.getType() == Material.LAVA || !standBlock.getType().isSolid()) {
                             attempts++;
                             continue;
                         }
@@ -7858,8 +8129,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 final Location dest = safe;
                 new BukkitRunnable() {
                     @Override public void run() {
-                        player.teleport(dest);
-                        player.sendMessage(net.kyori.adventure.text.Component.text("🌍 Teleported to a random location in the " + dimension + "!", net.kyori.adventure.text.format.NamedTextColor.GREEN));
+                        if (!player.isOnline()) return;
+                        teleportPlayerSafelyAsync(player, dest, "🌍 Teleported to a random location in the " + dimension + "!");
                     }
                 }.runTask(CustomScoreboard.this);
             }
@@ -7887,6 +8158,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     requester.sendMessage(Component.text("❌ Teleport cancelled because you moved!", NamedTextColor.RED));
                     return;
                 }
+                if (combatTagTicks.containsKey(requester.getUniqueId())) {
+                    cancel();
+                    requester.sendTitle("§cTeleport Cancelled", "§7Entered combat!", 0, 20, 10);
+                    requester.sendMessage(Component.text("❌ Teleport cancelled because you entered combat!", NamedTextColor.RED));
+                    return;
+                }
                 if (countdown > 0) {
                     requester.sendTitle(
                         "§bTeleporting in...",
@@ -7896,9 +8173,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     countdown--;
                 } else {
                     cancel();
-                    requester.teleport(target.getLocation());
+                    teleportPlayerSafelyAsync(requester, target.getLocation(), "✅ Teleported to " + target.getName() + "!");
                     requester.sendTitle("§aTeleported!", "", 0, 20, 10);
-                    requester.sendMessage(Component.text("✅ Teleported to " + target.getName() + "!", NamedTextColor.GREEN));
                 }
             }
         }.runTaskTimer(this, 0L, 20L);
@@ -8060,11 +8336,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onPlayerDropItem(PlayerDropItemEvent event) {
-        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId())) {
+        if (!loggedInPlayers.contains(event.getPlayer().getUniqueId()) && !isBedrockPlayer(event.getPlayer())) {
             event.setCancelled(true);
             return;
         }
         Player player = event.getPlayer();
+        if (player.getGameMode() == GameMode.SURVIVAL && (player.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getItemDrop().getLocation()))) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+            return;
+        }
         String title = player.getOpenInventory().getTitle();
         if (title.contains("Shop") || title.contains("Auction") || title.contains("Bounty") 
                 || title.equals("Random Teleport") || title.equals("Homes Menu") || title.equals("Settings")
@@ -8724,16 +9005,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private int getPlayerMaxHomes(Player player) {
         UUID uuid = player.getUniqueId();
         if (hasErpProMaxMap.getOrDefault(uuid, false)) {
-            return 35;
+            return 45;
         }
         if (hasErpProMap.getOrDefault(uuid, false)) {
-            return 23;
+            return 27;
         }
         if (hasErpPlusMap.getOrDefault(uuid, false)) {
-            return 14;
-        }
-        if (hasVipMap.getOrDefault(uuid, false)) {
-            return 10;
+            return 13;
         }
         return 5;
     }
@@ -8741,10 +9019,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private void openUnifiedHomeGui(Player player) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Homes Menu"));
         UUID uuid = player.getUniqueId();
-        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[36]);
+        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[54]);
         String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
-            String[] names = new String[36];
-            for (int i = 0; i < 36; i++) {
+            String[] names = new String[54];
+            for (int i = 0; i < 54; i++) {
                 names[i] = "Home " + (i + 1);
             }
             return names;
@@ -8768,9 +9046,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             modeLore = "§7Left-click: Teleport | Click if empty: Set Location";
         }
 
-        // Slots 0 to 35: Homes / Locked Slots
+        // Slots 0 to 44: Homes / Locked Slots
         int limit = getPlayerMaxHomes(player);
-        for (int i = 0; i < 36; i++) {
+        for (int i = 0; i < 45; i++) {
             if (i < limit) {
                 Location loc = homes[i];
                 String name = homeNames[i] != null ? homeNames[i] : "Home " + (i + 1);
@@ -8859,13 +9137,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     countdown--;
                 } else {
                     cancel();
-                    player.teleport(dest);
+                    String homeMsg = homeNumber == -1
+                        ? "🏠 Teleported to Team Home!"
+                        : "🏠 Teleported to Home " + homeNumber + "!";
                     player.sendTitle("§aWelcome Home!", "", 0, 20, 10);
-                    if (homeNumber == -1) {
-                        player.sendMessage(Component.text("🏠 Teleported to Team Home!", NamedTextColor.AQUA));
-                    } else {
-                        player.sendMessage(Component.text("🏠 Teleported to Home " + homeNumber + "!", NamedTextColor.GREEN));
-                    }
+                    teleportPlayerSafelyAsync(player, dest, homeMsg);
                 }
             }
         }.runTaskTimer(this, 0L, 20L);
@@ -8899,16 +9175,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     countdown--;
                 } else {
                     cancel();
-                    player.teleport(dest);
                     player.sendTitle("§aTeleported!", "", 0, 20, 10);
-                    player.sendMessage(Component.text("✅ Teleported to " + destinationName + "!", NamedTextColor.GREEN));
                     if (destinationName.equals("AFK Zone")) {
-                        player.sendMessage(Component.text("💤 Welcome to the AFK Zone! You will earn 1 Derpy per minute.", NamedTextColor.LIGHT_PURPLE));
+                        Bukkit.getScheduler().runTask(CustomScoreboard.this, () -> {
+                            if (player.isOnline()) player.sendMessage(Component.text("💤 Welcome to the AFK Zone! You will earn 1 Derpy per minute.", NamedTextColor.LIGHT_PURPLE));
+                        });
                     }
                     if (destinationName.equalsIgnoreCase("Spawn") || destinationName.equalsIgnoreCase("AFK Zone")) {
-                        playLobbyMusic(player);
+                        teleportPlayerSafelyAsync(player, dest, "✅ Teleported to " + destinationName + "!");
+                        Bukkit.getScheduler().runTask(CustomScoreboard.this, () -> { if (player.isOnline()) playLobbyMusic(player); });
                     } else {
-                        stopLobbyMusic(player);
+                        teleportPlayerSafelyAsync(player, dest, "✅ Teleported to " + destinationName + "!");
+                        Bukkit.getScheduler().runTask(CustomScoreboard.this, () -> { if (player.isOnline()) stopLobbyMusic(player); });
                     }
                 }
             }
@@ -9512,18 +9790,24 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         Player player = event.getPlayer();
         if (player.getWorld().getEnvironment() != World.Environment.NETHER) return;
-        
-        Block clickedBlock = event.getClickedBlock();
-        if (clickedBlock == null || clickedBlock.getY() < 127) return;
-        
-        // Check if player is a Bedrock player
         if (!isBedrockPlayer(player)) return;
 
-        ItemStack mainItem = player.getInventory().getItemInMainHand();
-        if (mainItem == null || !mainItem.getType().isBlock()) return;
+        Block clickedBlock = event.getClickedBlock();
+        if (clickedBlock == null) return;
 
         BlockFace face = event.getBlockFace();
         Block targetBlock = clickedBlock.getRelative(face);
+
+        // Only handle if the placed block would be above the bedrock roof (Y >= 128)
+        if (targetBlock.getY() < 128) return;
+
+        ItemStack item = player.getInventory().getItemInMainHand();
+        org.bukkit.inventory.EquipmentSlot slot = org.bukkit.inventory.EquipmentSlot.HAND;
+        if (item == null || !item.getType().isBlock()) {
+            item = player.getInventory().getItemInOffHand();
+            slot = org.bukkit.inventory.EquipmentSlot.OFF_HAND;
+        }
+        if (item == null || !item.getType().isBlock()) return;
 
         // Ensure the target block is air or replaceable
         if (targetBlock.getType() != Material.AIR && !targetBlock.isReplaceable()) return;
@@ -9533,16 +9817,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             targetBlock,
             targetBlock.getState(),
             clickedBlock,
-            mainItem,
+            item,
             player,
             true,
-            org.bukkit.inventory.EquipmentSlot.HAND
+            slot
         );
         Bukkit.getPluginManager().callEvent(placeEvent);
         if (placeEvent.isCancelled() || !placeEvent.canBuild()) return;
 
         // Place the block
-        Material blockType = mainItem.getType();
+        Material blockType = item.getType();
         targetBlock.setType(blockType);
         
         // Play placement sound
@@ -9550,7 +9834,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // Consume block from hand in survival
         if (player.getGameMode() == GameMode.SURVIVAL) {
-            mainItem.setAmount(mainItem.getAmount() - 1);
+            item.setAmount(item.getAmount() - 1);
         }
         
         event.setCancelled(true);
@@ -9657,6 +9941,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         TextDisplay display = holoLoc.getWorld().spawn(holoLoc, TextDisplay.class, entity -> {
             entity.setBillboard(Display.Billboard.CENTER);
             entity.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+            entity.setSeeThrough(false);
             entity.setShadowed(true);
             Component line1 = Component.text("🛒 " + data.ownerName + "'s Crate Shop", NamedTextColor.GOLD);
             Component line2 = Component.text("Selling: " + finalItemsStr, NamedTextColor.WHITE);
@@ -10225,6 +10510,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             display.setBillboard(org.bukkit.entity.Display.Billboard.CENTER);
             display.setPersistent(false);
             display.setGravity(false);
+            display.setSeeThrough(false);
             display.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
             
             currentVehicle.addPassenger(display);
@@ -10584,7 +10870,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String message = event.getMessage().toLowerCase().trim();
             if (message.startsWith("/tp") || message.startsWith("/spawn") || message.startsWith("/home")
                     || message.startsWith("/rtp") || message.startsWith("/dtp") || message.startsWith("/warp")
-                    || message.startsWith("/tpa") || message.startsWith("/tpaccept") || message.startsWith("/back")) {
+                    || message.startsWith("/tpa") || message.startsWith("/tpaccept") || message.startsWith("/back")
+                    || message.startsWith("/tpahere")) {
                 event.setCancelled(true);
                 player.sendMessage(Component.text("❌ You cannot teleport out of the duel arena!", NamedTextColor.RED));
                 return;
@@ -11084,6 +11371,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             title = "🪙 ERPIES LEADERBOARD 🪙";
         } else if (statType.equalsIgnoreCase("derpies")) {
             title = "💎 DERPIES LEADERBOARD 💎";
+        } else if (statType.equalsIgnoreCase("time")) {
+            title = "⏱️ TIME PLAYED LEADERBOARD ⏱️";
         }
 
         java.util.Set<UUID> allUuids = new java.util.HashSet<>();
@@ -11101,6 +11390,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             allUuids.addAll(erpiesMap.keySet());
         } else if (statType.equalsIgnoreCase("derpies")) {
             allUuids.addAll(derpiesMap.keySet());
+        } else if (statType.equalsIgnoreCase("time")) {
+            allUuids.addAll(timePlayedMap.keySet());
         }
 
         for (UUID uuid : allUuids) {
@@ -11124,6 +11415,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 } else {
                     val = getConfig().getLong("players." + key + ".derpies", 0L);
                 }
+            } else if (statType.equalsIgnoreCase("time")) {
+                if (timePlayedMap.containsKey(uuid)) {
+                    val = timePlayedMap.get(uuid).longValue();
+                } else {
+                    val = getConfig().getLong("players." + key + ".timePlayed", 0L);
+                }
             }
             list.add(new java.util.AbstractMap.SimpleEntry<>(uuid, val));
         }
@@ -11142,8 +11439,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (name == null) {
                 name = "Unknown";
             }
+            
+            String valStr;
+            if (statType.equalsIgnoreCase("time")) {
+                long hours = entry.getValue() / 3600;
+                long minutes = (entry.getValue() % 3600) / 60;
+                valStr = hours + "h " + minutes + "m";
+            } else {
+                valStr = formatValue(entry.getValue());
+            }
+
             Component line = Component.text("\n" + rank + ". " + name + ": ", NamedTextColor.GRAY)
-                .append(Component.text(formatValue(entry.getValue()), NamedTextColor.GOLD));
+                .append(Component.text(valStr, NamedTextColor.GOLD));
             comp = comp.append(line);
             rank++;
         }
@@ -11167,6 +11474,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         for (World world : Bukkit.getWorlds()) {
             for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                // Ensure no existing display is visible through walls
+                display.setSeeThrough(false);
                 if (display.getPersistentDataContainer().has(new NamespacedKey(this, "is_leaderboard_text"), PersistentDataType.BOOLEAN)) {
                     String statType = display.getPersistentDataContainer().get(new NamespacedKey(this, "leaderboard_stat_type"), PersistentDataType.STRING);
                     String colorName = display.getPersistentDataContainer().get(new NamespacedKey(this, "leaderboard_color"), PersistentDataType.STRING);
@@ -12418,6 +12727,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 event.setCancelled(true);
                 return;
             }
+            if (attacker.getGameMode() == GameMode.SURVIVAL && (attacker.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getEntity().getLocation()))) {
+                event.setCancelled(true);
+                attacker.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+                return;
+            }
         }
         if (event.getEntity() instanceof Player victim) {
             if (!loggedInPlayers.contains(victim.getUniqueId()) && !isBedrockPlayer(victim)) {
@@ -12446,5 +12760,353 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
+    private boolean isUnbreakableMaterial(Material material) {
+        if (material == null) return true;
+        switch (material) {
+            case AIR:
+            case CAVE_AIR:
+            case VOID_AIR:
+            case BEDROCK:
+            case BARRIER:
+            case END_PORTAL:
+            case END_PORTAL_FRAME:
+            case END_GATEWAY:
+            case NETHER_PORTAL:
+            case COMMAND_BLOCK:
+            case CHAIN_COMMAND_BLOCK:
+            case REPEATING_COMMAND_BLOCK:
+            case STRUCTURE_BLOCK:
+            case JIGSAW:
+            case LIGHT:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean isProtectedLocation(Location loc) {
+        if (loc == null) return true;
+        String worldName = loc.getWorld().getName();
+        if (worldName.equalsIgnoreCase("afk_zone") || worldName.equalsIgnoreCase("afk")) {
+            return true;
+        }
+        if (worldName.equalsIgnoreCase("spawn")) {
+            return true;
+        }
+        if (isInSpawnRadius(loc)) {
+            return true;
+        }
+        if (generators.containsKey(loc)) {
+            return true;
+        }
+        if (commandChests.containsKey(loc)) {
+            return true;
+        }
+        if (shopCrates.containsKey(loc)) {
+            return true;
+        }
+        return false;
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+    public void onBedrockBlockBreakHighest(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player) && (player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE || player.getGameMode() == GameMode.CREATIVE)) {
+            if (event.isCancelled()) {
+                Block block = event.getBlock();
+                Location loc = block.getLocation();
+                if (!isProtectedLocation(loc) && !isUnbreakableMaterial(block.getType())) {
+                    event.setCancelled(false);
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+    public void onBedrockBlockPlaceHighest(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player) && (player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE || player.getGameMode() == GameMode.CREATIVE)) {
+            if (event.isCancelled()) {
+                Block block = event.getBlock();
+                Location loc = block.getLocation();
+                if (!isProtectedLocation(loc) && !isUnbreakableMaterial(block.getType())) {
+                    event.setCancelled(false);
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+    public void onBedrockInventoryCreative(org.bukkit.event.inventory.InventoryCreativeEvent event) {
+        if (event.getWhoClicked() instanceof Player player) {
+            if (isBedrockPlayer(player)) {
+                if (event.isCancelled()) {
+                    event.setCancelled(false);
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR)
+    public void onBedrockInteractHighest(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player)) {
+            if (event.isCancelled()) {
+                Action action = event.getAction();
+                if (action == Action.RIGHT_CLICK_BLOCK || action == Action.RIGHT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
+                    Block block = event.getClickedBlock();
+                    if (block == null || !isProtectedLocation(block.getLocation())) {
+                        event.setCancelled(false);
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = false)
+    public void onBedrockBlockBreakMonitor(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player)) {
+            Block block = event.getBlock();
+            Location loc = block.getLocation();
+            // Force client visual synchronization after a tiny delay to fix any client-side ghost blocks
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
+                }
+            }, 1L);
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
+                }
+            }, 3L);
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = false)
+    public void onBedrockBlockPlaceMonitor(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player)) {
+            Block block = event.getBlock();
+            Location loc = block.getLocation();
+            // Force client visual synchronization after a tiny delay to fix any client-side placement glitches
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
+                }
+            }, 1L);
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
+                }
+            }, 3L);
+        }
+    }
+
+    private Location findNearestSafeLocation(Location start) {
+        World world = start.getWorld();
+        int startX = start.getBlockX();
+        int startY = start.getBlockY();
+        int startZ = start.getBlockZ();
+
+        // Search in increasing radius from 0 to 5 blocks
+        for (int r = 0; r <= 5; r++) {
+            for (int y = -3; y <= 3; y++) {
+                for (int x = -r; x <= r; x++) {
+                    for (int z = -r; z <= r; z++) {
+                        if (Math.abs(x) != r && Math.abs(z) != r && Math.abs(y) != r) continue;
+                        
+                        Location testLoc = new Location(world, startX + x, startY + y, startZ + z);
+                        if (isSafeLocation(testLoc)) {
+                            testLoc.add(0.5, 0.1, 0.5);
+                            testLoc.setYaw(start.getYaw());
+                            testLoc.setPitch(start.getPitch());
+                            return testLoc;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isSafeLocation(Location loc) {
+        Block feet = loc.getBlock();
+        Block head = feet.getRelative(BlockFace.UP);
+        Block ground = feet.getRelative(BlockFace.DOWN);
+
+        if (ground.getType().isAir() || !ground.getType().isSolid()) return false;
+        if (!feet.getType().isAir() && feet.getType().isSolid()) return false;
+        if (!head.getType().isAir() && head.getType().isSolid()) return false;
+        
+        if (feet.getType() == Material.LAVA || feet.getType() == Material.FIRE || feet.getType() == Material.SOUL_FIRE) return false;
+        if (head.getType() == Material.LAVA || head.getType() == Material.FIRE || head.getType() == Material.SOUL_FIRE) return false;
+
+        return true;
+    }
+
+    @EventHandler
+    public void onEntityPlace(org.bukkit.event.entity.EntityPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player != null && player.getGameMode() == GameMode.SURVIVAL) {
+            if (player.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getEntity().getLocation())) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onHangingPlace(org.bukkit.event.hanging.HangingPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player != null && player.getGameMode() == GameMode.SURVIVAL) {
+            if (player.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getEntity().getLocation())) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onHangingBreak(org.bukkit.event.hanging.HangingBreakByEntityEvent event) {
+        if (event.getRemover() instanceof Player player) {
+            if (player.getGameMode() == GameMode.SURVIVAL) {
+                if (player.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getEntity().getLocation())) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEntityPlaceInteract(PlayerInteractEvent event) {
+        if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
+            Player player = event.getPlayer();
+            if (player.getGameMode() == GameMode.SURVIVAL && (player.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getClickedBlock().getLocation()))) {
+                ItemStack item = event.getItem();
+                if (item != null) {
+                    Material type = item.getType();
+                    String name = type.name();
+                    if (type == Material.ARMOR_STAND || type == Material.END_CRYSTAL || type == Material.TNT || 
+                        type == Material.MINECART || type == Material.CHEST_MINECART || type == Material.TNT_MINECART || 
+                        type == Material.HOPPER_MINECART || type == Material.FURNACE_MINECART || 
+                        name.contains("BOAT") || name.contains("RAFT") || name.endsWith("_SPAWN_EGG")) {
+                        event.setCancelled(true);
+                        player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+                    }
+                }
+            }
+        }
+    }
+
+    private Location findLandLocation(Location start) {
+        Location safe = findNearestSafeLocation(start);
+        if (safe != null) return safe;
+
+        World world = start.getWorld();
+        int startX = start.getBlockX();
+        int startZ = start.getBlockZ();
+        int startY = start.getBlockY();
+
+        // Scan downwards
+        for (int dy = 0; dy < 100; dy++) {
+            int y = startY - dy;
+            if (y < world.getMinHeight() + 5) break;
+            Location testLoc = new Location(world, startX, y, startZ);
+            if (isSafeLocation(testLoc)) {
+                testLoc.add(0.5, 0.1, 0.5);
+                testLoc.setYaw(start.getYaw());
+                testLoc.setPitch(start.getPitch());
+                return testLoc;
+            }
+        }
+
+        // Scan upwards
+        for (int dy = 1; dy < 100; dy++) {
+            int y = startY + dy;
+            if (y > world.getMaxHeight() - 5) break;
+            Location testLoc = new Location(world, startX, y, startZ);
+            if (isSafeLocation(testLoc)) {
+                testLoc.add(0.5, 0.1, 0.5);
+                testLoc.setYaw(start.getYaw());
+                testLoc.setPitch(start.getPitch());
+                return testLoc;
+            }
+        }
+        return null;
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.NORMAL)
+    public void onPlayerTeleportSafetyAdjust(org.bukkit.event.player.PlayerTeleportEvent event) {
+        // Skip PLUGIN-caused teleports (e.g. /rtp, /home, /tpa) — those destinations are
+        // already validated by the caller, and overriding them here would break safe-location delivery.
+        if (event.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN) return;
+        Location to = event.getTo();
+        if (to != null && to.getWorld() != null) {
+            World.Environment env = to.getWorld().getEnvironment();
+            if (env == World.Environment.NETHER || env == World.Environment.THE_END) {
+                if (!isSafeLocation(to)) {
+                    Location safeLoc = findLandLocation(to);
+                    if (safeLoc != null) {
+                        event.setTo(safeLoc);
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
+    public void onPlayerTeleportSafetyBypass(org.bukkit.event.player.PlayerTeleportEvent event) {
+        if (event.isCancelled()) {
+            Location to = event.getTo();
+            if (to != null && to.getWorld() != null) {
+                Block block = to.getBlock();
+                Block below = block.getRelative(BlockFace.DOWN);
+                Material type = block.getType();
+                Material belowType = below.getType();
+
+                getLogger().info("[TeleportBypass] Intercepted cancelled teleport for " + event.getPlayer().getName() + " to " + to.getWorld().getName() + " " + to.getBlockX() + "," + to.getBlockY() + "," + to.getBlockZ() + ". Cause: " + event.getCause());
+
+                // Uncancel teleport unconditionally unless destination is inside lava or fire.
+                // Void (Y below minHeight) and unloaded chunks are allowed.
+                if (type != Material.LAVA && type != Material.FIRE && type != Material.SOUL_FIRE &&
+                    belowType != Material.LAVA && belowType != Material.FIRE && belowType != Material.SOUL_FIRE) {
+                    event.setCancelled(false);
+                    getLogger().info("[TeleportBypass] Force-uncancelled teleport to " + to.getWorld().getName() + " at Y=" + to.getY());
+                } else {
+                    getLogger().info("[TeleportBypass] Kept teleport cancelled because destination is lava or fire.");
+                }
+            }
+        }
+    }
+
+    public void teleportPlayerSafelyAsync(Player player, Location dest, String successMessage) {
+        if (player == null || !player.isOnline() || dest == null || dest.getWorld() == null) return;
+
+        World world = dest.getWorld();
+        getLogger().info("[TeleportAsync] Requesting async chunk load for " + player.getName() + " to " + world.getName() + " " + dest.getBlockX() + "," + dest.getBlockY() + "," + dest.getBlockZ());
+
+        // Pre-load destination chunk asynchronously, then teleport synchronously on the main thread.
+        // This pattern is compatible with both Java players (Paper) and Bedrock players (Geyser),
+        // whereas player.teleportAsync() uses Paper-internal futures that Geyser cannot handle
+        // correctly for cross-dimension teleports.
+        world.getChunkAtAsync(dest).thenAccept(chunk -> {
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!player.isOnline()) return;
+
+                getLogger().info("[TeleportAsync] Performing sync teleport for " + player.getName() + " to " + world.getName() + " " + dest.getBlockX() + "," + dest.getBlockY() + "," + dest.getBlockZ());
+                boolean success = player.teleport(dest);
+                getLogger().info("[TeleportAsync] Teleport result for " + player.getName() + ": " + success);
+                if (success) {
+                    if (successMessage != null && !successMessage.isEmpty()) {
+                        player.sendMessage(net.kyori.adventure.text.Component.text(successMessage, net.kyori.adventure.text.format.NamedTextColor.GREEN));
+                    }
+                } else {
+                    player.sendMessage(net.kyori.adventure.text.Component.text("❌ Teleportation failed! Please try again.", net.kyori.adventure.text.format.NamedTextColor.RED));
+                }
+            });
+        });
+    }
 
 }

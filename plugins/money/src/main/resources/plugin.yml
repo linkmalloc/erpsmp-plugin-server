@@ -30,6 +30,9 @@ commands:
   tpa:
     description: Send a teleport request to another player
     usage: /tpa <player>
+  tpahere:
+    description: Send a teleport-here request to another player
+    usage: /tpahere <player>
   tpaccept:
     description: Accept a pending teleport request
     usage: /tpaccept
