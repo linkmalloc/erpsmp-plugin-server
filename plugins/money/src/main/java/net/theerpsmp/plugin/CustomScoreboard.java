@@ -12914,7 +12914,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             tempConfig.set(path + ".items", itemList);
         }
 
-        File generatorsFile = new File(getDataFolder(), "generators.yml");
+        java.io.File generatorsFile = new java.io.File(getDataFolder(), "generators.yml");
         String yamlString = tempConfig.saveToString();
         
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
@@ -12928,7 +12928,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private void loadGenerators() {
         generators.clear();
-        File generatorsFile = new File(getDataFolder(), "generators.yml");
+        java.io.File generatorsFile = new java.io.File(getDataFolder(), "generators.yml");
         org.bukkit.configuration.file.YamlConfiguration genConfig;
         
         if (generatorsFile.exists()) {
