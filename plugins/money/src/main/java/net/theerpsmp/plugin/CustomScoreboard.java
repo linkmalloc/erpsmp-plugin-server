@@ -137,6 +137,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Boolean> hasErpProMaxMap = new HashMap<>();
     private final HashMap<UUID, Boolean> hasVipMap = new HashMap<>();
 
+    private long nextKeyallTime = 0;
+
     // Bank tracking maps
     private final HashMap<UUID, Long> bankErpiesMap = new HashMap<>();
     private final HashMap<UUID, Long> bankDerpiesMap = new HashMap<>();
@@ -696,16 +698,23 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }, 0L, 10L); // run every 10 ticks (0.5 seconds) for faster rendering
 
-        // Hourly reward tracking tasks
+        // Hourly reward tracking tasks (checks nextKeyallTime every second)
         Bukkit.getScheduler().runTaskTimer(this, () -> {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                UUID uuid = player.getUniqueId();
-                keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + 1);
-                if (!chatSpamDisabled.getOrDefault(uuid, false)) {
-                    player.sendMessage(Component.text("🎉 You received 1 Key reward for playing for an hour!", NamedTextColor.GOLD));
+            if (System.currentTimeMillis() >= nextKeyallTime) {
+                nextKeyallTime = System.currentTimeMillis() + (60 * 60 * 1000);
+                getConfig().set("nextKeyallTime", nextKeyallTime);
+                saveConfig();
+
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    UUID uuid = player.getUniqueId();
+                    keysMap.put(uuid, keysMap.getOrDefault(uuid, 0) + 1);
+                    if (!chatSpamDisabled.getOrDefault(uuid, false)) {
+                        player.sendMessage(Component.text("🎉 You received 1 Key reward for playing for an hour!", NamedTextColor.GOLD));
+                    }
+                    updateScoreboard(player);
                 }
             }
-        }, 72000L, 72000L);
+        }, 20L, 20L);
 
         // AFK Zone & Rank minute reward tracking task
         Bukkit.getScheduler().runTaskTimer(this, () -> {
@@ -861,6 +870,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         loadTeams();
         loadCommandChests();
         loadGenerators();
+
+        if (getConfig().contains("nextKeyallTime")) {
+            nextKeyallTime = getConfig().getLong("nextKeyallTime");
+            if (nextKeyallTime <= System.currentTimeMillis()) {
+                nextKeyallTime = System.currentTimeMillis() + (60 * 60 * 1000);
+                getConfig().set("nextKeyallTime", nextKeyallTime);
+                saveConfig();
+            }
+        } else {
+            nextKeyallTime = System.currentTimeMillis() + (60 * 60 * 1000);
+            getConfig().set("nextKeyallTime", nextKeyallTime);
+            saveConfig();
+        }
 
         if (getConfig().contains("server.rules")) {
             serverRules = getConfig().getStringList("server.rules");
@@ -8420,9 +8442,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Objective oldObj = board.getObjective("smp_board");
         if (oldObj != null) oldObj.unregister();
 
-        Component title = Component.text("play.", NamedTextColor.BLUE)
-                .append(Component.text("theerpsmp", NamedTextColor.GREEN))
-                .append(Component.text(".net", NamedTextColor.GOLD));
+        // Create gradient title for "ERP SMP" using MiniMessage
+        Component title = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                .deserialize("<gradient:#00c6ff:#0072ff><b>ERP SMP</b></gradient>");
 
         Objective obj = board.registerNewObjective("smp_board", Criteria.DUMMY, title);
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
@@ -8430,12 +8452,33 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         UUID uuid = player.getUniqueId();
 
-        addScoreboardRow(board, obj, "TimePlayed", NamedTextColor.AQUA, formatTimePlayed(timePlayedMap.getOrDefault(uuid, 0)), 6, "§1");
-        addScoreboardRow(board, obj, "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0L)), 5, "§2");
-        addScoreboardRow(board, obj, "Derpies", NamedTextColor.LIGHT_PURPLE, formatValue(derpiesMap.getOrDefault(uuid, 0L)), 4, "§3");
-        addScoreboardRow(board, obj, "Keys", NamedTextColor.BLUE, String.valueOf(keysMap.getOrDefault(uuid, 0)), 3, "§4");
-        addScoreboardRow(board, obj, "Kills", NamedTextColor.DARK_GREEN, String.valueOf(killsMap.getOrDefault(uuid, 0)), 2, "§5");
-        addScoreboardRow(board, obj, "Deaths", NamedTextColor.RED, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 1, "§6");
+        // Get player team
+        String teamName = "None";
+        String lowerTeam = playerTeams.get(uuid);
+        if (lowerTeam != null) {
+            TeamData data = teams.get(lowerTeam);
+            if (data != null) {
+                teamName = data.name;
+            }
+        }
+
+        // Add rows matching the user's requested order and screenshot styles
+        addScoreboardRow(board, obj, "$", "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0L)), 7, "§1");
+        addScoreboardRow(board, obj, "✦", "Derpies", NamedTextColor.LIGHT_PURPLE, formatValue(derpiesMap.getOrDefault(uuid, 0L)), 6, "§2");
+        addScoreboardRow(board, obj, "⚔", "Kills", NamedTextColor.RED, String.valueOf(killsMap.getOrDefault(uuid, 0)), 5, "§3");
+        addScoreboardRow(board, obj, "💀", "Deaths", NamedTextColor.GOLD, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 4, "§4");
+        addScoreboardRow(board, obj, "⌛", "Keyall", NamedTextColor.BLUE, formatKeyallTime(), 3, "§5");
+        addScoreboardRow(board, obj, "⏰", "Playtime", NamedTextColor.YELLOW, formatTimePlayed(timePlayedMap.getOrDefault(uuid, 0)), 2, "§6");
+        addScoreboardRow(board, obj, "🛡", "Team", NamedTextColor.AQUA, teamName, 1, "§7");
+    }
+
+    private String formatKeyallTime() {
+        long diff = nextKeyallTime - System.currentTimeMillis();
+        if (diff <= 0) return "0s";
+        long totalSeconds = diff / 1000;
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        return minutes + "m " + seconds + "s";
     }
 
     private String formatTimePlayed(int totalSeconds) {
@@ -8471,9 +8514,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return String.valueOf(value);
     }
 
-    private void addScoreboardRow(Scoreboard board, Objective obj, String label, NamedTextColor labelColor, String valueStr, int scoreIndex, String placeholderId) {
-        Component rowText = Component.text(label + ": ", labelColor)
-                .append(Component.text(valueStr, NamedTextColor.WHITE));
+    private void addScoreboardRow(Scoreboard board, Objective obj, String icon, String label, NamedTextColor valueColor, String valueStr, int scoreIndex, String placeholderId) {
+        Component rowText;
+        if (label.equalsIgnoreCase("Team")) {
+            rowText = Component.text(icon + " ", valueColor)
+                    .append(Component.text(label + " ", valueColor))
+                    .append(Component.text(valueStr, NamedTextColor.WHITE));
+        } else {
+            rowText = Component.text(icon + " ", valueColor)
+                    .append(Component.text(label + " ", NamedTextColor.WHITE))
+                    .append(Component.text(valueStr, valueColor));
+        }
 
         String teamName = "row_" + scoreIndex;
         Team team = board.getTeam(teamName);
