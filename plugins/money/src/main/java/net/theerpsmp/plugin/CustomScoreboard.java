@@ -13473,4 +13473,44 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             player.sendMessage(net.kyori.adventure.text.Component.text("❌ Teleportation failed! Please try again.", net.kyori.adventure.text.format.NamedTextColor.RED));
         }
     }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = false)
+    public void onBedrockBlockBreakMonitor(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player)) {
+            Block block = event.getBlock();
+            Location loc = block.getLocation();
+            org.bukkit.block.data.BlockData data = loc.getBlock().getBlockData();
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, data);
+                }
+            }, 1L);
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, data);
+                }
+            }, 3L);
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = false)
+    public void onBedrockBlockPlaceMonitor(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (isBedrockPlayer(player)) {
+            Block block = event.getBlock();
+            Location loc = block.getLocation();
+            org.bukkit.block.data.BlockData data = loc.getBlock().getBlockData();
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, data);
+                }
+            }, 1L);
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    player.sendBlockChange(loc, data);
+                }
+            }, 3L);
+        }
+    }
 }
