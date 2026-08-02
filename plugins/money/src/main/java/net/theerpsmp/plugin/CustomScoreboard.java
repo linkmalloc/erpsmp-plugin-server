@@ -776,7 +776,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                 if (toAdd != null) {
                     inv.addItem(toAdd);
-                    saveGenerators();
                 }
             }
         }, 1200L, 1200L);
@@ -789,7 +788,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             // Every 5 seconds (100 ticks), spawn mob generator items
             if (ticks[0] >= 100) {
                 ticks[0] = 0;
-                boolean generated = false;
                 for (GeneratorData gen : generators.values()) {
                     ItemStack toAdd = null;
                     if (gen.type.equals("iron_golem_generator")) {
@@ -822,16 +820,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                     if (toAdd != null) {
                         gen.inventory.addItem(toAdd);
-                        generated = true;
                     }
-                }
-                if (generated) {
-                    saveGenerators();
                 }
             }
 
             // Every 1 second (20 ticks), check for hoppers below ANY generator
-            boolean hopperMoved = false;
             for (GeneratorData gen : generators.values()) {
                 Location loc = gen.loc;
                 Block blockBelow = loc.getBlock().getRelative(org.bukkit.block.BlockFace.DOWN);
@@ -852,7 +845,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                 if (remaining.isEmpty()) {
                                     item.setAmount(item.getAmount() - 1);
                                     genInv.setItem(i, item.getAmount() <= 0 ? null : item);
-                                    hopperMoved = true;
                                     break; // move 1 item per generator per tick
                                 }
                             }
@@ -860,10 +852,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                 }
             }
-            if (hopperMoved) {
-                saveGenerators();
-            }
         }, 20L, 20L);
+
+        // Periodic auto-save generators task (every 5 minutes) to avoid synchronous disk write lag
+        Bukkit.getScheduler().runTaskTimer(this, this::saveGenerators, 6000L, 6000L);
 
         loadShopCrates();
         loadTeams();
