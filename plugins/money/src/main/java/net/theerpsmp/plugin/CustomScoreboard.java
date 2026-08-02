@@ -8486,7 +8486,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         // Add rows matching the user's requested order and screenshot styles
-        addScoreboardRow(board, obj, "$", "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0L)), 7, "§1");
+        addScoreboardRow(board, obj, "⛃", "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0L)), 7, "§1");
         addScoreboardRow(board, obj, "✦", "Derpies", NamedTextColor.LIGHT_PURPLE, formatValue(derpiesMap.getOrDefault(uuid, 0L)), 6, "§2");
         addScoreboardRow(board, obj, "⚔", "Kills", NamedTextColor.RED, String.valueOf(killsMap.getOrDefault(uuid, 0)), 5, "§3");
         addScoreboardRow(board, obj, "💀", "Deaths", NamedTextColor.GOLD, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 4, "§4");
