@@ -1774,7 +1774,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 pendingWarpTeleports.remove(uuid);
                 pendingWarpStartLocations.remove(uuid);
                 if (player.isOnline()) {
-                    teleportPlayerSafelyAsync(player, warps.get(warpName), "✨ Teleported to warp '" + displayWarpName + "'!");
+                    teleportPlayerSafely(player, warps.get(warpName), "✨ Teleported to warp '" + displayWarpName + "'!");
                 }
             }, 100L); // 100 ticks = 5 seconds
 
@@ -4128,7 +4128,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             Location dest = targetWorld.getSpawnLocation();
-            teleportPlayerSafelyAsync(player, dest, "🚀 Teleported to the " + cleanName + " dimension!");
+            teleportPlayerSafely(player, dest, "🚀 Teleported to the " + cleanName + " dimension!");
             return true;
         }
 
@@ -6309,7 +6309,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                 if (w != null) {
                                     Location dest = new Location(w, x, y, z, yaw, pitch);
                                     player.closeInventory();
-                                    teleportPlayerSafelyAsync(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
+                                    teleportPlayerSafely(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
                                 }
                             }
                         } else {
@@ -6317,7 +6317,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             Location dest = homes[homeIdx];
                             if (dest != null) {
                                 player.closeInventory();
-                                teleportPlayerSafelyAsync(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
+                                teleportPlayerSafely(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
                             }
                         }
                     }
@@ -8182,7 +8182,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 new BukkitRunnable() {
                     @Override public void run() {
                         if (!player.isOnline()) return;
-                        teleportPlayerSafelyAsync(player, dest, "🌍 Teleported to a random location in the " + dimension + "!");
+                        teleportPlayerSafely(player, dest, "🌍 Teleported to a random location in the " + dimension + "!");
                     }
                 }.runTask(CustomScoreboard.this);
             }
@@ -8225,7 +8225,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     countdown--;
                 } else {
                     cancel();
-                    teleportPlayerSafelyAsync(requester, target.getLocation(), "✅ Teleported to " + target.getName() + "!");
+                    teleportPlayerSafely(requester, target.getLocation(), "✅ Teleported to " + target.getName() + "!");
                     requester.sendTitle("§aTeleported!", "", 0, 20, 10);
                 }
             }
@@ -8264,7 +8264,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         if (adminWorld != null) {
             Location spawn = new Location(adminWorld, 0.5, adminWorld.getHighestBlockYAt(0, 0) + 1, 0.5);
-            teleportPlayerSafelyAsync(player, spawn, "🏠 Welcome to the Admin Room!");
+            teleportPlayerSafely(player, spawn, "🏠 Welcome to the Admin Room!");
         } else {
             player.sendMessage(Component.text("❌ Failed to create admin room!", NamedTextColor.RED));
         }
@@ -9192,7 +9192,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         ? "🏠 Teleported to Team Home!"
                         : "🏠 Teleported to Home " + homeNumber + "!";
                     player.sendTitle("§aWelcome Home!", "", 0, 20, 10);
-                    teleportPlayerSafelyAsync(player, dest, homeMsg);
+                    teleportPlayerSafely(player, dest, homeMsg);
                 }
             }
         }.runTaskTimer(this, 0L, 20L);
@@ -9233,10 +9233,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         });
                     }
                     if (destinationName.equalsIgnoreCase("Spawn") || destinationName.equalsIgnoreCase("AFK Zone")) {
-                        teleportPlayerSafelyAsync(player, dest, "✅ Teleported to " + destinationName + "!");
+                        teleportPlayerSafely(player, dest, "✅ Teleported to " + destinationName + "!");
                         Bukkit.getScheduler().runTask(CustomScoreboard.this, () -> { if (player.isOnline()) playLobbyMusic(player); });
                     } else {
-                        teleportPlayerSafelyAsync(player, dest, "✅ Teleported to " + destinationName + "!");
+                        teleportPlayerSafely(player, dest, "✅ Teleported to " + destinationName + "!");
                         Bukkit.getScheduler().runTask(CustomScoreboard.this, () -> { if (player.isOnline()) stopLobbyMusic(player); });
                     }
                 }
@@ -13321,7 +13321,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
-    public void teleportPlayerSafelyAsync(Player player, Location dest, String successMessage) {
+    public void teleportPlayerSafely(Player player, Location dest, String successMessage) {
         if (player == null || !player.isOnline() || dest == null || dest.getWorld() == null) return;
 
         World world = dest.getWorld();
