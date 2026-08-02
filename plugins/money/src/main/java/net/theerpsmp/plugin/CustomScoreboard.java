@@ -12895,47 +12895,67 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void saveGenerators() {
-        getConfig().set("generators", null);
+        org.bukkit.configuration.file.YamlConfiguration tempConfig = new org.bukkit.configuration.file.YamlConfiguration();
         for (var entry : generators.entrySet()) {
             Location loc = entry.getKey();
             GeneratorData data = entry.getValue();
             String key = loc.getWorld().getName() + "_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ();
             String path = "generators." + key;
-            getConfig().set(path + ".world", loc.getWorld().getName());
-            getConfig().set(path + ".x", loc.getX());
-            getConfig().set(path + ".y", loc.getY());
-            getConfig().set(path + ".z", loc.getZ());
-            getConfig().set(path + ".type", data.type);
+            tempConfig.set(path + ".world", loc.getWorld().getName());
+            tempConfig.set(path + ".x", loc.getX());
+            tempConfig.set(path + ".y", loc.getY());
+            tempConfig.set(path + ".z", loc.getZ());
+            tempConfig.set(path + ".type", data.type);
             
             List<ItemStack> itemList = new ArrayList<>();
             for (ItemStack item : data.inventory.getContents()) {
-                itemList.add(item != null ? item : new ItemStack(Material.AIR));
+                itemList.add(item != null ? item.clone() : new ItemStack(Material.AIR));
             }
-            getConfig().set(path + ".items", itemList);
+            tempConfig.set(path + ".items", itemList);
         }
-        saveConfig();
+
+        File generatorsFile = new File(getDataFolder(), "generators.yml");
+        String yamlString = tempConfig.saveToString();
+        
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                java.nio.file.Files.writeString(generatorsFile.toPath(), yamlString);
+            } catch (Exception e) {
+                getLogger().severe("[GeneratorSave] Failed to save generators.yml asynchronously: " + e.getMessage());
+            }
+        });
     }
 
     private void loadGenerators() {
         generators.clear();
-        if (!getConfig().contains("generators")) return;
-        org.bukkit.configuration.ConfigurationSection sec = getConfig().getConfigurationSection("generators");
+        File generatorsFile = new File(getDataFolder(), "generators.yml");
+        org.bukkit.configuration.file.YamlConfiguration genConfig;
+        
+        if (generatorsFile.exists()) {
+            genConfig = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(generatorsFile);
+        } else {
+            // Fallback to legacy config.yml if generators.yml doesn't exist yet
+            genConfig = (org.bukkit.configuration.file.YamlConfiguration) getConfig();
+        }
+        
+        if (!genConfig.contains("generators")) return;
+        org.bukkit.configuration.ConfigurationSection sec = genConfig.getConfigurationSection("generators");
         if (sec == null) return;
         for (String key : sec.getKeys(false)) {
             String path = "generators." + key;
-            String worldName = getConfig().getString(path + ".world");
-            double x = getConfig().getDouble(path + ".x");
-            double y = getConfig().getDouble(path + ".y");
-            double z = getConfig().getDouble(path + ".z");
+            String worldName = genConfig.getString(path + ".world");
+            double x = genConfig.getDouble(path + ".x");
+            double y = genConfig.getDouble(path + ".y");
+            double z = genConfig.getDouble(path + ".z");
             World w = Bukkit.getWorld(worldName);
             if (w == null) continue;
             Location loc = new Location(w, x, y, z);
-            String type = getConfig().getString(path + ".type");
+            String type = genConfig.getString(path + ".type");
             
             String title = capitalize(type.replace("_", " "));
             Inventory inventory = Bukkit.createInventory(null, 27, Component.text(title));
-            if (getConfig().contains(path + ".items")) {
-                List<?> list = getConfig().getList(path + ".items");
+            if (genConfig.contains(path + ".items")) {
+                List<?> list = genConfig.getList(path + ".items");
                 if (list != null) {
                     for (int i = 0; i < Math.min(27, list.size()); i++) {
                         if (list.get(i) instanceof ItemStack) {
