@@ -888,6 +888,30 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }, 20L, 10L);
 
+        // Periodic cleanup of orphaned player overhead tag displays (runs every 5 seconds)
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            for (World world : Bukkit.getWorlds()) {
+                for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                    if (display.getPersistentDataContainer().has(new NamespacedKey(this, "is_player_tag"), PersistentDataType.BOOLEAN)) {
+                        String ownerUUIDStr = display.getPersistentDataContainer().get(new NamespacedKey(this, "player_tag_owner"), PersistentDataType.STRING);
+                        if (ownerUUIDStr != null) {
+                            try {
+                                UUID ownerUUID = UUID.fromString(ownerUUIDStr);
+                                Player owner = Bukkit.getPlayer(ownerUUID);
+                                if (owner == null || !owner.isOnline()) {
+                                    display.remove();
+                                }
+                            } catch (Exception e) {
+                                display.remove();
+                            }
+                        } else {
+                            display.remove();
+                        }
+                    }
+                }
+            }
+        }, 100L, 100L);
+
         loadShopCrates();
         loadTeams();
         loadCommandChests();
@@ -10929,6 +10953,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             display.setSeeThrough(false);
             display.setBackgroundColor(org.bukkit.Color.fromARGB(0, 0, 0, 0));
             
+            // Mark it as a player overhead tag with its owner's UUID
+            display.getPersistentDataContainer().set(new NamespacedKey(this, "is_player_tag"), PersistentDataType.BOOLEAN, true);
+            display.getPersistentDataContainer().set(new NamespacedKey(this, "player_tag_owner"), PersistentDataType.STRING, uuid.toString());
+
             currentVehicle.addPassenger(display);
             currentVehicle = display;
             
