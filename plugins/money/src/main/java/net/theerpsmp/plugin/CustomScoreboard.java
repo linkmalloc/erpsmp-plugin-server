@@ -138,6 +138,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Boolean> hasVipMap = new HashMap<>();
 
     private long nextKeyallTime = 0;
+    private final HashMap<UUID, java.util.Set<UUID>> hiddenEntitiesMap = new HashMap<>();
 
     // Bank tracking maps
     private final HashMap<UUID, Long> bankErpiesMap = new HashMap<>();
@@ -866,6 +867,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // Periodic auto-save generators task (every 5 minutes) to avoid synchronous disk write lag
         Bukkit.getScheduler().runTaskTimer(this, this::saveGenerators, 6000L, 6000L);
 
+        // Floating text display line-of-sight culling task (runs every 10 ticks / 0.5 seconds)
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (!player.isOnline()) continue;
+                World world = player.getWorld();
+                Location eyeLoc = player.getEyeLocation();
+                
+                for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                    // Crate shop, command chest, and leaderboard holograms are stationary (no vehicle)
+                    if (display.getVehicle() == null) {
+                        double distSq = display.getLocation().distanceSquared(eyeLoc);
+                        boolean canSee = false;
+                        if (distSq <= 1600.0) { // Within 40 blocks
+                            canSee = player.hasLineOfSight(display);
+                        }
+                        updateDisplayVisibility(player, display, canSee);
+                    }
+                }
+            }
+        }, 20L, 10L);
+
         loadShopCrates();
         loadTeams();
         loadCommandChests();
@@ -1483,6 +1505,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
+        hiddenEntitiesMap.remove(uuid);
         combatTagTicks.remove(uuid);
         duelQueue.remove(uuid);
         org.bukkit.scheduler.BukkitTask warpTask = pendingWarpTeleports.remove(uuid);
@@ -8536,6 +8559,22 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Score score = obj.getScore(placeholderId);
         score.setScore(scoreIndex);
         score.numberFormat(io.papermc.paper.scoreboard.numbers.NumberFormat.blank());
+    }
+
+    private void updateDisplayVisibility(Player player, org.bukkit.entity.TextDisplay display, boolean canSee) {
+        UUID playerUUID = player.getUniqueId();
+        UUID entityUUID = display.getUniqueId();
+        
+        java.util.Set<UUID> hidden = hiddenEntitiesMap.computeIfAbsent(playerUUID, k -> new java.util.HashSet<>());
+        boolean currentlyHidden = hidden.contains(entityUUID);
+        
+        if (canSee && currentlyHidden) {
+            player.showEntity(this, display);
+            hidden.remove(entityUUID);
+        } else if (!canSee && !currentlyHidden) {
+            player.hideEntity(this, display);
+            hidden.add(entityUUID);
+        }
     }
 
     private ItemStack createEchoPickaxe() {
