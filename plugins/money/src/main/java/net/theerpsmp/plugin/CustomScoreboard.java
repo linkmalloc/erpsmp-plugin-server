@@ -2471,11 +2471,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                 Location loc1 = new Location(dualWorld, -15.5, y1 + 1.0, 0.5, -90f, 0f);
                 Location loc2 = new Location(dualWorld, 15.5, y2 + 1.0, 0.5, 90f, 0f);
-                challenger.teleport(loc1);
-                player.teleport(loc2);
-                
-                challenger.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
-                player.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
+                teleportationSync(challenger, loc1, "⚔️ Duel started! Good luck!");
+                teleportationSync(player, loc2, "⚔️ Duel started! Good luck!");
             } else {
                 player.sendMessage(Component.text("❌ Failed to load the duel arena.", NamedTextColor.RED));
                 challenger.sendMessage(Component.text("❌ Failed to load the duel arena.", NamedTextColor.RED));
