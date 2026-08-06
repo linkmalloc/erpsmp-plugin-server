@@ -1,5 +1,19 @@
 package net.theerpsmp.plugin;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.sql.SQLException;
+import java.io.File;
+import java.util.UUID;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.configuration.file.YamlConfiguration;
+
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -66,6 +80,25 @@ import java.util.UUID;
 import org.bukkit.scheduler.BukkitRunnable;
 
 public class CustomScoreboard extends JavaPlugin implements Listener, CommandExecutor {
+
+    private Connection connection;
+
+    public synchronized Connection getConnection() {
+        try {
+            if (connection == null || connection.isClosed()) {
+                File dataFolder = getDataFolder();
+                if (!dataFolder.exists()) {
+                    dataFolder.mkdirs();
+                }
+                File dbFile = new File(dataFolder, "playerdata.db");
+                Class.forName("org.sqlite.JDBC");
+                connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return connection;
+    }
 
     private final HashMap<UUID, Integer> timePlayedMap = new HashMap<>();
     private final HashMap<UUID, Long> erpiesMap = new HashMap<>();
@@ -450,6 +483,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        initDatabase();
+        migrateYamlToDatabase();
         getServer().getPluginManager().registerEvents(this, this);
 
         // Ensure "spawn" world is loaded/created flat
@@ -943,122 +978,424 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return inv;
     }
 
+    public static String serializeItemList(List<ItemStack> items) {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("items", items);
+        return config.saveToString();
+    }
+
+    public static List<ItemStack> deserializeItemList(String data) {
+        List<ItemStack> items = new ArrayList<>();
+        if (data == null || data.isEmpty()) return items;
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            config.loadFromString(data);
+            List<?> list = config.getList("items");
+            if (list != null) {
+                for (Object obj : list) {
+                    if (obj instanceof ItemStack) {
+                        items.add((ItemStack) obj);
+                    } else {
+                        items.add(null);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return items;
+    }
+
+    private void initDatabase() {
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE IF NOT EXISTS player_stats (" +
+                         "uuid TEXT PRIMARY KEY, " +
+                         "lastKnownName TEXT, " +
+                         "timePlayed INTEGER, " +
+                         "erpies INTEGER, " +
+                         "derpies INTEGER, " +
+                         "keys INTEGER, " +
+                         "kills INTEGER, " +
+                         "deaths INTEGER, " +
+                         "regularKeys INTEGER, " +
+                         "crimsonKeys INTEGER, " +
+                         "echoKeys INTEGER, " +
+                         "endKeys INTEGER, " +
+                         "amethystKeys INTEGER, " +
+                         "hasErpPlus INTEGER, " +
+                         "hasErpPro INTEGER, " +
+                         "hasErpProMax INTEGER, " +
+                         "hasVip INTEGER, " +
+                         "bankErpies INTEGER, " +
+                         "bankDerpies INTEGER, " +
+                         "lastInterestTime INTEGER, " +
+                         "chatSpamDisabled INTEGER, " +
+                         "tpaDisabled INTEGER, " +
+                         "voiceChatEnabled INTEGER, " +
+                         "musicDisabled INTEGER, " +
+                         "starterLootDisabled INTEGER, " +
+                         "activeNametagsList TEXT, " +
+                         "killedAdmin INTEGER, " +
+                         "killedDragon INTEGER, " +
+                         "manuallyUnlockedNametags TEXT, " +
+                         "oresMined INTEGER, " +
+                         "invisibleKills INTEGER, " +
+                         "blocksPlaced INTEGER, " +
+                         "starvationDeaths INTEGER, " +
+                         "apocalypseZombieKills INTEGER, " +
+                         "apocalypseLongestSurvival INTEGER, " +
+                         "apocalypseMaxWavesSurvived INTEGER, " +
+                         "password TEXT, " +
+                         "foodsEaten TEXT, " +
+                         "enderChest TEXT, " +
+                         "bankItems TEXT" +
+                         ");");
+            
+            stmt.execute("CREATE TABLE IF NOT EXISTS player_homes (" +
+                         "uuid TEXT, " +
+                         "slot INTEGER, " +
+                         "world TEXT, " +
+                         "x REAL, " +
+                         "y REAL, " +
+                         "z REAL, " +
+                         "pitch REAL, " +
+                         "yaw REAL, " +
+                         "name TEXT, " +
+                         "PRIMARY KEY (uuid, slot)" +
+                         ");");
+            
+            getLogger().info("[Database] SQLite database initialized successfully.");
+        } catch (Exception e) {
+            getLogger().severe("[Database] Failed to initialize SQLite database: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void migrateYamlToDatabase() {
+        if (!getConfig().contains("players")) {
+            return;
+        }
+        org.bukkit.configuration.ConfigurationSection section = getConfig().getConfigurationSection("players");
+        if (section == null) return;
+        
+        getLogger().info("[Database] Found legacy player data in config.yml. Starting auto-migration to SQLite...");
+        
+        int count = 0;
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false);
+            
+            String insertStats = "REPLACE INTO player_stats (uuid, lastKnownName, timePlayed, erpies, derpies, keys, kills, deaths, " +
+                                 "regularKeys, crimsonKeys, echoKeys, endKeys, amethystKeys, hasErpPlus, hasErpPro, hasErpProMax, hasVip, " +
+                                 "bankErpies, bankDerpies, lastInterestTime, chatSpamDisabled, tpaDisabled, voiceChatEnabled, musicDisabled, " +
+                                 "starterLootDisabled, activeNametagsList, killedAdmin, killedDragon, manuallyUnlockedNametags, " +
+                                 "oresMined, invisibleKills, blocksPlaced, starvationDeaths, apocalypseZombieKills, " +
+                                 "apocalypseLongestSurvival, apocalypseMaxWavesSurvived, password, foodsEaten, enderChest, bankItems) " +
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+            
+            String insertHome = "REPLACE INTO player_homes (uuid, slot, world, x, y, z, pitch, yaw, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);";
+            
+            try (PreparedStatement psStats = conn.prepareStatement(insertStats);
+                 PreparedStatement psHome = conn.prepareStatement(insertHome)) {
+                
+                for (String uuidStr : section.getKeys(false)) {
+                    try {
+                        String path = "players." + uuidStr + ".";
+                        
+                        psStats.setString(1, uuidStr);
+                        psStats.setString(2, getConfig().getString(path + "lastKnownName"));
+                        
+                        int seconds = getConfig().getInt(path + "timePlayed", -1);
+                        if (seconds == -1) {
+                            seconds = getConfig().getInt(path + "hoursPlayed", 0) * 3600;
+                        }
+                        psStats.setInt(3, seconds);
+                        psStats.setLong(4, getConfig().getLong(path + "erpies", 0L));
+                        psStats.setLong(5, getConfig().getLong(path + "derpies", 0L));
+                        psStats.setInt(6, getConfig().getInt(path + "keys", 0));
+                        psStats.setInt(7, getConfig().getInt(path + "kills", 0));
+                        psStats.setInt(8, getConfig().getInt(path + "deaths", 0));
+                        
+                        psStats.setInt(9, getConfig().getInt(path + "regularKeys", 0));
+                        psStats.setInt(10, getConfig().getInt(path + "crimsonKeys", 0));
+                        psStats.setInt(11, getConfig().getInt(path + "echoKeys", 0));
+                        psStats.setInt(12, getConfig().getInt(path + "endKeys", 0));
+                        psStats.setInt(13, getConfig().getInt(path + "amethystKeys", 0));
+                        psStats.setInt(14, getConfig().getBoolean(path + "hasErpPlus", false) ? 1 : 0);
+                        psStats.setInt(15, getConfig().getBoolean(path + "hasErpPro", false) ? 1 : 0);
+                        psStats.setInt(16, getConfig().getBoolean(path + "hasErpProMax", false) ? 1 : 0);
+                        psStats.setInt(17, getConfig().getBoolean(path + "hasVip", false) ? 1 : 0);
+                        
+                        psStats.setLong(18, getConfig().getLong(path + "bankErpies", 0L));
+                        psStats.setLong(19, getConfig().getLong(path + "bankDerpies", 0L));
+                        psStats.setLong(20, getConfig().getLong(path + "lastInterestTime", 0L));
+                        
+                        psStats.setInt(21, getConfig().getBoolean(path + "chatSpamDisabled", false) ? 1 : 0);
+                        psStats.setInt(22, getConfig().getBoolean(path + "tpaDisabled", false) ? 1 : 0);
+                        psStats.setInt(23, getConfig().getBoolean(path + "voiceChatEnabled", false) ? 1 : 0);
+                        psStats.setInt(24, getConfig().getBoolean(path + "musicDisabled", false) ? 1 : 0);
+                        psStats.setInt(25, getConfig().getBoolean(path + "starterLootDisabled", false) ? 1 : 0);
+                        
+                        List<String> activeList = getConfig().getStringList(path + "activeNametagsList");
+                        if (activeList.isEmpty() && getConfig().contains(path + "activeNametag")) {
+                            String legacy = getConfig().getString(path + "activeNametag", "");
+                            if (!legacy.isEmpty()) activeList.add(legacy);
+                        }
+                        psStats.setString(26, String.join(",", activeList));
+                        
+                        psStats.setInt(27, getConfig().getBoolean(path + "killedAdmin", false) ? 1 : 0);
+                        psStats.setInt(28, getConfig().getBoolean(path + "killedDragon", false) ? 1 : 0);
+                        
+                        List<String> unlockedList = getConfig().getStringList(path + "manuallyUnlockedNametags");
+                        psStats.setString(29, String.join(",", unlockedList));
+                        
+                        psStats.setInt(30, getConfig().getInt(path + "oresMined", 0));
+                        psStats.setInt(31, getConfig().getInt(path + "invisibleKills", 0));
+                        psStats.setInt(32, getConfig().getInt(path + "blocksPlaced", 0));
+                        psStats.setInt(33, getConfig().getInt(path + "starvationDeaths", 0));
+                        psStats.setInt(34, getConfig().getInt(path + "apocalypseZombieKills", 0));
+                        psStats.setLong(35, getConfig().getLong(path + "apocalypseLongestSurvival", 0L));
+                        psStats.setInt(36, getConfig().getInt(path + "apocalypseMaxWavesSurvived", 0));
+                        psStats.setString(37, getConfig().getString(path + "password", ""));
+                        
+                        YamlConfiguration foodSection = new YamlConfiguration();
+                        if (getConfig().contains(path + "foodsEaten")) {
+                            org.bukkit.configuration.ConfigurationSection foods = getConfig().getConfigurationSection(path + "foodsEaten");
+                            if (foods != null) {
+                                for (String foodKey : foods.getKeys(false)) {
+                                    foodSection.set(foodKey, foods.getInt(foodKey));
+                                }
+                            }
+                        }
+                        psStats.setString(38, foodSection.saveToString());
+                        
+                        List<ItemStack> enderItems = new ArrayList<>();
+                        if (getConfig().contains(path + "enderChest")) {
+                            org.bukkit.configuration.ConfigurationSection ecSec = getConfig().getConfigurationSection(path + "enderChest");
+                            if (ecSec != null) {
+                                for (int i = 0; i < 54; i++) {
+                                    if (ecSec.contains(String.valueOf(i))) {
+                                        enderItems.add(ecSec.getItemStack(String.valueOf(i)));
+                                    } else {
+                                        enderItems.add(null);
+                                    }
+                                }
+                            }
+                        }
+                        psStats.setString(39, serializeItemList(enderItems));
+                        
+                        List<ItemStack> bankItems = new ArrayList<>();
+                        if (getConfig().contains(path + "bankItems")) {
+                            List<?> list = getConfig().getList(path + "bankItems");
+                            if (list != null) {
+                                for (Object obj : list) {
+                                    if (obj instanceof ItemStack) bankItems.add((ItemStack) obj);
+                                }
+                            }
+                        }
+                        psStats.setString(40, serializeItemList(bankItems));
+                        psStats.executeUpdate();
+                        
+                        for (int i = 0; i < 54; i++) {
+                            String homePath = path + "homes." + i;
+                            if (getConfig().contains(homePath + ".world")) {
+                                psHome.setString(1, uuidStr);
+                                psHome.setInt(2, i);
+                                psHome.setString(3, getConfig().getString(homePath + ".world"));
+                                psHome.setDouble(4, getConfig().getDouble(homePath + ".x"));
+                                psHome.setDouble(5, getConfig().getDouble(homePath + ".y"));
+                                psHome.setDouble(6, getConfig().getDouble(homePath + ".z"));
+                                psHome.setFloat(7, (float) getConfig().getDouble(homePath + ".pitch"));
+                                psHome.setFloat(8, (float) getConfig().getDouble(homePath + ".yaw"));
+                                psHome.setString(9, getConfig().getString(homePath + ".name"));
+                                psHome.executeUpdate();
+                            }
+                        }
+                        count++;
+                    } catch (Exception ex) {
+                        getLogger().severe("Error migrating player: " + uuidStr);
+                        ex.printStackTrace();
+                    }
+                }
+                conn.commit();
+                
+                getConfig().set("players", null);
+                saveConfig();
+                
+                getLogger().info("[Database] Successfully migrated " + count + " players to SQLite. config.yml cleaned up.");
+            } catch (Exception ex) {
+                conn.rollback();
+                getLogger().severe("[Database] Rollback! Error during migration: " + ex.getMessage());
+                ex.printStackTrace();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void loadPlayerData(Player player) {
         loadPlayerData(player.getUniqueId());
     }
 
     private void loadPlayerData(UUID uuid) {
-        String path = "players." + uuid.toString() + ".";
-        
-        int seconds = getConfig().getInt(path + "timePlayed", -1);
-        if (seconds == -1) {
-            seconds = getConfig().getInt(path + "hoursPlayed", 0) * 3600;
-        }
-        timePlayedMap.put(uuid, seconds);
-        erpiesMap.put(uuid, getConfig().getLong(path + "erpies", 0L));
-        derpiesMap.put(uuid, getConfig().getLong(path + "derpies", 0L));
-        keysMap.put(uuid, getConfig().getInt(path + "keys", 0));
-        killsMap.put(uuid, getConfig().getInt(path + "kills", 0));
-        deathsMap.put(uuid, getConfig().getInt(path + "deaths", 0));
-        
-        regularKeysMap.put(uuid, getConfig().getInt(path + "regularKeys", 0));
-        crimsonKeysMap.put(uuid, getConfig().getInt(path + "crimsonKeys", 0));
-        echoKeysMap.put(uuid, getConfig().getInt(path + "echoKeys", 0));
-        endKeysMap.put(uuid, getConfig().getInt(path + "endKeys", 0));
-        amethystKeysMap.put(uuid, getConfig().getInt(path + "amethystKeys", 0));
-        hasErpPlusMap.put(uuid, getConfig().getBoolean(path + "hasErpPlus", false));
-        hasErpProMap.put(uuid, getConfig().getBoolean(path + "hasErpPro", false));
-        hasErpProMaxMap.put(uuid, getConfig().getBoolean(path + "hasErpProMax", false));
-        hasVipMap.put(uuid, getConfig().getBoolean(path + "hasVip", false));
-
-        bankErpiesMap.put(uuid, getConfig().getLong(path + "bankErpies", 0L));
-        bankDerpiesMap.put(uuid, getConfig().getLong(path + "bankDerpies", 0L));
-        lastInterestTimeMap.put(uuid, getConfig().getLong(path + "lastInterestTime", 0L));
-        
-        List<ItemStack> bankItems = new ArrayList<>();
-        if (getConfig().contains(path + "bankItems")) {
-            List<?> list = getConfig().getList(path + "bankItems");
-            if (list != null) {
-                for (Object obj : list) {
-                    if (obj instanceof ItemStack) {
-                        bankItems.add((ItemStack) obj);
+        try (Connection conn = getConnection();
+             PreparedStatement psStats = conn.prepareStatement("SELECT * FROM player_stats WHERE uuid = ?");
+             PreparedStatement psHomes = conn.prepareStatement("SELECT * FROM player_homes WHERE uuid = ?")) {
+            
+            psStats.setString(1, uuid.toString());
+            try (ResultSet rs = psStats.executeQuery()) {
+                if (rs.next()) {
+                    timePlayedMap.put(uuid, rs.getInt("timePlayed"));
+                    erpiesMap.put(uuid, rs.getLong("erpies"));
+                    derpiesMap.put(uuid, rs.getLong("derpies"));
+                    keysMap.put(uuid, rs.getInt("keys"));
+                    killsMap.put(uuid, rs.getInt("kills"));
+                    deathsMap.put(uuid, rs.getInt("deaths"));
+                    
+                    regularKeysMap.put(uuid, rs.getInt("regularKeys"));
+                    crimsonKeysMap.put(uuid, rs.getInt("crimsonKeys"));
+                    echoKeysMap.put(uuid, rs.getInt("echoKeys"));
+                    endKeysMap.put(uuid, rs.getInt("endKeys"));
+                    amethystKeysMap.put(uuid, rs.getInt("amethystKeys"));
+                    
+                    hasErpPlusMap.put(uuid, rs.getInt("hasErpPlus") == 1);
+                    hasErpProMap.put(uuid, rs.getInt("hasErpPro") == 1);
+                    hasErpProMaxMap.put(uuid, rs.getInt("hasErpProMax") == 1);
+                    hasVipMap.put(uuid, rs.getInt("hasVip") == 1);
+                    
+                    bankErpiesMap.put(uuid, rs.getLong("bankErpies"));
+                    bankDerpiesMap.put(uuid, rs.getLong("bankDerpies"));
+                    lastInterestTimeMap.put(uuid, rs.getLong("lastInterestTime"));
+                    
+                    chatSpamDisabled.put(uuid, rs.getInt("chatSpamDisabled") == 1);
+                    tpaDisabled.put(uuid, rs.getInt("tpaDisabled") == 1);
+                    voiceChatEnabled.put(uuid, rs.getInt("voiceChatEnabled") == 1);
+                    musicDisabled.put(uuid, rs.getInt("musicDisabled") == 1);
+                    starterLootDisabled.put(uuid, rs.getInt("starterLootDisabled") == 1);
+                    
+                    killedAdminMap.put(uuid, rs.getInt("killedAdmin") == 1);
+                    killedDragonMap.put(uuid, rs.getInt("killedDragon") == 1);
+                    
+                    oresMinedMap.put(uuid, rs.getInt("oresMined"));
+                    invisibleKillsMap.put(uuid, rs.getInt("invisibleKills"));
+                    blocksPlacedMap.put(uuid, rs.getInt("blocksPlaced"));
+                    starvationDeathsMap.put(uuid, rs.getInt("starvationDeaths"));
+                    apocalypseZombieKillsMap.put(uuid, rs.getInt("apocalypseZombieKills"));
+                    apocalypseLongestSurvivalTimeMap.put(uuid, rs.getLong("apocalypseLongestSurvival"));
+                    apocalypseMaxWavesSurvivedMap.put(uuid, rs.getInt("apocalypseMaxWavesSurvived"));
+                    playerPasswords.put(uuid, rs.getString("password"));
+                    
+                    String activeTagsStr = rs.getString("activeNametagsList");
+                    java.util.Set<String> activeSet = new java.util.HashSet<>();
+                    if (activeTagsStr != null && !activeTagsStr.isEmpty()) {
+                        for (String s : activeTagsStr.split(",")) activeSet.add(s);
+                    }
+                    activeNametags.put(uuid, activeSet);
+                    
+                    String unlockedTagsStr = rs.getString("manuallyUnlockedNametags");
+                    java.util.Set<String> unlockedSet = new java.util.HashSet<>();
+                    if (unlockedTagsStr != null && !unlockedTagsStr.isEmpty()) {
+                        for (String s : unlockedTagsStr.split(",")) unlockedSet.add(s);
+                    }
+                    manuallyUnlockedNametags.put(uuid, unlockedSet);
+                    
+                    HashMap<Material, Integer> foods = new HashMap<>();
+                    String foodsStr = rs.getString("foodsEaten");
+                    if (foodsStr != null && !foodsStr.isEmpty()) {
+                        YamlConfiguration foodConfig = new YamlConfiguration();
+                        foodConfig.loadFromString(foodsStr);
+                        for (String key : foodConfig.getKeys(false)) {
+                            try {
+                                foods.put(Material.valueOf(key), foodConfig.getInt(key));
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                    foodsEatenMap.put(uuid, foods);
+                    
+                    String ecStr = rs.getString("enderChest");
+                    List<ItemStack> enderItems = deserializeItemList(ecStr);
+                    Inventory enderInv = Bukkit.createInventory(null, 54, Component.text("Ender Chest"));
+                    for (int i = 0; i < Math.min(54, enderItems.size()); i++) {
+                        if (enderItems.get(i) != null) enderInv.setItem(i, enderItems.get(i));
+                    }
+                    customEnderChests.put(uuid, enderInv);
+                    
+                    String bankStr = rs.getString("bankItems");
+                    bankItemsMap.put(uuid, deserializeItemList(bankStr));
+                } else {
+                    timePlayedMap.put(uuid, 0);
+                    erpiesMap.put(uuid, 0L);
+                    derpiesMap.put(uuid, 0L);
+                    keysMap.put(uuid, 0);
+                    killsMap.put(uuid, 0);
+                    deathsMap.put(uuid, 0);
+                    regularKeysMap.put(uuid, 0);
+                    crimsonKeysMap.put(uuid, 0);
+                    echoKeysMap.put(uuid, 0);
+                    endKeysMap.put(uuid, 0);
+                    amethystKeysMap.put(uuid, 0);
+                    hasErpPlusMap.put(uuid, false);
+                    hasErpProMap.put(uuid, false);
+                    hasErpProMaxMap.put(uuid, false);
+                    hasVipMap.put(uuid, false);
+                    bankErpiesMap.put(uuid, 0L);
+                    bankDerpiesMap.put(uuid, 0L);
+                    lastInterestTimeMap.put(uuid, 0L);
+                    chatSpamDisabled.put(uuid, false);
+                    tpaDisabled.put(uuid, false);
+                    voiceChatEnabled.put(uuid, false);
+                    musicDisabled.put(uuid, false);
+                    starterLootDisabled.put(uuid, false);
+                    killedAdminMap.put(uuid, false);
+                    killedDragonMap.put(uuid, false);
+                    oresMinedMap.put(uuid, 0);
+                    invisibleKillsMap.put(uuid, 0);
+                    blocksPlacedMap.put(uuid, 0);
+                    starvationDeathsMap.put(uuid, 0);
+                    apocalypseZombieKillsMap.put(uuid, 0);
+                    apocalypseLongestSurvivalTimeMap.put(uuid, 0L);
+                    apocalypseMaxWavesSurvivedMap.put(uuid, 0);
+                    playerPasswords.put(uuid, "");
+                    activeNametags.put(uuid, new java.util.HashSet<>());
+                    manuallyUnlockedNametags.put(uuid, new java.util.HashSet<>());
+                    foodsEatenMap.put(uuid, new HashMap<>());
+                    
+                    Inventory enderInv = Bukkit.createInventory(null, 54, Component.text("Ender Chest"));
+                    customEnderChests.put(uuid, enderInv);
+                    bankItemsMap.put(uuid, new ArrayList<>());
+                }
+            }
+            
+            Location[] homes = new Location[54];
+            String[] homeNames = new String[54];
+            psHomes.setString(1, uuid.toString());
+            try (ResultSet rs = psHomes.executeQuery()) {
+                while (rs.next()) {
+                    int slot = rs.getInt("slot");
+                    if (slot >= 0 && slot < 54) {
+                        String worldName = rs.getString("world");
+                        double x = rs.getDouble("x");
+                        double y = rs.getDouble("y");
+                        double z = rs.getDouble("z");
+                        float pitch = rs.getFloat("pitch");
+                        float yaw = rs.getFloat("yaw");
+                        String homeName = rs.getString("name");
+                        
+                        World w = Bukkit.getWorld(worldName);
+                        if (w != null) {
+                            homes[slot] = new Location(w, x, y, z, yaw, pitch);
+                            homeNames[slot] = homeName;
+                        }
                     }
                 }
             }
+            playerHomes.put(uuid, homes);
+            playerHomeNames.put(uuid, homeNames);
+            
+        } catch (Exception e) {
+            getLogger().severe("Failed to load player data for UUID: " + uuid);
+            e.printStackTrace();
         }
-        bankItemsMap.put(uuid, bankItems);
-
-        chatSpamDisabled.put(uuid, getConfig().getBoolean(path + "chatSpamDisabled", false));
-        tpaDisabled.put(uuid, getConfig().getBoolean(path + "tpaDisabled", false));
-        voiceChatEnabled.put(uuid, getConfig().getBoolean(path + "voiceChatEnabled", false));
-        musicDisabled.put(uuid, getConfig().getBoolean(path + "musicDisabled", false));
-        starterLootDisabled.put(uuid, getConfig().getBoolean(path + "starterLootDisabled", false));
-
-        java.util.List<String> activeList = getConfig().getStringList(path + "activeNametagsList");
-        if (activeList.isEmpty() && getConfig().contains(path + "activeNametag")) {
-            String legacy = getConfig().getString(path + "activeNametag", "");
-            if (!legacy.isEmpty()) activeList.add(legacy);
-        }
-        activeNametags.put(uuid, new java.util.HashSet<>(activeList));
-        killedAdminMap.put(uuid, getConfig().getBoolean(path + "killedAdmin", false));
-        killedDragonMap.put(uuid, getConfig().getBoolean(path + "killedDragon", false));
-        java.util.List<String> unlocked = getConfig().getStringList(path + "manuallyUnlockedNametags");
-        manuallyUnlockedNametags.put(uuid, new java.util.HashSet<>(unlocked));
-
-        oresMinedMap.put(uuid, getConfig().getInt(path + "oresMined", 0));
-        invisibleKillsMap.put(uuid, getConfig().getInt(path + "invisibleKills", 0));
-        blocksPlacedMap.put(uuid, getConfig().getInt(path + "blocksPlaced", 0));
-        starvationDeathsMap.put(uuid, getConfig().getInt(path + "starvationDeaths", 0));
-        apocalypseZombieKillsMap.put(uuid, getConfig().getInt(path + "apocalypseZombieKills", 0));
-        apocalypseLongestSurvivalTimeMap.put(uuid, getConfig().getLong(path + "apocalypseLongestSurvival", 0L));
-        apocalypseMaxWavesSurvivedMap.put(uuid, getConfig().getInt(path + "apocalypseMaxWavesSurvived", 0));
-        playerPasswords.put(uuid, getConfig().getString(path + "password", ""));
-
-        HashMap<Material, Integer> foods = new HashMap<>();
-        if (getConfig().contains(path + "foodsEaten")) {
-            org.bukkit.configuration.ConfigurationSection foodSec = getConfig().getConfigurationSection(path + "foodsEaten");
-            if (foodSec != null) {
-                for (String key : foodSec.getKeys(false)) {
-                    try {
-                        Material mat = Material.valueOf(key);
-                        int count = foodSec.getInt(key);
-                        foods.put(mat, count);
-                    } catch (Exception e) {}
-                }
-            }
-        }
-        foodsEatenMap.put(uuid, foods);
-
-        Location[] homes = new Location[54];
-        for (int i = 0; i < 54; i++) {
-            String homePath = path + "homes." + i;
-            if (getConfig().contains(homePath)) {
-                String worldName = getConfig().getString(homePath + ".world");
-                if (worldName != null) {
-                    double x = getConfig().getDouble(homePath + ".x");
-                    double y = getConfig().getDouble(homePath + ".y");
-                    double z = getConfig().getDouble(homePath + ".z");
-                    float pitch = (float) getConfig().getDouble(homePath + ".pitch");
-                    float yaw = (float) getConfig().getDouble(homePath + ".yaw");
-                    World w = Bukkit.getWorld(worldName);
-                    if (w != null) {
-                        homes[i] = new Location(w, x, y, z, yaw, pitch);
-                    }
-                }
-            }
-        }
-        playerHomes.put(uuid, homes);
-
-        String[] homeNames = new String[54];
-        for (int i = 0; i < 54; i++) {
-            String homePath = path + "homes." + i;
-            if (getConfig().contains(homePath + ".name")) {
-                homeNames[i] = getConfig().getString(homePath + ".name");
-            } else {
-                homeNames[i] = "Home " + (i + 1);
-            }
-        }
-        playerHomeNames.put(uuid, homeNames);
     }
 
     private void savePlayerData(Player player) {
@@ -1066,125 +1403,172 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void savePlayerData(UUID uuid) {
-        String path = "players." + uuid.toString() + ".";
-        org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
         String name = offline != null ? offline.getName() : null;
-        if (name != null) {
-            getConfig().set(path + "lastKnownName", name);
-        }
-        getConfig().set(path + "timePlayed", timePlayedMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "erpies", erpiesMap.getOrDefault(uuid, 0L));
-        getConfig().set(path + "derpies", derpiesMap.getOrDefault(uuid, 0L));
-        getConfig().set(path + "keys", keysMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "kills", killsMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "deaths", deathsMap.getOrDefault(uuid, 0));
         
-        getConfig().set(path + "regularKeys", regularKeysMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "crimsonKeys", crimsonKeysMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "echoKeys", echoKeysMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "endKeys", endKeysMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "amethystKeys", amethystKeysMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "hasErpPlus", hasErpPlusMap.getOrDefault(uuid, false));
-        getConfig().set(path + "hasErpPro", hasErpProMap.getOrDefault(uuid, false));
-        getConfig().set(path + "hasErpProMax", hasErpProMaxMap.getOrDefault(uuid, false));
-        getConfig().set(path + "hasVip", hasVipMap.getOrDefault(uuid, false));
-
-        getConfig().set(path + "bankErpies", bankErpiesMap.getOrDefault(uuid, 0L));
-        getConfig().set(path + "bankDerpies", bankDerpiesMap.getOrDefault(uuid, 0L));
-        getConfig().set(path + "lastInterestTime", lastInterestTimeMap.getOrDefault(uuid, 0L));
-        getConfig().set(path + "bankItems", bankItemsMap.getOrDefault(uuid, new ArrayList<>()));
-
-        getConfig().set(path + "chatSpamDisabled", chatSpamDisabled.getOrDefault(uuid, false));
-        getConfig().set(path + "tpaDisabled", tpaDisabled.getOrDefault(uuid, false));
-        getConfig().set(path + "voiceChatEnabled", voiceChatEnabled.getOrDefault(uuid, false));
-        getConfig().set(path + "musicDisabled", musicDisabled.getOrDefault(uuid, false));
-        getConfig().set(path + "starterLootDisabled", starterLootDisabled.getOrDefault(uuid, false));
-
-        java.util.Set<String> activeSet = activeNametags.get(uuid);
-        if (activeSet != null) {
-            getConfig().set(path + "activeNametagsList", new java.util.ArrayList<>(activeSet));
-        } else {
-            getConfig().set(path + "activeNametagsList", null);
-        }
-        getConfig().set(path + "killedAdmin", killedAdminMap.getOrDefault(uuid, false));
-        getConfig().set(path + "killedDragon", killedDragonMap.getOrDefault(uuid, false));
-        java.util.Set<String> unlockedSet = manuallyUnlockedNametags.get(uuid);
-        if (unlockedSet != null) {
-            getConfig().set(path + "manuallyUnlockedNametags", new java.util.ArrayList<>(unlockedSet));
-        } else {
-            getConfig().set(path + "manuallyUnlockedNametags", null);
-        }
-
-        getConfig().set(path + "oresMined", oresMinedMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "invisibleKills", invisibleKillsMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "blocksPlaced", blocksPlacedMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "starvationDeaths", starvationDeathsMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "apocalypseZombieKills", apocalypseZombieKillsMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "apocalypseLongestSurvival", apocalypseLongestSurvivalTimeMap.getOrDefault(uuid, 0L));
-        getConfig().set(path + "apocalypseMaxWavesSurvived", apocalypseMaxWavesSurvivedMap.getOrDefault(uuid, 0));
-        getConfig().set(path + "password", playerPasswords.getOrDefault(uuid, ""));
-
-        HashMap<Material, Integer> foods = foodsEatenMap.get(uuid);
-        if (foods != null) {
-            for (var entry : foods.entrySet()) {
-                getConfig().set(path + "foodsEaten." + entry.getKey().name(), entry.getValue());
-            }
-        }
-
-        Location[] homes = playerHomes.get(uuid);
-        String[] homeNames = playerHomeNames.get(uuid);
-        if (homes != null) {
-            for (int i = 0; i < 54; i++) {
-                String homePath = path + "homes." + i;
-                if (homes[i] != null) {
-                    // Write the home location
-                    getConfig().set(homePath + ".world", homes[i].getWorld().getName());
-                    getConfig().set(homePath + ".x", homes[i].getX());
-                    getConfig().set(homePath + ".y", homes[i].getY());
-                    getConfig().set(homePath + ".z", homes[i].getZ());
-                    getConfig().set(homePath + ".pitch", homes[i].getPitch());
-                    getConfig().set(homePath + ".yaw", homes[i].getYaw());
-                    // Also save name if available
-                    if (homeNames != null && homeNames[i] != null) {
-                        getConfig().set(homePath + ".name", homeNames[i]);
-                    }
-                } else if (getConfig().contains(homePath + ".world")) {
-                    // Only explicitly delete the home if we actually loaded it (it was in memory as null because the player deleted it)
-                    // If homes array exists but slot is null and there was a location in config, it means the player explicitly removed it
-                    getConfig().set(homePath + ".world", null);
-                    getConfig().set(homePath + ".x", null);
-                    getConfig().set(homePath + ".y", null);
-                    getConfig().set(homePath + ".z", null);
-                    getConfig().set(homePath + ".pitch", null);
-                    getConfig().set(homePath + ".yaw", null);
-                    // Keep the name entry intact
-                }
-            }
-        }
-        // Save any remaining home names for slots without locations
-        if (homeNames != null) {
-            for (int i = 0; i < 54; i++) {
-                String homePath = path + "homes." + i;
-                if ((homes == null || homes[i] == null) && homeNames[i] != null && !getConfig().contains(homePath + ".world")) {
-                    getConfig().set(homePath + ".name", homeNames[i]);
-                }
-            }
-        }
+        int timePlayed = timePlayedMap.getOrDefault(uuid, 0);
+        long erpies = erpiesMap.getOrDefault(uuid, 0L);
+        long derpies = derpiesMap.getOrDefault(uuid, 0L);
+        int keys = keysMap.getOrDefault(uuid, 0);
+        int kills = killsMap.getOrDefault(uuid, 0);
+        int deaths = deathsMap.getOrDefault(uuid, 0);
         
-        // Save custom ender chest
+        int regularKeys = regularKeysMap.getOrDefault(uuid, 0);
+        int crimsonKeys = crimsonKeysMap.getOrDefault(uuid, 0);
+        int echoKeys = echoKeysMap.getOrDefault(uuid, 0);
+        int endKeys = endKeysMap.getOrDefault(uuid, 0);
+        int amethystKeys = amethystKeysMap.getOrDefault(uuid, 0);
+        
+        boolean hasErpPlus = hasErpPlusMap.getOrDefault(uuid, false);
+        boolean hasErpPro = hasErpProMap.getOrDefault(uuid, false);
+        boolean hasErpProMax = hasErpProMaxMap.getOrDefault(uuid, false);
+        boolean hasVip = hasVipMap.getOrDefault(uuid, false);
+        
+        long bankErpies = bankErpiesMap.getOrDefault(uuid, 0L);
+        long bankDerpies = bankDerpiesMap.getOrDefault(uuid, 0L);
+        long lastInterestTime = lastInterestTimeMap.getOrDefault(uuid, 0L);
+        
+        boolean chatSpam = chatSpamDisabled.getOrDefault(uuid, false);
+        boolean tpa = tpaDisabled.getOrDefault(uuid, false);
+        boolean voice = voiceChatEnabled.getOrDefault(uuid, false);
+        boolean music = musicDisabled.getOrDefault(uuid, false);
+        boolean starter = starterLootDisabled.getOrDefault(uuid, false);
+        
+        boolean admin = killedAdminMap.getOrDefault(uuid, false);
+        boolean dragon = killedDragonMap.getOrDefault(uuid, false);
+        
+        int ores = oresMinedMap.getOrDefault(uuid, 0);
+        int invKills = invisibleKillsMap.getOrDefault(uuid, 0);
+        int blocks = blocksPlacedMap.getOrDefault(uuid, 0);
+        int starvation = starvationDeathsMap.getOrDefault(uuid, 0);
+        int apocZombies = apocalypseZombieKillsMap.getOrDefault(uuid, 0);
+        long apocLongest = apocalypseLongestSurvivalTimeMap.getOrDefault(uuid, 0L);
+        int apocMaxWaves = apocalypseMaxWavesSurvivedMap.getOrDefault(uuid, 0);
+        String pass = playerPasswords.getOrDefault(uuid, "");
+        
+        List<String> activeList = activeNametags.containsKey(uuid) ? new ArrayList<>(activeNametags.get(uuid)) : new ArrayList<>();
+        List<String> unlockedList = manuallyUnlockedNametags.containsKey(uuid) ? new ArrayList<>(manuallyUnlockedNametags.get(uuid)) : new ArrayList<>();
+        
+        HashMap<Material, Integer> foodsEaten = foodsEatenMap.containsKey(uuid) ? new HashMap<>(foodsEatenMap.get(uuid)) : new HashMap<>();
+        
+        YamlConfiguration foodConfig = new YamlConfiguration();
+        for (var entry : foodsEaten.entrySet()) {
+            foodConfig.set(entry.getKey().name(), entry.getValue());
+        }
+        String foodsEatenStr = foodConfig.saveToString();
+        
+        List<ItemStack> enderItems = new ArrayList<>();
         Inventory enderInv = customEnderChests.get(uuid);
         if (enderInv != null) {
-            String enderPath = path + "enderChest";
-            getConfig().set(enderPath, null); // Clear existing values
             for (int i = 0; i < 54; i++) {
                 ItemStack item = enderInv.getItem(i);
-                if (item != null && item.getType() != Material.AIR) {
-                    getConfig().set(enderPath + "." + i, item);
-                }
+                enderItems.add(item != null ? item.clone() : null);
             }
         }
-
-        saveConfig();
+        String enderChestStr = serializeItemList(enderItems);
+        
+        List<ItemStack> bankItems = new ArrayList<>();
+        List<ItemStack> rawBankItems = bankItemsMap.get(uuid);
+        if (rawBankItems != null) {
+            for (ItemStack item : rawBankItems) {
+                bankItems.add(item != null ? item.clone() : null);
+            }
+        }
+        String bankItemsStr = serializeItemList(bankItems);
+        
+        Location[] homes = playerHomes.get(uuid);
+        String[] homeNames = playerHomeNames.get(uuid);
+        final Location[] homesCopy = homes != null ? homes.clone() : null;
+        final String[] homeNamesCopy = homeNames != null ? homeNames.clone() : null;
+        
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            String insertStats = "REPLACE INTO player_stats (uuid, lastKnownName, timePlayed, erpies, derpies, keys, kills, deaths, " +
+                                 "regularKeys, crimsonKeys, echoKeys, endKeys, amethystKeys, hasErpPlus, hasErpPro, hasErpProMax, hasVip, " +
+                                 "bankErpies, bankDerpies, lastInterestTime, chatSpamDisabled, tpaDisabled, voiceChatEnabled, musicDisabled, " +
+                                 "starterLootDisabled, activeNametagsList, killedAdmin, killedDragon, manuallyUnlockedNametags, " +
+                                 "oresMined, invisibleKills, blocksPlaced, starvationDeaths, apocalypseZombieKills, " +
+                                 "apocalypseLongestSurvival, apocalypseMaxWavesSurvived, password, foodsEaten, enderChest, bankItems) " +
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+            
+            try (Connection conn = getConnection();
+                 PreparedStatement psStats = conn.prepareStatement(insertStats);
+                 PreparedStatement psHomeDelete = conn.prepareStatement("DELETE FROM player_homes WHERE uuid = ?");
+                 PreparedStatement psHomeInsert = conn.prepareStatement("REPLACE INTO player_homes (uuid, slot, world, x, y, z, pitch, yaw, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")) {
+                
+                psStats.setString(1, uuid.toString());
+                psStats.setString(2, name);
+                psStats.setInt(3, timePlayed);
+                psStats.setLong(4, erpies);
+                psStats.setLong(5, derpies);
+                psStats.setInt(6, keys);
+                psStats.setInt(7, kills);
+                psStats.setInt(8, deaths);
+                
+                psStats.setInt(9, regularKeys);
+                psStats.setInt(10, crimsonKeys);
+                psStats.setInt(11, echoKeys);
+                psStats.setInt(12, endKeys);
+                psStats.setInt(13, amethystKeys);
+                psStats.setInt(14, hasErpPlus ? 1 : 0);
+                psStats.setInt(15, hasErpPro ? 1 : 0);
+                psStats.setInt(16, hasErpProMax ? 1 : 0);
+                psStats.setInt(17, hasVip ? 1 : 0);
+                
+                psStats.setLong(18, bankErpies);
+                psStats.setLong(19, bankDerpies);
+                psStats.setLong(20, lastInterestTime);
+                
+                psStats.setInt(21, chatSpam ? 1 : 0);
+                psStats.setInt(22, tpa ? 1 : 0);
+                psStats.setInt(23, voice ? 1 : 0);
+                psStats.setInt(24, music ? 1 : 0);
+                psStats.setInt(25, starter ? 1 : 0);
+                
+                psStats.setString(26, String.join(",", activeList));
+                
+                psStats.setInt(27, admin ? 1 : 0);
+                psStats.setInt(28, dragon ? 1 : 0);
+                
+                psStats.setString(29, String.join(",", unlockedList));
+                
+                psStats.setInt(30, ores);
+                psStats.setInt(31, invKills);
+                psStats.setInt(32, blocks);
+                psStats.setInt(33, starvation);
+                psStats.setInt(34, apocZombies);
+                psStats.setLong(35, apocLongest);
+                psStats.setInt(36, apocMaxWaves);
+                psStats.setString(37, pass);
+                psStats.setString(38, foodsEatenStr);
+                psStats.setString(39, enderChestStr);
+                psStats.setString(40, bankItemsStr);
+                psStats.executeUpdate();
+                
+                psHomeDelete.setString(1, uuid.toString());
+                psHomeDelete.executeUpdate();
+                
+                if (homesCopy != null) {
+                    for (int i = 0; i < 54; i++) {
+                        if (homesCopy[i] != null && homesCopy[i].getWorld() != null) {
+                            psHomeInsert.setString(1, uuid.toString());
+                            psHomeInsert.setInt(2, i);
+                            psHomeInsert.setString(3, homesCopy[i].getWorld().getName());
+                            psHomeInsert.setDouble(4, homesCopy[i].getX());
+                            psHomeInsert.setDouble(5, homesCopy[i].getY());
+                            psHomeInsert.setDouble(6, homesCopy[i].getZ());
+                            psHomeInsert.setFloat(7, homesCopy[i].getPitch());
+                            psHomeInsert.setFloat(8, homesCopy[i].getYaw());
+                            psHomeInsert.setString(9, (homeNamesCopy != null && homeNamesCopy[i] != null) ? homeNamesCopy[i] : null);
+                            psHomeInsert.executeUpdate();
+                        }
+                    }
+                }
+                
+            } catch (Exception e) {
+                getLogger().severe("Failed to save player data asynchronously for UUID: " + uuid);
+                e.printStackTrace();
+            }
+        });
     }
 
     private void unloadPlayerData(UUID uuid) {
@@ -1405,10 +1789,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return count;
     }
 
-    @EventHandler
-    public void onChunkUnload(org.bukkit.event.world.ChunkUnloadEvent event) {
-        event.getChunk().setForceLoaded(true);
-    }
 
     @EventHandler
     public void onPlayerTeleport(org.bukkit.event.player.PlayerTeleportEvent event) {
@@ -10851,6 +11231,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             currentVehicle.addPassenger(display);
             currentVehicle = display;
             
+            // Hide the tag display from the owner player so it doesn't block their first-person crosshair
+            player.hideEntity(this, display);
+            
             displays.add(display);
         }
         
@@ -13342,6 +13725,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         World world = dest.getWorld();
         getLogger().info("[TeleportSync] Teleporting player " + player.getName() + " to " + world.getName() + " " + dest.getBlockX() + "," + dest.getBlockY() + "," + dest.getBlockZ());
 
+        // Remove stacked passenger tag displays first to prevent passenger-teleport bugs in Spigot
+        List<org.bukkit.entity.TextDisplay> old = playerTagDisplays.remove(player.getUniqueId());
+        if (old != null) {
+            for (org.bukkit.entity.TextDisplay td : old) {
+                if (td.isValid()) td.remove();
+            }
+        }
+
         boolean success = false;
         try {
             success = player.teleport(dest);
@@ -13351,10 +13742,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         getLogger().info("[TeleportSync] Teleport result for " + player.getName() + ": " + success);
         if (success) {
+            // Re-create overhead tags at the new destination
+            updatePlayerFloatingTags(player);
             if (successMessage != null && !successMessage.isEmpty()) {
                 player.sendMessage(net.kyori.adventure.text.Component.text(successMessage, net.kyori.adventure.text.format.NamedTextColor.GREEN));
             }
         } else {
+            // Re-create tags if teleport failed so they aren't lost
+            updatePlayerFloatingTags(player);
             player.sendMessage(net.kyori.adventure.text.Component.text("❌ Teleportation failed! Please try again.", net.kyori.adventure.text.format.NamedTextColor.RED));
         }
     }
@@ -13363,17 +13758,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onBedrockBlockBreakMonitor(BlockBreakEvent event) {
         Player player = event.getPlayer();
         if (isBedrockPlayer(player)) {
-            Block block = event.getBlock();
-            Location loc = block.getLocation();
-            org.bukkit.block.data.BlockData data = loc.getBlock().getBlockData();
+            Location loc = event.getBlock().getLocation();
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 if (player.isOnline()) {
-                    player.sendBlockChange(loc, data);
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
                 }
             }, 1L);
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 if (player.isOnline()) {
-                    player.sendBlockChange(loc, data);
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
                 }
             }, 3L);
         }
@@ -13383,17 +13776,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onBedrockBlockPlaceMonitor(BlockPlaceEvent event) {
         Player player = event.getPlayer();
         if (isBedrockPlayer(player)) {
-            Block block = event.getBlock();
-            Location loc = block.getLocation();
-            org.bukkit.block.data.BlockData data = loc.getBlock().getBlockData();
+            Location loc = event.getBlock().getLocation();
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 if (player.isOnline()) {
-                    player.sendBlockChange(loc, data);
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
                 }
             }, 1L);
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 if (player.isOnline()) {
-                    player.sendBlockChange(loc, data);
+                    player.sendBlockChange(loc, loc.getBlock().getBlockData());
                 }
             }, 3L);
         }
