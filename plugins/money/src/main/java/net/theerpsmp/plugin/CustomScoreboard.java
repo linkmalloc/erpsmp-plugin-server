@@ -68,63 +68,11 @@ import org.bukkit.scheduler.BukkitRunnable;
 public class CustomScoreboard extends JavaPlugin implements Listener, CommandExecutor {
 
     private final HashMap<UUID, Integer> timePlayedMap = new HashMap<>();
-    private final HashMap<UUID, Long> erpiesMap = new HashMap<>() {
-        @Override
-        public Long put(UUID key, Long value) {
-            Long res = super.put(key, value);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-        @Override
-        public Long remove(Object key) {
-            Long res = super.remove(key);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-    };
-    private final HashMap<UUID, Long> derpiesMap = new HashMap<>() {
-        @Override
-        public Long put(UUID key, Long value) {
-            Long res = super.put(key, value);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-        @Override
-        public Long remove(Object key) {
-            Long res = super.remove(key);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-    };
+    private final HashMap<UUID, Long> erpiesMap = new HashMap<>();
+    private final HashMap<UUID, Long> derpiesMap = new HashMap<>();
     private final HashMap<UUID, Integer> keysMap = new HashMap<>();
-    private final HashMap<UUID, Integer> killsMap = new HashMap<>() {
-        @Override
-        public Integer put(UUID key, Integer value) {
-            Integer res = super.put(key, value);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-        @Override
-        public Integer remove(Object key) {
-            Integer res = super.remove(key);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-    };
-    private final HashMap<UUID, Integer> deathsMap = new HashMap<>() {
-        @Override
-        public Integer put(UUID key, Integer value) {
-            Integer res = super.put(key, value);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-        @Override
-        public Integer remove(Object key) {
-            Integer res = super.remove(key);
-            updateLeaderboardFloatingTexts(true);
-            return res;
-        }
-    };
+    private final HashMap<UUID, Integer> killsMap = new HashMap<>();
+    private final HashMap<UUID, Integer> deathsMap = new HashMap<>();
 
     // Key tracking for /derpshop
     private final HashMap<UUID, Integer> regularKeysMap = new HashMap<>();
@@ -588,7 +536,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("tpaccept") != null) getCommand("tpaccept").setExecutor(this);
         if (getCommand("pay") != null) getCommand("pay").setExecutor(this);
         if (getCommand("stash") != null) getCommand("stash").setExecutor(this);
-        if (getCommand("currency") != null) getCommand("currency").setExecutor(this);
+        if (getCommand("erpies") != null) getCommand("erpies").setExecutor(this);
         if (getCommand("echokeys") != null) getCommand("echokeys").setExecutor(this);
         if (getCommand("crimsonkeys") != null) getCommand("crimsonkeys").setExecutor(this);
         if (getCommand("adminroom") != null) getCommand("adminroom").setExecutor(this);
@@ -617,7 +565,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("login") != null) getCommand("login").setExecutor(this);
         if (getCommand("deposit") != null) getCommand("deposit").setExecutor(this);
         if (getCommand("withdraw") != null) getCommand("withdraw").setExecutor(this);
-        // Removed erpscoreboard registration
+        if (getCommand("erpscoreboard") != null) getCommand("erpscoreboard").setExecutor(this);
         if (getCommand("cut") != null) getCommand("cut").setExecutor(this);
         if (getCommand("alwaysday") != null) getCommand("alwaysday").setExecutor(this);
         if (getCommand("maketeam") != null) getCommand("maketeam").setExecutor(this);
@@ -2256,174 +2204,92 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        if (command.getName().equalsIgnoreCase("currency")) {
-            if (sender instanceof Player playerSender) {
-                if (!playerSender.getUniqueId().toString().equals("00000000-0000-0000-0009-01f06c518376")) {
-                    playerSender.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
-                    return true;
-                }
-            }
-            if (args.length < 3) {
-                sender.sendMessage(Component.text("❌ Usage: /currency (playername/all) (erpies/derpies/kills/deaths/keys) (add/remove/set/reset) [amount]", NamedTextColor.RED));
+        if (command.getName().equalsIgnoreCase("erpscoreboard")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
-            String targetArg = args[0];
-            String currencyArg = args[1].toLowerCase();
-            String opArg = args[2].toLowerCase();
+            if (args.length < 2) {
+                player.sendMessage(Component.text("❌ Usage: /erpscoreboard (t/e/d/k/ki/de) (add/remove/set/reset) (amount) [player]", NamedTextColor.RED));
+                return true;
+            }
+            String statArg = args[0].toLowerCase();
+            String opArg = args[1].toLowerCase();
             long amount = 0;
+            Player target = player;
+            int nextArgIdx = 2;
             
             if (!opArg.equals("reset")) {
-                if (args.length < 4) {
-                    sender.sendMessage(Component.text("❌ Usage: /currency (playername/all) (erpies/derpies/kills/deaths/keys) (add/remove/set) (amount)", NamedTextColor.RED));
+                if (args.length < 3) {
+                    player.sendMessage(Component.text("❌ Usage: /erpscoreboard <t/e/d/k/ki/de> <add/remove/set> <amount> [player]", NamedTextColor.RED));
                     return true;
                 }
                 try {
-                    amount = parseAmountWithSuffix(args[3]);
+                    amount = Long.parseLong(args[2]);
+                    nextArgIdx = 3;
                 } catch (NumberFormatException e) {
-                    sender.sendMessage(Component.text("❌ Invalid amount format!", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Invalid amount format!", NamedTextColor.RED));
                     return true;
                 }
             }
             
-            if (!currencyArg.equals("erpies") && !currencyArg.equals("derpies") && !currencyArg.equals("kills") && !currencyArg.equals("deaths") && !currencyArg.equals("keys")) {
-                sender.sendMessage(Component.text("❌ Unknown currency/stat type! Use: erpies, derpies, kills, deaths, keys", NamedTextColor.RED));
-                return true;
-            }
-            
-            if (!opArg.equals("add") && !opArg.equals("remove") && !opArg.equals("set") && !opArg.equals("reset")) {
-                sender.sendMessage(Component.text("❌ Unknown operation! Use: add, remove, set, reset", NamedTextColor.RED));
-                return true;
-            }
-            
-            java.util.List<UUID> targetUUIDs = new java.util.ArrayList<>();
-            java.util.Map<UUID, Player> onlineMap = new java.util.HashMap<>();
-            
-            if (targetArg.equalsIgnoreCase("all")) {
-                for (Player p : Bukkit.getOnlinePlayers()) {
-                    targetUUIDs.add(p.getUniqueId());
-                    onlineMap.put(p.getUniqueId(), p);
+            if (args.length > nextArgIdx) {
+                target = Bukkit.getPlayer(args[nextArgIdx]);
+                if (target == null) {
+                    player.sendMessage(Component.text("❌ Target player not found!", NamedTextColor.RED));
+                    return true;
                 }
-                org.bukkit.configuration.ConfigurationSection playersSec = getConfig().getConfigurationSection("players");
-                if (playersSec != null) {
-                    for (String key : playersSec.getKeys(false)) {
-                        try {
-                            UUID uuid = UUID.fromString(key);
-                            if (!onlineMap.containsKey(uuid)) {
-                                targetUUIDs.add(uuid);
-                            }
-                        } catch (IllegalArgumentException ignored) {}
-                    }
+            }
+            
+            UUID targetUUID = target.getUniqueId();
+            long currentValue = 0;
+            switch (statArg) {
+                case "t", "h" -> currentValue = timePlayedMap.getOrDefault(targetUUID, 0);
+                case "e" -> currentValue = erpiesMap.getOrDefault(targetUUID, 0L);
+                case "d" -> currentValue = derpiesMap.getOrDefault(targetUUID, 0L);
+                case "k" -> currentValue = keysMap.getOrDefault(targetUUID, 0);
+                case "ki" -> currentValue = killsMap.getOrDefault(targetUUID, 0);
+                case "de" -> currentValue = deathsMap.getOrDefault(targetUUID, 0);
+                default -> {
+                    player.sendMessage(Component.text("❌ Unknown stat '" + statArg + "'! Use: t, e, d, k, ki, de", NamedTextColor.RED));
+                    return true;
+                }
+            }
+
+            long newValue = currentValue;
+            switch (opArg) {
+                case "add" -> newValue = currentValue + amount;
+                case "remove" -> newValue = currentValue - amount;
+                case "set" -> newValue = amount;
+                case "reset" -> newValue = 0;
+                default -> {
+                    player.sendMessage(Component.text("❌ Unknown operation '" + opArg + "'! Use: add, remove, set, reset", NamedTextColor.RED));
+                    return true;
+                }
+            }
+            
+            if (statArg.equals("t") || statArg.equals("h") || statArg.equals("k") || statArg.equals("ki") || statArg.equals("de")) {
+                if (newValue < 0) newValue = 0;
+                if (newValue > Integer.MAX_VALUE) newValue = Integer.MAX_VALUE;
+                int intVal = (int) newValue;
+                switch (statArg) {
+                    case "t", "h" -> timePlayedMap.put(targetUUID, intVal);
+                    case "k" -> keysMap.put(targetUUID, intVal);
+                    case "ki" -> killsMap.put(targetUUID, intVal);
+                    case "de" -> deathsMap.put(targetUUID, intVal);
                 }
             } else {
-                Player onlineTarget = Bukkit.getPlayer(targetArg);
-                if (onlineTarget != null) {
-                    targetUUIDs.add(onlineTarget.getUniqueId());
-                    onlineMap.put(onlineTarget.getUniqueId(), onlineTarget);
-                } else {
-                    UUID offlineUUID = null;
-                    org.bukkit.configuration.ConfigurationSection playersSec = getConfig().getConfigurationSection("players");
-                    if (playersSec != null) {
-                        for (String key : playersSec.getKeys(false)) {
-                            String name = getConfig().getString("players." + key + ".lastKnownName");
-                            if (name != null && name.equalsIgnoreCase(targetArg)) {
-                                try {
-                                    offlineUUID = UUID.fromString(key);
-                                    break;
-                                } catch (IllegalArgumentException ignored) {}
-                            }
-                        }
-                    }
-                    if (offlineUUID == null) {
-                        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(targetArg);
-                        if (op != null && op.getUniqueId() != null) {
-                            offlineUUID = op.getUniqueId();
-                        }
-                    }
-                    if (offlineUUID != null) {
-                        targetUUIDs.add(offlineUUID);
-                    } else {
-                        sender.sendMessage(Component.text("❌ Target player not found!", NamedTextColor.RED));
-                        return true;
-                    }
-                }
-            }
-            
-            for (UUID targetUUID : targetUUIDs) {
-                Player onlinePlayer = onlineMap.get(targetUUID);
-                long currentValue = 0;
-                if (onlinePlayer != null) {
-                    if (currencyArg.equals("erpies")) {
-                        currentValue = erpiesMap.getOrDefault(targetUUID, 0L);
-                    } else if (currencyArg.equals("derpies")) {
-                        currentValue = derpiesMap.getOrDefault(targetUUID, 0L);
-                    } else if (currencyArg.equals("kills")) {
-                        currentValue = killsMap.getOrDefault(targetUUID, 0);
-                    } else if (currencyArg.equals("deaths")) {
-                        currentValue = deathsMap.getOrDefault(targetUUID, 0);
-                    } else if (currencyArg.equals("keys")) {
-                        currentValue = keysMap.getOrDefault(targetUUID, 0);
-                    }
-                } else {
-                    String path = "players." + targetUUID.toString() + ".";
-                    if (currencyArg.equals("erpies")) {
-                        currentValue = getConfig().getLong(path + "erpies", 0L);
-                    } else if (currencyArg.equals("derpies")) {
-                        currentValue = getConfig().getLong(path + "derpies", 0L);
-                    } else if (currencyArg.equals("kills")) {
-                        currentValue = getConfig().getInt(path + "kills", 0);
-                    } else if (currencyArg.equals("deaths")) {
-                        currentValue = getConfig().getInt(path + "deaths", 0);
-                    } else if (currencyArg.equals("keys")) {
-                        currentValue = getConfig().getInt(path + "keys", 0);
-                    }
-                }
-                
-                long newValue = currentValue;
-                if (opArg.equals("add")) {
-                    newValue = currentValue + amount;
-                } else if (opArg.equals("remove")) {
-                    newValue = currentValue - amount;
-                } else if (opArg.equals("set")) {
-                    newValue = amount;
-                } else if (opArg.equals("reset")) {
-                    newValue = 0;
-                }
-                
                 if (newValue < 0) newValue = 0;
-                
-                if (onlinePlayer != null) {
-                    if (currencyArg.equals("erpies")) {
-                        erpiesMap.put(targetUUID, newValue);
-                    } else if (currencyArg.equals("derpies")) {
-                        derpiesMap.put(targetUUID, newValue);
-                    } else {
-                        if (newValue > Integer.MAX_VALUE) newValue = Integer.MAX_VALUE;
-                        int intVal = (int) newValue;
-                        if (currencyArg.equals("kills")) {
-                            killsMap.put(targetUUID, intVal);
-                        } else if (currencyArg.equals("deaths")) {
-                            deathsMap.put(targetUUID, intVal);
-                        } else if (currencyArg.equals("keys")) {
-                            keysMap.put(targetUUID, intVal);
-                        }
-                    }
-                    updateScoreboard(onlinePlayer);
-                    savePlayerData(onlinePlayer);
-                    onlinePlayer.sendMessage(Component.text("⚙️ Your " + currencyArg + " has been updated to " + newValue, NamedTextColor.GOLD));
-                } else {
-                    String path = "players." + targetUUID.toString() + ".";
-                    if (currencyArg.equals("erpies") || currencyArg.equals("derpies")) {
-                        getConfig().set(path + currencyArg, newValue);
-                    } else {
-                        if (newValue > Integer.MAX_VALUE) newValue = Integer.MAX_VALUE;
-                        getConfig().set(path + currencyArg, (int) newValue);
-                    }
-                    saveConfig();
-                    updateLeaderboardFloatingTexts(true);
+                switch (statArg) {
+                    case "e" -> erpiesMap.put(targetUUID, newValue);
+                    case "d" -> derpiesMap.put(targetUUID, newValue);
                 }
             }
-            
-            sender.sendMessage(Component.text("✅ Successfully updated " + currencyArg + " for " + (targetArg.equalsIgnoreCase("all") ? "all players" : targetArg) + " to the new value(s).", NamedTextColor.GREEN));
+
+            updateScoreboard(target);
+            player.sendMessage(Component.text("✅ Successfully updated " + statArg + " for " + target.getName() + " to " + newValue, NamedTextColor.GREEN));
+            target.sendMessage(Component.text("⚙️ Your scoreboard stat (" + statArg + ") has been updated to " + newValue, NamedTextColor.GOLD));
+            savePlayerData(target);
             return true;
         }
 
@@ -2749,7 +2615,32 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         // --- /erpies <player> <amount> (OP) ---
-        // Removed erpies command
+        if (command.getName().equalsIgnoreCase("erpies")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 2) {
+                player.sendMessage(Component.text("❌ Usage: /erpies <player> <amount>", NamedTextColor.RED));
+                return true;
+            }
+            Player target = Bukkit.getPlayer(args[0]);
+            if (target == null) {
+                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
+                return true;
+            }
+            long amount;
+            try {
+                amount = parseAmountWithSuffix(args[1]);
+            } catch (NumberFormatException e) {
+                player.sendMessage(Component.text("❌ Invalid amount format! E.g. 500, 10k, 1.5m, 1b", NamedTextColor.RED));
+                return true;
+            }
+            UUID targetUUID = target.getUniqueId();
+            erpiesMap.put(targetUUID, amount);
+            player.sendMessage(Component.text("✅ Set " + target.getName() + "'s Erpies to " + amount, NamedTextColor.GREEN));
+            return true;
+        }
 
         // --- /echokeys <player> <reset|remove|add> <amount> (OP) ---
         if (command.getName().equalsIgnoreCase("echokeys")) {
@@ -11906,15 +11797,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private int leaderboardUpdateTicks = 0;
     private void updateLeaderboardFloatingTexts() {
-        updateLeaderboardFloatingTexts(false);
-    }
-
-    private void updateLeaderboardFloatingTexts(boolean force) {
-        if (!force) {
-            leaderboardUpdateTicks++;
-            if (leaderboardUpdateTicks % 10 != 0) { // Every 10 seconds (ticks run every 1 second)
-                return;
-            }
+        leaderboardUpdateTicks++;
+        if (leaderboardUpdateTicks % 10 != 0) { // Every 10 seconds (ticks run every 1 second)
+            return;
         }
         for (World world : Bukkit.getWorlds()) {
             for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
