@@ -170,7 +170,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (spectatorCount) spectatorCount.textContent = '64 Watching';
 
     function connectToRealtimeFeed() {
-        const source = new EventSource('http://localhost:8080/events');
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const relayUrl = isLocal ? 'http://localhost:8080' : 'https://play.theerpsmp.net:8080';
+        const source = new EventSource(`${relayUrl}/events`);
         
         source.onmessage = (event) => {
             try {

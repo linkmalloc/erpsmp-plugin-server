@@ -617,6 +617,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         loadAdminToken();
         startWebhookServer();
 
+        // Clean up orphaned player tag displays on startup
+        for (World world : Bukkit.getWorlds()) {
+            for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
+                if (display.getPersistentDataContainer().has(new NamespacedKey(this, "is_player_tag"), PersistentDataType.BOOLEAN)) {
+                    display.remove();
+                }
+            }
+        }
+
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 UUID uuid = player.getUniqueId();
@@ -858,13 +867,35 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 Location eyeLoc = player.getEyeLocation();
                 
                 for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
-                    // Crate shop, command chest, and leaderboard holograms are stationary (no vehicle)
-                    if (display.getVehicle() == null) {
+                    boolean isPlayerTag = display.getPersistentDataContainer().has(new NamespacedKey(this, "is_player_tag"), PersistentDataType.BOOLEAN);
+                    if (display.getVehicle() == null || isPlayerTag) {
                         double distSq = display.getLocation().distanceSquared(eyeLoc);
                         boolean canSee = false;
                         if (distSq <= 1600.0) { // Within 40 blocks
                             canSee = player.hasLineOfSight(display);
                         }
+                        
+                        // Spectator mode visibility culling: viewer cannot see tags
+                        if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+                            canSee = false;
+                        }
+                        
+                        if (isPlayerTag) {
+                            String ownerUUIDStr = display.getPersistentDataContainer().get(new NamespacedKey(this, "player_tag_owner"), PersistentDataType.STRING);
+                            if (ownerUUIDStr != null) {
+                                try {
+                                    UUID ownerUUID = UUID.fromString(ownerUUIDStr);
+                                    Player owner = Bukkit.getPlayer(ownerUUID);
+                                    // If owner is offline or in spectator mode, tag is hidden
+                                    if (owner == null || !owner.isOnline() || owner.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+                                        canSee = false;
+                                    }
+                                } catch (Exception ignored) {
+                                    canSee = false;
+                                }
+                            }
+                        }
+                        
                         updateDisplayVisibility(player, display, canSee);
                     }
                 }
@@ -1235,6 +1266,42 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private void loadPlayerData(Player player) {
         loadPlayerData(player.getUniqueId());
+        
+        UUID uuid = player.getUniqueId();
+        String name = player.getName();
+        if (name != null && name.startsWith(".")) {
+            String cleanName = name.substring(1);
+            org.bukkit.OfflinePlayer javaPlayer = Bukkit.getOfflinePlayer(cleanName);
+            if (javaPlayer != null && javaPlayer.getUniqueId() != null) {
+                UUID javaUuid = javaPlayer.getUniqueId();
+                
+                boolean hasPlus = hasErpPlusMap.getOrDefault(javaUuid, false);
+                boolean hasPro = hasErpProMap.getOrDefault(javaUuid, false);
+                boolean hasProMax = hasErpProMaxMap.getOrDefault(javaUuid, false);
+                boolean hasVip = hasVipMap.getOrDefault(javaUuid, false);
+
+                // If not loaded in maps, check DB directly
+                if (!hasPlus && !hasPro && !hasProMax && !hasVip) {
+                    try (Connection conn = getConnection();
+                         PreparedStatement psJava = conn.prepareStatement("SELECT hasErpPlus, hasErpPro, hasErpProMax, hasVip FROM player_stats WHERE uuid = ?")) {
+                        psJava.setString(1, javaUuid.toString());
+                        try (ResultSet rsJava = psJava.executeQuery()) {
+                            if (rsJava.next()) {
+                                if (rsJava.getInt("hasErpPlus") == 1) hasPlus = true;
+                                if (rsJava.getInt("hasErpPro") == 1) hasPro = true;
+                                if (rsJava.getInt("hasErpProMax") == 1) hasProMax = true;
+                                if (rsJava.getInt("hasVip") == 1) hasVip = true;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                if (hasPlus) hasErpPlusMap.put(uuid, true);
+                if (hasPro) hasErpProMap.put(uuid, true);
+                if (hasProMax) hasErpProMaxMap.put(uuid, true);
+                if (hasVip) hasVipMap.put(uuid, true);
+            }
+        }
     }
 
     private void loadPlayerData(UUID uuid) {
@@ -1794,6 +1861,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerTeleport(org.bukkit.event.player.PlayerTeleportEvent event) {
         Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        
+        // Remove old tag displays immediately before teleport occurs to prevent client ghost entities
+        List<org.bukkit.entity.TextDisplay> old = playerTagDisplays.remove(uuid);
+        if (old != null) {
+            for (org.bukkit.entity.TextDisplay td : old) {
+                if (td.isValid()) td.remove();
+            }
+        }
+
         if (event.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY) {
             Location from = event.getFrom();
             if (from.getWorld() != null) {
@@ -1828,6 +1905,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerChangedWorld(org.bukkit.event.player.PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        
+        // Remove old tag displays immediately
+        List<org.bukkit.entity.TextDisplay> old = playerTagDisplays.remove(uuid);
+        if (old != null) {
+            for (org.bukkit.entity.TextDisplay td : old) {
+                if (td.isValid()) td.remove();
+            }
+        }
+
         String fromWorld = event.getFrom().getName();
         boolean fromLobby = fromWorld.equalsIgnoreCase("spawn") || fromWorld.equalsIgnoreCase("afk") || fromWorld.equalsIgnoreCase("afk_zone");
         String toWorld = player.getWorld().getName();
@@ -2075,27 +2162,49 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
                 return true;
             }
-            
+            UUID counterpartUuid = null;
+            String tName = targetDisplayName;
+            if (tName != null) {
+                if (tName.startsWith(".")) {
+                    org.bukkit.OfflinePlayer javaPlayer = Bukkit.getOfflinePlayer(tName.substring(1));
+                    if (javaPlayer != null) counterpartUuid = javaPlayer.getUniqueId();
+                } else {
+                    org.bukkit.OfflinePlayer bedrockPlayer = Bukkit.getOfflinePlayer("." + tName);
+                    if (bedrockPlayer != null) counterpartUuid = bedrockPlayer.getUniqueId();
+                }
+            }
+
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
             hasVipMap.put(targetUuid, false);
+            if (counterpartUuid != null) {
+                hasErpPlusMap.put(counterpartUuid, false);
+                hasErpProMap.put(counterpartUuid, false);
+                hasErpProMaxMap.put(counterpartUuid, false);
+                hasVipMap.put(counterpartUuid, false);
+            }
+
             String rankLabel = "None";
             switch (rankArg) {
                 case "erp+":
                     hasErpPlusMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasErpPlusMap.put(counterpartUuid, true);
                     rankLabel = "Erp+";
                     break;
                 case "erp++":
                     hasErpProMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasErpProMap.put(counterpartUuid, true);
                     rankLabel = "Erp+ Pro";
                     break;
                 case "erp+++":
                     hasErpProMaxMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasErpProMaxMap.put(counterpartUuid, true);
                     rankLabel = "Erp+ Pro Max";
                     break;
                 case "vip":
                     hasVipMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasVipMap.put(counterpartUuid, true);
                     rankLabel = "VIP";
                     break;
                 case "none":
@@ -2109,6 +2218,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     return true;
             }
             savePlayerData(targetUuid);
+            if (counterpartUuid != null) {
+                savePlayerData(counterpartUuid);
+            }
             if (isOnline) {
                 updateScoreboard(target);
                 sender.sendMessage("Success: Set " + targetDisplayName + "'s rank to " + rankLabel);
@@ -2299,27 +2411,49 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
                 return true;
             }
+            UUID counterpartUuid = null;
+            if (targetDisplayName != null) {
+                if (targetDisplayName.startsWith(".")) {
+                    org.bukkit.OfflinePlayer javaPlayer = Bukkit.getOfflinePlayer(targetDisplayName.substring(1));
+                    if (javaPlayer != null) counterpartUuid = javaPlayer.getUniqueId();
+                } else {
+                    org.bukkit.OfflinePlayer bedrockPlayer = Bukkit.getOfflinePlayer("." + targetDisplayName);
+                    if (bedrockPlayer != null) counterpartUuid = bedrockPlayer.getUniqueId();
+                }
+            }
+
             // Clear all ranks first
             hasErpPlusMap.put(targetUuid, false);
             hasErpProMap.put(targetUuid, false);
             hasErpProMaxMap.put(targetUuid, false);
             hasVipMap.put(targetUuid, false);
+            if (counterpartUuid != null) {
+                hasErpPlusMap.put(counterpartUuid, false);
+                hasErpProMap.put(counterpartUuid, false);
+                hasErpProMaxMap.put(counterpartUuid, false);
+                hasVipMap.put(counterpartUuid, false);
+            }
+
             String rankLabel;
             switch (rankArg) {
                 case "erp+":
                     hasErpPlusMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasErpPlusMap.put(counterpartUuid, true);
                     rankLabel = "Erp+";
                     break;
                 case "erp++":
                     hasErpProMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasErpProMap.put(counterpartUuid, true);
                     rankLabel = "Erp+ Pro";
                     break;
                 case "erp+++":
                     hasErpProMaxMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasErpProMaxMap.put(counterpartUuid, true);
                     rankLabel = "Erp+ Pro Max";
                     break;
                 case "vip":
                     hasVipMap.put(targetUuid, true);
+                    if (counterpartUuid != null) hasVipMap.put(counterpartUuid, true);
                     rankLabel = "VIP";
                     break;
                 case "reset":
@@ -2333,6 +2467,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     return true;
             }
             savePlayerData(targetUuid);
+            if (counterpartUuid != null) {
+                savePlayerData(counterpartUuid);
+            }
             if (isOnline) {
                 updateScoreboard(target);
                 player.sendMessage(Component.text("✅ Set " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
@@ -2806,32 +2943,39 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
 
                 java.util.Date expiration = null;
+                String reason = "Banned by administrator";
+                Double days = null;
+
                 if (args.length >= 3) {
                     try {
-                        double days = Double.parseDouble(args[2]);
+                        days = Double.parseDouble(args[2]);
                         long ms = (long) (days * 24 * 60 * 60 * 1000);
                         expiration = new java.util.Date(System.currentTimeMillis() + ms);
+                        
+                        if (args.length >= 4) {
+                            reason = String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length));
+                        }
                     } catch (NumberFormatException e) {
-                        player.sendMessage(Component.text("❌ Invalid number of days!", NamedTextColor.RED));
-                        return true;
+                        reason = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
                     }
                 }
 
-                Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(targetName, "Banned by administrator", expiration, null);
+                Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(targetName, reason, expiration, null);
                 Player target = Bukkit.getPlayer(targetName);
                 if (target != null) {
-                    target.kick(Component.text("You have been banned from the server."));
+                    target.kick(Component.text("You have been banned from the server.\nReason: " + reason));
                 }
+                
                 if (expiration != null) {
-                    player.sendMessage(Component.text("✅ Banned player " + targetName + " for " + args[2] + " days", NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("✅ Banned player " + targetName + " for " + days + " days. Reason: " + reason, NamedTextColor.GREEN));
                 } else {
-                    player.sendMessage(Component.text("✅ Permanently banned player " + targetName, NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("✅ Permanently banned player " + targetName + ". Reason: " + reason, NamedTextColor.GREEN));
                 }
             } else if (action.equals("unban")) {
                 Bukkit.getBanList(org.bukkit.BanList.Type.NAME).pardon(targetName);
                 player.sendMessage(Component.text("✅ Unbanned player " + targetName, NamedTextColor.GREEN));
             } else {
-                player.sendMessage(Component.text("❌ Usage: /player (ban/unban) (playername) (optional:number of days of ban)", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /player (ban/unban) (playername) [days] [reason]", NamedTextColor.RED));
             }
             return true;
         }
@@ -11618,6 +11762,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
     public void onPlayerCommandPreprocess(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
+        String preprocessMsg = event.getMessage().toLowerCase().trim();
+        String[] preprocessParts = preprocessMsg.split(" ");
+        String preprocessCmd = preprocessParts[0].replaceAll("^/", "");
+        if (preprocessCmd.contains(":")) preprocessCmd = preprocessCmd.substring(preprocessCmd.indexOf(':') + 1);
+
+        if (preprocessCmd.equals("op") || preprocessCmd.equals("deop") || preprocessCmd.equals("ban")) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("❌ This command has been disabled by the administrator!", NamedTextColor.RED));
+            return;
+        }
         if (!loggedInPlayers.contains(player.getUniqueId()) && !isBedrockPlayer(player)) {
             String message = event.getMessage().toLowerCase().trim();
             String[] parts = message.split(" ");
@@ -11625,7 +11779,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (cmd.contains(":")) cmd = cmd.substring(cmd.indexOf(':') + 1);
             
             boolean isAuthCmd = cmd.equals("login") || cmd.equals("register");
-            boolean isAllowedOpCmd = player.isOp() && (cmd.equals("op") || cmd.equals("deop") || cmd.equals("ban") || cmd.equals("ban-ip") || cmd.equals("pardon"));
+            boolean isAllowedOpCmd = player.isOp() && (cmd.equals("player") || cmd.equals("kick") || cmd.equals("gm") || cmd.equals("gamemode"));
             
             if (!isAuthCmd && !isAllowedOpCmd) {
                 event.setCancelled(true);
