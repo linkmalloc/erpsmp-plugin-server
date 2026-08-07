@@ -1647,6 +1647,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        broadcastLiveEvent("join", "fa-user-plus", "<span class=\"highlight-name\">" + player.getName() + "</span> joined ErpSMP — Welcome! 🎉");
         loadPlayerData(player);
         updateScoreboard(player);
         updatePlayerFloatingTags(player);
@@ -1843,6 +1844,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
+        broadcastLiveEvent("join", "fa-door-open", "<span class=\"highlight-name\">" + player.getName() + "</span> left the game.");
         UUID uuid = player.getUniqueId();
 
         if (player.getWorld().getName().equalsIgnoreCase("apocalypse")) {
@@ -1930,6 +1932,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onPlayerKill(PlayerDeathEvent event) {
         Player victim = event.getEntity();
+        net.kyori.adventure.text.Component deathMessageComp = event.deathMessage();
+        String deathMsg = "";
+        if (deathMessageComp != null) {
+            deathMsg = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(deathMessageComp);
+        } else {
+            deathMsg = victim.getName() + " died.";
+        }
+        String formattedMsg = deathMsg.replace(victim.getName(), "<span class=\"highlight-name\">" + victim.getName() + "</span>");
+        Player eventKiller = victim.getKiller();
+        if (eventKiller != null) {
+            formattedMsg = formattedMsg.replace(eventKiller.getName(), "<span class=\"highlight-name\">" + eventKiller.getName() + "</span>");
+        }
+        broadcastLiveEvent("kill", "fa-skull", formattedMsg);
+
         UUID victimUUID = victim.getUniqueId();
         deathsMap.put(victimUUID, deathsMap.getOrDefault(victimUUID, 0) + 1);
 
@@ -1979,6 +1995,42 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         combatTagTicks.remove(victimUUID);
+    }
+
+    private void broadcastLiveEvent(String cls, String icon, String text) {
+        org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(2))
+                    .build();
+
+                java.util.Map<String, String> data = new java.util.HashMap<>();
+                data.put("cls", cls);
+                data.put("icon", icon);
+                data.put("text", text);
+
+                StringBuilder jsonBuilder = new StringBuilder("{");
+                int index = 0;
+                for (java.util.Map.Entry<String, String> entry : data.entrySet()) {
+                    if (index > 0) jsonBuilder.append(",");
+                    jsonBuilder.append("\"").append(entry.getKey()).append("\":\"")
+                               .append(entry.getValue().replace("\"", "\\\"")).append("\"");
+                    index++;
+                }
+                jsonBuilder.append("}");
+                String json = jsonBuilder.toString();
+
+                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("http://localhost:8080/api/publish"))
+                    .timeout(java.time.Duration.ofSeconds(2))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer ErpAdmin$2026!Secure")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+                client.send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
+            } catch (Exception ignored) {}
+        });
     }
 
     @Override
@@ -12805,6 +12857,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (deceased.getWorld().getName().equalsIgnoreCase("duel")) {
             Player killer = deceased.getKiller();
             if (killer != null && killer.isOnline() && killer.getWorld().getName().equalsIgnoreCase("duel")) {
+                broadcastLiveEvent("duel", "fa-trophy", "<span class=\"highlight-name\">" + killer.getName() + "</span> won a duel against <span class=\"highlight-name\">" + deceased.getName() + "</span>! 🏆");
                 killer.sendTitle("§a§lVICTORY!", "§fYou won the duel!", 10, 40, 10);
                 killer.sendMessage(Component.text("🏆 You won the duel! You have 1 minute to collect the loot before being teleported back to spawn.", NamedTextColor.GOLD));
                 

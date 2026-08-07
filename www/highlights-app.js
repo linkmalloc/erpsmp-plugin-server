@@ -166,13 +166,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    /* ---- Spectator Count Simulation ---- */
-    let spectators = 64;
-    setInterval(() => {
-        spectators += Math.floor(Math.random() * 7) - 3;
-        spectators = Math.max(38, Math.min(120, spectators));
-        if (spectatorCount) spectatorCount.textContent = `${spectators} Watching`;
-    }, 5000);
+    /* ---- Realtime Spectator and Event Feed ---- */
+    if (spectatorCount) spectatorCount.textContent = '64 Watching';
+
+    function connectToRealtimeFeed() {
+        const source = new EventSource('http://localhost:8080/events');
+        
+        source.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'spectators') {
+                    if (spectatorCount) spectatorCount.textContent = `${data.count} Watching`;
+                } else if (data.type === 'event') {
+                    addEvent({
+                        cls: data.cls,
+                        icon: data.icon,
+                        text: () => data.text
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse event data:", e);
+            }
+        };
+
+        source.onerror = () => {
+            source.close();
+            setTimeout(connectToRealtimeFeed, 5000);
+        };
+    }
+    connectToRealtimeFeed();
 
     /* ---- Live Server Event Feed ---- */
     const allEvents = [
@@ -217,11 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addEvent(allEvents[i % allEvents.length], ago);
     });
 
-    // Auto-generate new events
-    setInterval(() => {
-        const evt = allEvents[Math.floor(Math.random() * allEvents.length)];
-        addEvent(evt);
-    }, 7000);
+    // Real-time events will be appended dynamically via SSE.
 
     /* ---- Chat Input ---- */
     if (chatForm) {
