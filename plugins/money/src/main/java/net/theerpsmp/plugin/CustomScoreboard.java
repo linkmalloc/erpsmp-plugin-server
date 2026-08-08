@@ -885,10 +885,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             if (ownerUUIDStr != null) {
                                 try {
                                     UUID ownerUUID = UUID.fromString(ownerUUIDStr);
-                                    Player owner = Bukkit.getPlayer(ownerUUID);
-                                    // If owner is offline or in spectator mode, tag is hidden
-                                    if (owner == null || !owner.isOnline() || owner.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+                                    if (player.getUniqueId().equals(ownerUUID)) {
                                         canSee = false;
+                                    } else {
+                                        Player owner = Bukkit.getPlayer(ownerUUID);
+                                        // If owner is offline or in spectator mode, tag is hidden
+                                        if (owner == null || !owner.isOnline() || owner.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+                                            canSee = false;
+                                        }
                                     }
                                 } catch (Exception ignored) {
                                     canSee = false;
@@ -11331,8 +11335,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // 1. Remove old displays
         List<org.bukkit.entity.TextDisplay> old = playerTagDisplays.remove(uuid);
         if (old != null) {
+            java.util.Set<UUID> hidden = hiddenEntitiesMap.get(uuid);
             for (org.bukkit.entity.TextDisplay td : old) {
                 if (td.isValid()) td.remove();
+                if (hidden != null) hidden.remove(td.getUniqueId());
             }
         }
         
@@ -11425,7 +11431,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             currentVehicle = display;
             
             // Hide the tag display from the owner player so it doesn't block their first-person crosshair
-            player.hideEntity(this, display);
+            updateDisplayVisibility(player, display, false);
             
             displays.add(display);
         }
