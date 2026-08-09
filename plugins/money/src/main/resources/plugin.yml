@@ -254,3 +254,6 @@ commands:
   withdraw:
     description: Open the withdraw options interface (Operators only)
     usage: /withdraw
+  passwordreset:
+    description: Reset a Java player's password (Only for .RedToppat208 and .Boreas4052)
+    usage: /passwordreset <playername>

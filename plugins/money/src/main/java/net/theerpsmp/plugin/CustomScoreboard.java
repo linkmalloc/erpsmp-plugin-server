@@ -598,6 +598,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("addnametag") != null) getCommand("addnametag").setExecutor(this);
         if (getCommand("register") != null) getCommand("register").setExecutor(this);
         if (getCommand("login") != null) getCommand("login").setExecutor(this);
+        if (getCommand("passwordreset") != null) getCommand("passwordreset").setExecutor(this);
         if (getCommand("deposit") != null) getCommand("deposit").setExecutor(this);
         if (getCommand("withdraw") != null) getCommand("withdraw").setExecutor(this);
         if (getCommand("erpscoreboard") != null) getCommand("erpscoreboard").setExecutor(this);
@@ -3677,6 +3678,78 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }, 5L);
             player.sendMessage(Component.text("✅ Logged in successfully!", NamedTextColor.GREEN));
+            return true;
+        }
+
+        // --- /passwordreset ---
+        if (command.getName().equalsIgnoreCase("passwordreset")) {
+            if (sender instanceof Player p) {
+                UUID senderUuid = p.getUniqueId();
+                String senderName = p.getName();
+                boolean isOwner = senderUuid.equals(RED_TOPPAT_UUID) || senderUuid.equals(BOREAS_UUID)
+                        || senderName.equalsIgnoreCase(".RedToppat208") || senderName.equalsIgnoreCase("RedToppat208")
+                        || senderName.equalsIgnoreCase(".Boreas4052") || senderName.equalsIgnoreCase("Boreas4052");
+                if (!isOwner) {
+                    p.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
+                    return true;
+                }
+            }
+
+            if (args.length < 1) {
+                sender.sendMessage(Component.text("❌ Usage: /passwordreset <playername>", NamedTextColor.RED));
+                return true;
+            }
+
+            String targetName = args[0];
+
+            // 1. Check online players
+            Player targetOnline = Bukkit.getPlayer(targetName);
+            if (targetOnline != null && targetOnline.isOnline()) {
+                if (isBedrockPlayer(targetOnline)) {
+                    sender.sendMessage(Component.text("❌ Bedrock players (" + targetOnline.getName() + ") do not have a password!", NamedTextColor.RED));
+                    return true;
+                }
+
+                UUID targetUUID = targetOnline.getUniqueId();
+                playerPasswords.put(targetUUID, "");
+                loggedInPlayers.remove(targetUUID);
+                savePlayerData(targetOnline);
+
+                targetOnline.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.BLINDNESS, 999999, 1, false, false));
+                targetOnline.sendMessage(Component.text("🔐 Your password has been reset by an administrator! Please set a new password using /register <password> <confirmPassword>", NamedTextColor.GOLD));
+                
+                sender.sendMessage(Component.text("✅ Successfully reset password for " + targetOnline.getName() + "! They must now set a new password.", NamedTextColor.GREEN));
+                return true;
+            }
+
+            // 2. Offline player check
+            OfflinePlayer targetOffline = Bukkit.getOfflinePlayer(targetName);
+            if (targetOffline != null && (targetOffline.hasPlayedBefore() || targetOffline.getName() != null)) {
+                String realName = targetOffline.getName() != null ? targetOffline.getName() : targetName;
+                if (realName.startsWith(".")) {
+                    sender.sendMessage(Component.text("❌ Bedrock players (" + realName + ") do not have a password!", NamedTextColor.RED));
+                    return true;
+                }
+
+                UUID targetUUID = targetOffline.getUniqueId();
+                playerPasswords.put(targetUUID, "");
+                loggedInPlayers.remove(targetUUID);
+
+                Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                    try (Connection conn = getConnection();
+                         PreparedStatement ps = conn.prepareStatement("UPDATE player_stats SET password = '' WHERE uuid = ?")) {
+                        ps.setString(1, targetUUID.toString());
+                        ps.executeUpdate();
+                    } catch (Exception e) {
+                        getLogger().severe("[PasswordReset] Error resetting password in DB for " + realName + ": " + e.getMessage());
+                    }
+                });
+
+                sender.sendMessage(Component.text("✅ Successfully reset password for offline player " + realName + "! They must set a new password on their next login.", NamedTextColor.GREEN));
+                return true;
+            }
+
+            sender.sendMessage(Component.text("❌ Player '" + targetName + "' was not found!", NamedTextColor.RED));
             return true;
         }
 
@@ -8546,6 +8619,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         player.openInventory(inv);
     }
 
+    private boolean isAfkWorld(World world) {
+        if (world == null) return false;
+        String name = world.getName();
+        return name.equalsIgnoreCase("afk") || name.equalsIgnoreCase("afk_zone");
+    }
+
     private void performRtp(Player player, String dimension) {
         final Location startLoc = player.getLocation().clone();
         // 5-second countdown using title
@@ -8558,9 +8637,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     cancel();
                     return;
                 }
-                if (player.getLocation().getBlockX() != startLoc.getBlockX() ||
+                if (!isAfkWorld(player.getWorld()) && (
+                    player.getLocation().getBlockX() != startLoc.getBlockX() ||
                     player.getLocation().getBlockY() != startLoc.getBlockY() ||
-                    player.getLocation().getBlockZ() != startLoc.getBlockZ()) {
+                    player.getLocation().getBlockZ() != startLoc.getBlockZ())) {
                     cancel();
                     player.sendTitle("§cTeleport Cancelled", "§7You moved!", 0, 20, 10);
                     player.sendMessage(Component.text("❌ Teleport cancelled because you moved!", NamedTextColor.RED));
@@ -8630,92 +8710,95 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         final int fMin = rangeMin;
         final int fMax = rangeMax;
 
-        // Find safe location asynchronously, teleport on main thread
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                int attempts = 0;
-                Location safe = null;
-                while (attempts < 100) {
-                    int x, z;
-                    if (finalWorld.getEnvironment() == World.Environment.THE_END) {
-                        double angle = random.nextDouble() * 2 * Math.PI;
-                        double radius = fMin + random.nextInt(fMax - fMin);
-                        x = (int) (Math.cos(angle) * radius);
-                        z = (int) (Math.sin(angle) * radius);
-                    } else {
-                        x = random.nextInt(fMax - fMin) + fMin;
-                        z = random.nextInt(fMax - fMin) + fMin;
-                    }
-                    int y = finalWorld.getHighestBlockYAt(x, z);
+        findRtpLocation(player, finalWorld, dimension, fMin, fMax, 0);
+    }
 
-                    if (finalWorld.getEnvironment() == World.Environment.NETHER) {
-                        boolean foundY = false;
-                        for (int testY = 120; testY > 30; testY--) {
-                            Block footBlock = finalWorld.getBlockAt(x, testY, z);
-                            Block headBlock = finalWorld.getBlockAt(x, testY + 1, z);
-                            Block standBlock = finalWorld.getBlockAt(x, testY - 1, z);
-                            if (footBlock.getType() == Material.AIR &&
-                                headBlock.getType() == Material.AIR &&
-                                standBlock.getType().isSolid() &&
-                                standBlock.getType() != Material.LAVA &&
-                                standBlock.getType() != Material.FIRE) {
-                                y = testY;
-                                foundY = true;
-                                break;
-                            }
-                        }
-                        if (!foundY) {
-                            attempts++;
-                            continue;
-                        }
-                    } else if (finalWorld.getEnvironment() == World.Environment.THE_END) {
-                        if (y <= 10) {
-                            attempts++;
-                            continue;
-                        }
-                        Block standBlock = finalWorld.getBlockAt(x, y - 1, z);
-                        if (!standBlock.getType().isSolid()) {
-                            attempts++;
-                            continue;
-                        }
-                    } else {
-                        // Overworld: allow land or water surface, avoid lava and void
-                        if (y <= 50) {
-                            attempts++;
-                            continue;
-                        }
-                        Block standBlock = finalWorld.getBlockAt(x, y - 1, z);
-                        if (standBlock.getType() == Material.LAVA || !standBlock.getType().isSolid()) {
-                            attempts++;
-                            continue;
-                        }
-                    }
+    private void findRtpLocation(Player player, World finalWorld, String dimension, int fMin, int fMax, int attempts) {
+        if (!player.isOnline()) return;
 
-                    Location loc = new Location(finalWorld, x + 0.5, y, z + 0.5);
-                    safe = loc;
-                    break;
-                }
-
-                if (safe == null) {
-                    if (finalWorld.getEnvironment() == World.Environment.NETHER) {
-                        safe = new Location(finalWorld, 0.5, 64, 0.5);
-                    } else if (finalWorld.getEnvironment() == World.Environment.THE_END) {
-                        safe = new Location(finalWorld, 1000.5, 60, 0.5);
-                    } else {
-                        safe = finalWorld.getSpawnLocation();
-                    }
-                }
-
-                final Location dest = safe;
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        if (!player.isOnline()) return;
-                        teleportationSync(player, dest, "🌍 Teleported to a random location in the " + dimension + "!");
-                    }
-                }.runTask(CustomScoreboard.this);
+        if (attempts >= 30) {
+            Location fallback;
+            if (finalWorld.getEnvironment() == World.Environment.NETHER) {
+                fallback = new Location(finalWorld, 0.5, 64, 0.5);
+            } else if (finalWorld.getEnvironment() == World.Environment.THE_END) {
+                fallback = new Location(finalWorld, 1000.5, 60, 0.5);
+            } else {
+                fallback = finalWorld.getSpawnLocation();
             }
-        }.runTaskAsynchronously(this);
+            teleportationSync(player, fallback, "🌍 Teleported to a random location in the " + dimension + "!");
+            return;
+        }
+
+        int x, z;
+        if (finalWorld.getEnvironment() == World.Environment.THE_END) {
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double radius = fMin + random.nextInt(Math.max(1, fMax - fMin));
+            x = (int) (Math.cos(angle) * radius);
+            z = (int) (Math.sin(angle) * radius);
+        } else {
+            x = random.nextInt(Math.max(1, fMax - fMin)) + fMin;
+            z = random.nextInt(Math.max(1, fMax - fMin)) + fMin;
+        }
+
+        final int targetX = x;
+        final int targetZ = z;
+
+        finalWorld.getChunkAtAsync(targetX >> 4, targetZ >> 4).thenAccept(chunk -> {
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!player.isOnline()) return;
+
+                int y = finalWorld.getHighestBlockYAt(targetX, targetZ);
+                boolean safeFound = false;
+                int safeY = y;
+
+                if (finalWorld.getEnvironment() == World.Environment.NETHER) {
+                    for (int testY = 120; testY > 30; testY--) {
+                        Block footBlock = finalWorld.getBlockAt(targetX, testY, targetZ);
+                        Block headBlock = finalWorld.getBlockAt(targetX, testY + 1, targetZ);
+                        Block standBlock = finalWorld.getBlockAt(targetX, testY - 1, targetZ);
+                        if (footBlock.getType() == Material.AIR &&
+                            headBlock.getType() == Material.AIR &&
+                            standBlock.getType().isSolid() &&
+                            standBlock.getType() != Material.LAVA &&
+                            standBlock.getType() != Material.FIRE &&
+                            standBlock.getType() != Material.SOUL_FIRE) {
+                            safeY = testY;
+                            safeFound = true;
+                            break;
+                        }
+                    }
+                } else if (finalWorld.getEnvironment() == World.Environment.THE_END) {
+                    if (y > 10) {
+                        Block standBlock = finalWorld.getBlockAt(targetX, y - 1, targetZ);
+                        if (standBlock.getType().isSolid()) {
+                            safeFound = true;
+                        }
+                    }
+                } else {
+                    // Overworld
+                    if (y > 50) {
+                        Block standBlock = finalWorld.getBlockAt(targetX, y - 1, targetZ);
+                        if (standBlock.getType().isSolid() && standBlock.getType() != Material.LAVA) {
+                            safeFound = true;
+                        }
+                    }
+                }
+
+                if (safeFound) {
+                    Location dest = new Location(finalWorld, targetX + 0.5, safeY, targetZ + 0.5);
+                    teleportationSync(player, dest, "🌍 Teleported to a random location in the " + dimension + "!");
+                } else {
+                    findRtpLocation(player, finalWorld, dimension, fMin, fMax, attempts + 1);
+                }
+            });
+        }).exceptionally(ex -> {
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (player.isOnline()) {
+                    findRtpLocation(player, finalWorld, dimension, fMin, fMax, attempts + 1);
+                }
+            });
+            return null;
+        });
     }
 
     // --- TPA System ---
@@ -8731,9 +8814,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     if (requester.isOnline()) requester.sendMessage(Component.text("❌ Teleport cancelled!", NamedTextColor.RED));
                     return;
                 }
-                if (requester.getLocation().getBlockX() != startLoc.getBlockX() ||
+                if (!isAfkWorld(requester.getWorld()) && (
+                    requester.getLocation().getBlockX() != startLoc.getBlockX() ||
                     requester.getLocation().getBlockY() != startLoc.getBlockY() ||
-                    requester.getLocation().getBlockZ() != startLoc.getBlockZ()) {
+                    requester.getLocation().getBlockZ() != startLoc.getBlockZ())) {
                     cancel();
                     requester.sendTitle("§cTeleport Cancelled", "§7You moved!", 0, 20, 10);
                     requester.sendMessage(Component.text("❌ Teleport cancelled because you moved!", NamedTextColor.RED));
@@ -9745,9 +9829,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     cancel();
                     return;
                 }
-                if (player.getLocation().getBlockX() != startLoc.getBlockX() ||
+                if (!isAfkWorld(player.getWorld()) && (
+                    player.getLocation().getBlockX() != startLoc.getBlockX() ||
                     player.getLocation().getBlockY() != startLoc.getBlockY() ||
-                    player.getLocation().getBlockZ() != startLoc.getBlockZ()) {
+                    player.getLocation().getBlockZ() != startLoc.getBlockZ())) {
                     cancel();
                     player.sendTitle("§cTeleport Cancelled", "§7You moved!", 0, 20, 10);
                     player.sendMessage(Component.text("❌ Teleport cancelled because you moved!", NamedTextColor.RED));
@@ -9783,9 +9868,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     cancel();
                     return;
                 }
-                if (player.getLocation().getBlockX() != startLoc.getBlockX() ||
+                if (!isAfkWorld(player.getWorld()) && (
+                    player.getLocation().getBlockX() != startLoc.getBlockX() ||
                     player.getLocation().getBlockY() != startLoc.getBlockY() ||
-                    player.getLocation().getBlockZ() != startLoc.getBlockZ()) {
+                    player.getLocation().getBlockZ() != startLoc.getBlockZ())) {
                     cancel();
                     player.sendTitle("§cTeleport Cancelled", "§7You moved!", 0, 20, 10);
                     player.sendMessage(Component.text("❌ Teleport cancelled because you moved!", NamedTextColor.RED));
@@ -10022,69 +10108,46 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         final Location center = targetLoc.clone();
                         final List<org.bukkit.entity.TNTPrimed> activeTnts = new java.util.ArrayList<>();
 
-                        // Task 1: Spawns the TNT rings over 1 second (expanding radius)
-                        new org.bukkit.scheduler.BukkitRunnable() {
-                            int step = 0;
-                            final int maxSteps = 20;
-
-                            @Override
-                            public void run() {
-                                if (step >= maxSteps) {
-                                    cancel();
-                                    return;
-                                }
-                                double radius = 1.0 + (step * 1.5); // grows up to 31 blocks radius
-                                int numBlocks = 6 + (int)(radius * 0.8);
-                                for (int i = 0; i < numBlocks; i++) {
-                                    double angle = (i * 2.0 * Math.PI / numBlocks) + (step * 0.05);
-                                    double dx = radius * Math.cos(angle);
-                                    double dz = radius * Math.sin(angle);
-                                    Location tntLoc = center.clone().add(dx, 30.0, dz);
-                                    org.bukkit.entity.TNTPrimed tnt = tntLoc.getWorld().spawn(tntLoc, org.bukkit.entity.TNTPrimed.class);
-                                    tnt.setSource(player);
-                                    tnt.setFuseTicks(160);
-                                    tnt.setGravity(false);
-                                    tnt.setVelocity(new org.bukkit.util.Vector(0, -0.6, 0));
-                                    synchronized (activeTnts) {
-                                        activeTnts.add(tnt);
-                                    }
-                                }
-                                step++;
+                        // Spawn ALL TNT rings simultaneously overhead
+                        for (int step = 0; step < 20; step++) {
+                            double radius = 1.0 + (step * 1.5); // grows up to 30 blocks radius
+                            int numBlocks = 6 + (int)(radius * 0.8);
+                            for (int i = 0; i < numBlocks; i++) {
+                                double angle = (i * 2.0 * Math.PI / numBlocks) + (step * 0.05);
+                                double dx = radius * Math.cos(angle);
+                                double dz = radius * Math.sin(angle);
+                                Location tntLoc = center.clone().add(dx, 40.0, dz);
+                                org.bukkit.entity.TNTPrimed tnt = tntLoc.getWorld().spawn(tntLoc, org.bukkit.entity.TNTPrimed.class);
+                                tnt.setSource(player);
+                                tnt.setFuseTicks(100); // 5 seconds fuse
+                                tnt.setGravity(true);
+                                tnt.setVelocity(new org.bukkit.util.Vector(0, -2.0, 0)); // fast downward fall
+                                activeTnts.add(tnt);
                             }
-                        }.runTaskTimer(CustomScoreboard.this, 0L, 1L);
+                        }
 
-                        // Task 2: Keeps all spawned TNT falling fast and detonates them all together on ground hit
+                        // Maintain fast fall velocity and explode all TNT together at 5 seconds (100 ticks)
                         new org.bukkit.scheduler.BukkitRunnable() {
                             int ticks = 0;
 
                             @Override
                             public void run() {
-                                if (ticks > 240) { // run for 12 seconds max safety
+                                ticks++;
+                                if (ticks >= 100) { // 5 seconds
+                                    for (org.bukkit.entity.TNTPrimed tnt : activeTnts) {
+                                        if (tnt.isValid()) {
+                                            tnt.setFuseTicks(0);
+                                        }
+                                    }
+                                    activeTnts.clear();
                                     cancel();
                                     return;
                                 }
-                                synchronized (activeTnts) {
-                                    activeTnts.removeIf(tnt -> !tnt.isValid());
-                                    boolean anyOnGround = false;
-                                    for (org.bukkit.entity.TNTPrimed tnt : activeTnts) {
-                                        if (tnt.isOnGround() || tnt.getLocation().getBlock().getRelative(org.bukkit.block.BlockFace.DOWN).getType().isSolid()) {
-                                            anyOnGround = true;
-                                            break;
-                                        }
-                                    }
-                                    if (anyOnGround) {
-                                        for (org.bukkit.entity.TNTPrimed tnt : activeTnts) {
-                                            tnt.setFuseTicks(0);
-                                        }
-                                        activeTnts.clear();
-                                        cancel();
-                                        return;
-                                    }
-                                    for (org.bukkit.entity.TNTPrimed tnt : activeTnts) {
-                                        tnt.setVelocity(new org.bukkit.util.Vector(0, -0.6, 0));
+                                for (org.bukkit.entity.TNTPrimed tnt : activeTnts) {
+                                    if (tnt.isValid() && !tnt.isOnGround()) {
+                                        tnt.setVelocity(new org.bukkit.util.Vector(0, -2.0, 0));
                                     }
                                 }
-                                ticks++;
                             }
                         }.runTaskTimer(CustomScoreboard.this, 0L, 1L);
                     }
