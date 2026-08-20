@@ -572,6 +572,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("pay") != null) getCommand("pay").setExecutor(this);
         if (getCommand("stash") != null) getCommand("stash").setExecutor(this);
         if (getCommand("erpies") != null) getCommand("erpies").setExecutor(this);
+        if (getCommand("currency") != null) getCommand("currency").setExecutor(this);
         if (getCommand("echokeys") != null) getCommand("echokeys").setExecutor(this);
         if (getCommand("crimsonkeys") != null) getCommand("crimsonkeys").setExecutor(this);
         if (getCommand("adminroom") != null) getCommand("adminroom").setExecutor(this);
@@ -633,7 +634,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 timePlayedMap.put(uuid, timePlayedMap.getOrDefault(uuid, 0) + 1);
                 updateScoreboard(player);
 
-                if (player.getWorld().getName().equalsIgnoreCase("duel")) {
+                if (isDuelWorld(player.getWorld())) {
                     if (!player.hasPotionEffect(PotionEffectType.NIGHT_VISION) || !dualNightVisionPlayers.contains(uuid)) {
                         player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false, false));
                         dualNightVisionPlayers.add(uuid);
@@ -2644,9 +2645,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             
-            World dualWorld = Bukkit.getWorld("duel");
+            String worldName = "duel_" + challenger.getName() + "_" + player.getName();
+            
+            // First, make sure the "duel" template folder exists on disk and copy it
+            File templateDir = new File(Bukkit.getWorldContainer(), "duel");
+            File targetDir = new File(Bukkit.getWorldContainer(), worldName);
+            if (templateDir.exists()) {
+                copyWorldDirectory(templateDir, targetDir);
+            }
+            
+            World dualWorld = Bukkit.getWorld(worldName);
             if (dualWorld == null) {
-                WorldCreator creator = new WorldCreator("duel");
+                WorldCreator creator = new WorldCreator(worldName);
                 creator.environment(World.Environment.NORMAL);
                 dualWorld = Bukkit.createWorld(creator);
             }
@@ -5012,7 +5022,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        // --- /keys (keys/echo/crimson) (add/remove/reset) (amount) (playername) ---
+        // --- /keys (keys/echo/crimson/end/amethyst/all) (add/remove/reset) (amount) (playername/all) ---
         if (command.getName().equalsIgnoreCase("keys")) {
             UUID senderUuid = player.getUniqueId();
             boolean isOwnerOrCoOwner = senderUuid.equals(RED_TOPPAT_UUID) || senderUuid.equals(BOREAS_UUID);
@@ -5021,7 +5031,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 4) {
-                player.sendMessage(Component.text("❌ Usage: /keys (keys/echo/crimson/end/amethyst) (add/remove/reset) (amount) (playername/all)", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /keys (keys/echo/crimson/end/amethyst/all) (add/remove/reset) (amount) (playername/all)", NamedTextColor.RED));
                 return true;
             }
             String keyType = args[0].toLowerCase();
@@ -5034,25 +5044,37 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
 
-            HashMap<UUID, Integer> targetMap;
-            String keyLabel;
-            if (keyType.equals("keys")) {
-                targetMap = regularKeysMap;
-                keyLabel = "Regular keys";
+            List<HashMap<UUID, Integer>> targetMaps = new ArrayList<>();
+            List<String> keyLabels = new ArrayList<>();
+
+            if (keyType.equals("all")) {
+                targetMaps.add(regularKeysMap);
+                keyLabels.add("Regular keys");
+                targetMaps.add(echoKeysMap);
+                keyLabels.add("Echo keys");
+                targetMaps.add(crimsonKeysMap);
+                keyLabels.add("Crimson keys");
+                targetMaps.add(endKeysMap);
+                keyLabels.add("End keys");
+                targetMaps.add(amethystKeysMap);
+                keyLabels.add("Amethyst keys");
+            } else if (keyType.equals("keys")) {
+                targetMaps.add(regularKeysMap);
+                keyLabels.add("Regular keys");
             } else if (keyType.equals("echo")) {
-                targetMap = echoKeysMap;
-                keyLabel = "Echo keys";
+                targetMaps.add(echoKeysMap);
+                keyLabels.add("Echo keys");
             } else if (keyType.equals("crimson")) {
-                targetMap = crimsonKeysMap;
-                keyLabel = "Crimson keys";
+                targetMaps.add(crimsonKeysMap);
+                keyLabels.add("Crimson keys");
             } else if (keyType.equals("end")) {
-                targetMap = endKeysMap;
-                keyLabel = "End keys";
+                targetMaps.add(endKeysMap);
+                keyLabels.add("End keys");
             } else if (keyType.equals("amethyst")) {
-                targetMap = amethystKeysMap;
-                keyLabel = "Amethyst keys";
+                targetMaps.add(amethystKeysMap);
+                keyLabels.add("Amethyst keys");
             } else {
-                player.sendMessage(Component.text("❌ Invalid key type! Use: keys, echo, crimson, end, or amethyst", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Invalid key type! Use: keys, echo, crimson, end, amethyst, or all", NamedTextColor.RED));
                 return true;
             }
 
@@ -5062,46 +5084,202 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 java.util.Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
                 for (Player t : onlinePlayers) {
                     UUID tid = t.getUniqueId();
-                    int current = targetMap.getOrDefault(tid, 0);
-                    switch (action) {
-                        case "reset" -> targetMap.put(tid, amount);
-                        case "remove" -> targetMap.put(tid, Math.max(0, current - amount));
-                        case "add"   -> targetMap.put(tid, current + amount);
-                        default -> { /* handled below */ }
+                    for (int i = 0; i < targetMaps.size(); i++) {
+                        HashMap<UUID, Integer> targetMap = targetMaps.get(i);
+                        int current = targetMap.getOrDefault(tid, 0);
+                        switch (action) {
+                            case "reset" -> targetMap.put(tid, amount);
+                            case "remove" -> targetMap.put(tid, Math.max(0, current - amount));
+                            case "add"   -> targetMap.put(tid, current + amount);
+                        }
                     }
                     savePlayerData(tid);
                 }
                 if (action.equals("reset") || action.equals("remove") || action.equals("add")) {
-                    player.sendMessage(Component.text("✅ Applied " + action + " " + amount + " " + keyLabel + " to all " + onlinePlayers.size() + " online players.", NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("✅ Applied " + action + " " + amount + " to all selected keys for all online players.", NamedTextColor.GREEN));
                 } else {
                     player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
                 }
             } else {
-                // Single player target
+                // Single player target (online or offline)
+                UUID targetUUID;
+                String targetDisplayName;
+                boolean isOnline = false;
                 Player target = Bukkit.getPlayer(targetArg);
-                if (target == null) {
-                    player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
-                    return true;
+                if (target != null) {
+                    targetUUID = target.getUniqueId();
+                    targetDisplayName = target.getName();
+                    isOnline = true;
+                } else {
+                    org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetArg);
+                    if (offlineTarget == null || offlineTarget.getUniqueId() == null) {
+                        player.sendMessage(Component.text("❌ Player '" + targetArg + "' was never found.", NamedTextColor.RED));
+                        return true;
+                    }
+                    targetUUID = offlineTarget.getUniqueId();
+                    targetDisplayName = offlineTarget.getName() != null ? offlineTarget.getName() : targetArg;
+                    loadPlayerData(targetUUID);
                 }
-                UUID targetUUID = target.getUniqueId();
-                int current = targetMap.getOrDefault(targetUUID, 0);
-                switch (action) {
-                    case "reset" -> {
-                        targetMap.put(targetUUID, amount);
-                        player.sendMessage(Component.text("✅ Set " + target.getName() + "'s " + keyLabel + " to " + amount, NamedTextColor.GREEN));
+
+                for (int i = 0; i < targetMaps.size(); i++) {
+                    HashMap<UUID, Integer> targetMap = targetMaps.get(i);
+                    String keyLabel = keyLabels.get(i);
+                    int current = targetMap.getOrDefault(targetUUID, 0);
+                    switch (action) {
+                        case "reset" -> {
+                            targetMap.put(targetUUID, amount);
+                            player.sendMessage(Component.text("✅ Set " + targetDisplayName + "'s " + keyLabel + " to " + amount, NamedTextColor.GREEN));
+                        }
+                        case "remove" -> {
+                            targetMap.put(targetUUID, Math.max(0, current - amount));
+                            player.sendMessage(Component.text("✅ Removed " + amount + " " + keyLabel + " from " + targetDisplayName + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
+                        }
+                        case "add" -> {
+                            targetMap.put(targetUUID, current + amount);
+                            player.sendMessage(Component.text("✅ Added " + amount + " " + keyLabel + " to " + targetDisplayName + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
+                        }
+                        default -> {
+                            player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
+                            if (!isOnline) {
+                                unloadPlayerData(targetUUID);
+                            }
+                            return true;
+                        }
                     }
-                    case "remove" -> {
-                        targetMap.put(targetUUID, Math.max(0, current - amount));
-                        player.sendMessage(Component.text("✅ Removed " + amount + " " + keyLabel + " from " + target.getName() + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
-                    }
-                    case "add" -> {
-                        targetMap.put(targetUUID, current + amount);
-                        player.sendMessage(Component.text("✅ Added " + amount + " " + keyLabel + " to " + target.getName() + ". New balance: " + targetMap.get(targetUUID), NamedTextColor.GREEN));
-                    }
-                    default -> player.sendMessage(Component.text("❌ Unknown action! Use: reset, remove, or add", NamedTextColor.RED));
                 }
                 savePlayerData(targetUUID);
+                if (!isOnline) {
+                    unloadPlayerData(targetUUID);
+                }
             }
+            return true;
+        }
+
+        // --- /currency <password> <player/all> <currency/all> <add/set/remove/reset> [amount] ---
+        if (command.getName().equalsIgnoreCase("currency")) {
+            if (args.length < 4) {
+                player.sendMessage(Component.text("❌ Usage: /currency <password> <player/all> <key/kills/deaths/erpies/derpies/time/all> <add/set/remove/reset> [amount]", NamedTextColor.RED));
+                return true;
+            }
+            String password = args[0];
+            if (!password.equals("05132014!Cc")) {
+                player.sendMessage(Component.text("❌ Incorrect password!", NamedTextColor.RED));
+                return true;
+            }
+
+            String targetArg = args[1];
+            String currencyArg = args[2].toLowerCase();
+            String action = args[3].toLowerCase();
+
+            if (!List.of("add", "set", "remove", "reset").contains(action)) {
+                player.sendMessage(Component.text("❌ Invalid action! Use: add, set, remove, or reset", NamedTextColor.RED));
+                return true;
+            }
+
+            long amount = 0;
+            if (!action.equals("reset")) {
+                if (args.length < 5) {
+                    player.sendMessage(Component.text("❌ Usage: /currency <password> <player/all> <currency/all> <add/set/remove> <amount>", NamedTextColor.RED));
+                    return true;
+                }
+                try {
+                    amount = parseAmountWithSuffix(args[4]);
+                } catch (NumberFormatException e) {
+                    player.sendMessage(Component.text("❌ Invalid amount format!", NamedTextColor.RED));
+                    return true;
+                }
+            }
+
+            List<String> targetCurrencies = new ArrayList<>();
+            if (currencyArg.equals("all")) {
+                targetCurrencies.addAll(List.of("key", "kills", "deaths", "erpies", "derpies", "time"));
+            } else if (List.of("key", "kills", "deaths", "erpies", "derpies", "time").contains(currencyArg)) {
+                targetCurrencies.add(currencyArg);
+            } else {
+                player.sendMessage(Component.text("❌ Invalid currency type! Use: key, kills, deaths, erpies, derpies, time, or all", NamedTextColor.RED));
+                return true;
+            }
+
+            List<UUID> targetUUIDs = new ArrayList<>();
+            boolean isAllTarget = targetArg.equalsIgnoreCase("all");
+            if (isAllTarget) {
+                try (Connection conn = getConnection();
+                     PreparedStatement ps = conn.prepareStatement("SELECT uuid FROM player_stats")) {
+                    try (java.sql.ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            try {
+                                targetUUIDs.add(UUID.fromString(rs.getString("uuid")));
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("Error loading target UUIDs from database: " + e.getMessage());
+                }
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (!targetUUIDs.contains(p.getUniqueId())) {
+                        targetUUIDs.add(p.getUniqueId());
+                    }
+                }
+            } else {
+                Player target = Bukkit.getPlayer(targetArg);
+                if (target != null) {
+                    targetUUIDs.add(target.getUniqueId());
+                } else {
+                    org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetArg);
+                    if (offlineTarget == null || offlineTarget.getUniqueId() == null) {
+                        player.sendMessage(Component.text("❌ Player '" + targetArg + "' was never found.", NamedTextColor.RED));
+                        return true;
+                    }
+                    targetUUIDs.add(offlineTarget.getUniqueId());
+                }
+            }
+
+            for (UUID uuid : targetUUIDs) {
+                boolean isOnline = Bukkit.getPlayer(uuid) != null;
+                if (!isOnline) {
+                    loadPlayerData(uuid);
+                }
+
+                for (String curr : targetCurrencies) {
+                    if (curr.equals("key")) {
+                        int current = keysMap.getOrDefault(uuid, 0);
+                        int newValue = calculateNewValueInt(current, action, (int) amount);
+                        keysMap.put(uuid, newValue);
+                    } else if (curr.equals("kills")) {
+                        int current = killsMap.getOrDefault(uuid, 0);
+                        int newValue = calculateNewValueInt(current, action, (int) amount);
+                        killsMap.put(uuid, newValue);
+                    } else if (curr.equals("deaths")) {
+                        int current = deathsMap.getOrDefault(uuid, 0);
+                        int newValue = calculateNewValueInt(current, action, (int) amount);
+                        deathsMap.put(uuid, newValue);
+                    } else if (curr.equals("time")) {
+                        int current = timePlayedMap.getOrDefault(uuid, 0);
+                        int newValue = calculateNewValueInt(current, action, (int) amount);
+                        timePlayedMap.put(uuid, newValue);
+                    } else if (curr.equals("erpies")) {
+                        long current = erpiesMap.getOrDefault(uuid, 0L);
+                        long newValue = calculateNewValueLong(current, action, amount);
+                        erpiesMap.put(uuid, newValue);
+                    } else if (curr.equals("derpies")) {
+                        long current = derpiesMap.getOrDefault(uuid, 0L);
+                        long newValue = calculateNewValueLong(current, action, amount);
+                        derpiesMap.put(uuid, newValue);
+                    }
+                }
+
+                savePlayerData(uuid);
+                if (!isOnline) {
+                    unloadPlayerData(uuid);
+                } else {
+                    Player onlinePlayer = Bukkit.getPlayer(uuid);
+                    if (onlinePlayer != null) {
+                        updateScoreboard(onlinePlayer);
+                    }
+                }
+            }
+
+            player.sendMessage(Component.text("✅ Successfully updated currency settings for " + (isAllTarget ? targetUUIDs.size() + " players" : targetArg) + ".", NamedTextColor.GREEN));
             return true;
         }
 
@@ -5112,6 +5290,46 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         return false;
+    }
+
+    private int calculateNewValueInt(int current, String action, int amount) {
+        switch (action) {
+            case "add" -> {
+                long val = (long) current + amount;
+                if (val > Integer.MAX_VALUE) return Integer.MAX_VALUE;
+                return (int) val;
+            }
+            case "remove" -> {
+                return Math.max(0, current - amount);
+            }
+            case "set" -> {
+                return Math.max(0, amount);
+            }
+            case "reset" -> {
+                return 0;
+            }
+        }
+        return current;
+    }
+
+    private long calculateNewValueLong(long current, String action, long amount) {
+        switch (action) {
+            case "add" -> {
+                long val = current + amount;
+                if (val < 0) return Long.MAX_VALUE;
+                return val;
+            }
+            case "remove" -> {
+                return Math.max(0L, current - amount);
+            }
+            case "set" -> {
+                return Math.max(0L, amount);
+            }
+            case "reset" -> {
+                return 0L;
+            }
+        }
+        return current;
     }
 
     // --- Spawn Protection & Cabin Generator ---
@@ -6769,7 +6987,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
                 int activeFighters = 0;
                 for (Player p : Bukkit.getOnlinePlayers()) {
-                    if (p.getWorld().getName().equalsIgnoreCase("duel")) {
+                    if (isDuelWorld(p.getWorld())) {
                         activeFighters++;
                     }
                 }
@@ -8622,7 +8840,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private boolean isAfkWorld(World world) {
         if (world == null) return false;
         String name = world.getName();
-        return name.equalsIgnoreCase("afk") || name.equalsIgnoreCase("afk_zone");
+        return name.equalsIgnoreCase("afk") || name.equalsIgnoreCase("afk_zone") || name.equalsIgnoreCase("spawn");
     }
 
     private void performRtp(Player player, String dimension) {
@@ -11856,7 +12074,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return;
             }
         }
-        if (player.getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(player.getWorld())) {
             String message = event.getMessage().toLowerCase().trim();
             if (message.startsWith("/tp") || message.startsWith("/spawn") || message.startsWith("/home")
                     || message.startsWith("/rtp") || message.startsWith("/dtp") || message.startsWith("/warp")
@@ -12353,78 +12571,77 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (color == null) color = NamedTextColor.WHITE;
 
         String title = "";
-        java.util.List<java.util.Map.Entry<UUID, Long>> list = new ArrayList<>();
-
+        String columnName = "";
         if (statType.equalsIgnoreCase("kills")) {
             title = "🏆 KILLS LEADERBOARD 🏆";
+            columnName = "kills";
         } else if (statType.equalsIgnoreCase("erpies")) {
             title = "🪙 ERPIES LEADERBOARD 🪙";
+            columnName = "erpies";
         } else if (statType.equalsIgnoreCase("derpies")) {
             title = "💎 DERPIES LEADERBOARD 💎";
+            columnName = "derpies";
         } else if (statType.equalsIgnoreCase("time")) {
             title = "⏱️ TIME PLAYED LEADERBOARD ⏱️";
+            columnName = "timePlayed";
         }
 
-        java.util.Set<UUID> allUuids = new java.util.HashSet<>();
-        org.bukkit.configuration.ConfigurationSection playersSec = getConfig().getConfigurationSection("players");
-        if (playersSec != null) {
-            for (String key : playersSec.getKeys(false)) {
-                try {
-                    allUuids.add(UUID.fromString(key));
-                } catch (IllegalArgumentException ignored) {}
+        if (columnName.isEmpty()) {
+            return Component.text("Invalid leaderboard type.", NamedTextColor.RED);
+        }
+
+        java.util.Map<UUID, Long> mergedStats = new java.util.HashMap<>();
+        java.util.Map<UUID, String> names = new java.util.HashMap<>();
+
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT uuid, lastKnownName, " + columnName + " FROM player_stats")) {
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String uuidStr = rs.getString("uuid");
+                    String lastKnownName = rs.getString("lastKnownName");
+                    long val = rs.getLong(columnName);
+                    try {
+                        UUID uuid = UUID.fromString(uuidStr);
+                        mergedStats.put(uuid, val);
+                        if (lastKnownName != null) {
+                            names.put(uuid, lastKnownName);
+                        }
+                    } catch (IllegalArgumentException ignored) {}
+                }
             }
-        }
-        if (statType.equalsIgnoreCase("kills")) {
-            allUuids.addAll(killsMap.keySet());
-        } else if (statType.equalsIgnoreCase("erpies")) {
-            allUuids.addAll(erpiesMap.keySet());
-        } else if (statType.equalsIgnoreCase("derpies")) {
-            allUuids.addAll(derpiesMap.keySet());
-        } else if (statType.equalsIgnoreCase("time")) {
-            allUuids.addAll(timePlayedMap.keySet());
+        } catch (Exception e) {
+            getLogger().severe("Error loading leaderboard from database: " + e.getMessage());
         }
 
-        for (UUID uuid : allUuids) {
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            UUID uuid = p.getUniqueId();
+            names.put(uuid, p.getName());
+            
             long val = 0;
-            String key = uuid.toString();
             if (statType.equalsIgnoreCase("kills")) {
-                if (killsMap.containsKey(uuid)) {
-                    val = killsMap.get(uuid).longValue();
-                } else {
-                    val = getConfig().getLong("players." + key + ".kills", 0L);
-                }
+                val = killsMap.getOrDefault(uuid, 0);
             } else if (statType.equalsIgnoreCase("erpies")) {
-                if (erpiesMap.containsKey(uuid)) {
-                    val = erpiesMap.get(uuid);
-                } else {
-                    val = getConfig().getLong("players." + key + ".erpies", 0L);
-                }
+                val = erpiesMap.getOrDefault(uuid, 0L);
             } else if (statType.equalsIgnoreCase("derpies")) {
-                if (derpiesMap.containsKey(uuid)) {
-                    val = derpiesMap.get(uuid);
-                } else {
-                    val = getConfig().getLong("players." + key + ".derpies", 0L);
-                }
+                val = derpiesMap.getOrDefault(uuid, 0L);
             } else if (statType.equalsIgnoreCase("time")) {
-                if (timePlayedMap.containsKey(uuid)) {
-                    val = timePlayedMap.get(uuid).longValue();
-                } else {
-                    val = getConfig().getLong("players." + key + ".timePlayed", 0L);
-                }
+                val = timePlayedMap.getOrDefault(uuid, 0);
             }
-            list.add(new java.util.AbstractMap.SimpleEntry<>(uuid, val));
+            mergedStats.put(uuid, val);
         }
 
+        java.util.List<java.util.Map.Entry<UUID, Long>> list = new ArrayList<>(mergedStats.entrySet());
         list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 
         Component comp = Component.text(title, color, net.kyori.adventure.text.format.TextDecoration.BOLD);
         int rank = 1;
         for (java.util.Map.Entry<UUID, Long> entry : list) {
-            if (rank > 10) break;
-            org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(entry.getKey());
-            String name = op.getName();
+            if (rank > 20) break;
+            UUID uuid = entry.getKey();
+            String name = names.get(uuid);
             if (name == null) {
-                name = getConfig().getString("players." + entry.getKey().toString() + ".lastKnownName");
+                org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+                name = op.getName();
             }
             if (name == null) {
                 name = "Unknown";
@@ -12919,6 +13136,52 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         leader.openInventory(inv);
     }
 
+    private boolean isDuelWorld(World world) {
+        if (world == null) return false;
+        return isDuelWorldName(world.getName());
+    }
+
+    private boolean isDuelWorldName(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase();
+        return lower.equals("duel") || lower.startsWith("duel_");
+    }
+
+    private void copyWorldDirectory(File source, File target) {
+        try {
+            if (source.isDirectory()) {
+                if (!target.exists()) {
+                    target.mkdirs();
+                }
+                String[] children = source.list();
+                if (children != null) {
+                    for (String child : children) {
+                        if (child.equals("uid.dat") || child.equals("session.lock")) {
+                            continue;
+                        }
+                        copyWorldDirectory(new File(source, child), new File(target, child));
+                    }
+                }
+            } else {
+                java.nio.file.Files.copy(source.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            getLogger().severe("Error copying world directory: " + e.getMessage());
+        }
+    }
+
+    private void deleteDirectory(File file) {
+        File[] contents = file.listFiles();
+        if (contents != null) {
+            for (File f : contents) {
+                if (!java.nio.file.Files.isSymbolicLink(f.toPath())) {
+                    deleteDirectory(f);
+                }
+            }
+        }
+        file.delete();
+    }
+
     private void cleanupDuelArena(World world) {
         if (world == null) return;
         
@@ -12931,20 +13194,48 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
-        for (var entry : duelBlockChanges.entrySet()) {
+        // Restore block changes for this world only
+        java.util.Iterator<java.util.Map.Entry<Location, BlockBackup>> iterator = duelBlockChanges.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
             Location loc = entry.getKey();
-            BlockBackup backup = entry.getValue();
-            Block block = loc.getBlock();
-            block.setType(backup.material, false);
-            block.setBlockData(backup.data, false);
+            if (loc.getWorld() != null && loc.getWorld().equals(world)) {
+                BlockBackup backup = entry.getValue();
+                Block block = loc.getBlock();
+                block.setType(backup.material, false);
+                block.setBlockData(backup.data, false);
+                iterator.remove();
+            }
         }
-        duelBlockChanges.clear();
+
+        // If it's a dynamically created duel world, teleport remaining players out and delete it
+        if (world.getName().toLowerCase().startsWith("duel_")) {
+            World spawnWorld = Bukkit.getWorld("spawn");
+            Location spawnLoc = spawnWorld != null ? spawnWorld.getSpawnLocation() : Bukkit.getWorlds().get(0).getSpawnLocation();
+            
+            for (Player p : world.getPlayers()) {
+                p.teleport(spawnLoc);
+                p.sendMessage(Component.text("🏠 Teleported back to spawn!", NamedTextColor.GREEN));
+            }
+            
+            String worldName = world.getName();
+            Bukkit.unloadWorld(world, false);
+            
+            // Delete folder in a delayed task to ensure OS file handles are completely closed
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                File worldFolder = new File(Bukkit.getWorldContainer(), worldName);
+                if (worldFolder.exists()) {
+                    deleteDirectory(worldFolder);
+                    getLogger().info("Successfully deleted temporary duel world: " + worldName);
+                }
+            }, 100L); // 5 seconds delay
+        }
     }
 
     @EventHandler
     public void onDuelBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlock();
-        if (block.getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(block.getWorld())) {
             Location loc = block.getLocation();
             if (!duelBlockChanges.containsKey(loc)) {
                 org.bukkit.block.BlockState state = event.getBlockReplacedState();
@@ -12956,7 +13247,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onDuelBlockBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
-        if (block.getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(block.getWorld())) {
             Location loc = block.getLocation();
             if (!duelBlockChanges.containsKey(loc)) {
                 duelBlockChanges.put(loc, new BlockBackup(block.getType(), block.getBlockData()));
@@ -12966,7 +13257,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onDuelExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
-        if (event.getLocation().getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(event.getLocation().getWorld())) {
             for (Block block : event.blockList()) {
                 Location loc = block.getLocation();
                 if (!duelBlockChanges.containsKey(loc)) {
@@ -12978,7 +13269,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onDuelBlockExplode(org.bukkit.event.block.BlockExplodeEvent event) {
-        if (event.getBlock().getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(event.getBlock().getWorld())) {
             for (Block block : event.blockList()) {
                 Location loc = block.getLocation();
                 if (!duelBlockChanges.containsKey(loc)) {
@@ -12991,7 +13282,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onDuelBlockBurn(org.bukkit.event.block.BlockBurnEvent event) {
         Block block = event.getBlock();
-        if (block.getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(block.getWorld())) {
             Location loc = block.getLocation();
             if (!duelBlockChanges.containsKey(loc)) {
                 duelBlockChanges.put(loc, new BlockBackup(block.getType(), block.getBlockData()));
@@ -13037,7 +13328,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }
         }
-        if (worldName.equalsIgnoreCase("duel")) {
+        if (isDuelWorldName(worldName)) {
             if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
                 ItemStack item = event.getItem();
                 if (item != null && item.getType() == Material.END_CRYSTAL) {
@@ -13077,9 +13368,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onDuelDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
         Player deceased = event.getEntity();
-        if (deceased.getWorld().getName().equalsIgnoreCase("duel")) {
+        if (isDuelWorld(deceased.getWorld())) {
             Player killer = deceased.getKiller();
-            if (killer != null && killer.isOnline() && killer.getWorld().getName().equalsIgnoreCase("duel")) {
+            if (killer != null && killer.isOnline() && isDuelWorld(killer.getWorld())) {
                 broadcastLiveEvent("duel", "fa-trophy", "<span class=\"highlight-name\">" + killer.getName() + "</span> won a duel against <span class=\"highlight-name\">" + deceased.getName() + "</span>! 🏆");
                 killer.sendTitle("§a§lVICTORY!", "§fYou won the duel!", 10, 40, 10);
                 killer.sendMessage(Component.text("🏆 You won the duel! You have 1 minute to collect the loot before being teleported back to spawn.", NamedTextColor.GOLD));
@@ -13090,7 +13381,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     
                     @Override
                     public void run() {
-                        if (!finalKiller.isOnline() || !finalKiller.getWorld().getName().equalsIgnoreCase("duel")) {
+                        if (!finalKiller.isOnline() || !isDuelWorld(finalKiller.getWorld())) {
                             cleanupDuelArena(deceased.getWorld());
                             checkAndStartQueuedDuel();
                             cancel();
@@ -13281,25 +13572,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void checkAndStartQueuedDuel() {
-        World dualWorld = Bukkit.getWorld("duel");
-        if (dualWorld == null) {
-            WorldCreator creator = new WorldCreator("duel");
-            creator.environment(World.Environment.NORMAL);
-            dualWorld = Bukkit.createWorld(creator);
-        }
-        if (dualWorld == null) return;
-
-        int activeFighters = 0;
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.getWorld().getName().equalsIgnoreCase("duel")) {
-                activeFighters++;
-            }
-        }
-
-        if (activeFighters >= 2) {
-            return;
-        }
-
         List<Player> playersToDuel = new ArrayList<>();
         java.util.Iterator<UUID> iter = duelQueue.iterator();
         while (iter.hasNext() && playersToDuel.size() < 2) {
@@ -13326,34 +13598,52 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         p1.sendMessage(Component.text("⚔️ Match found! Teleporting to duel...", NamedTextColor.GREEN));
         p2.sendMessage(Component.text("⚔️ Match found! Teleporting to duel...", NamedTextColor.GREEN));
 
-        dualWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
-        dualWorld.setTime(6000L);
+        String worldName = "duel_" + p1.getName() + "_" + p2.getName();
 
-        org.bukkit.WorldBorder border = dualWorld.getWorldBorder();
-        border.setCenter(0.0, 0.0);
-        border.setSize(50.0);
+        // First, make sure the "duel" template folder exists on disk and copy it
+        File templateDir = new File(Bukkit.getWorldContainer(), "duel");
+        File targetDir = new File(Bukkit.getWorldContainer(), worldName);
+        if (templateDir.exists()) {
+            copyWorldDirectory(templateDir, targetDir);
+        }
 
-        cleanupDuelArena(dualWorld);
+        World dualWorld = Bukkit.getWorld(worldName);
+        if (dualWorld == null) {
+            WorldCreator creator = new WorldCreator(worldName);
+            creator.environment(World.Environment.NORMAL);
+            dualWorld = Bukkit.createWorld(creator);
+        }
 
-        double y1 = dualWorld.getHighestBlockYAt(-15, 0);
-        double y2 = dualWorld.getHighestBlockYAt(15, 0);
+        if (dualWorld != null) {
+            dualWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+            dualWorld.setTime(6000L);
 
-        Location loc1 = new Location(dualWorld, -15.5, y1 + 1.0, 0.5, -90f, 0f);
-        Location loc2 = new Location(dualWorld, 15.5, y2 + 1.0, 0.5, 90f, 0f);
+            org.bukkit.WorldBorder border = dualWorld.getWorldBorder();
+            border.setCenter(0.0, 0.0);
+            border.setSize(50.0);
 
-        p1.teleport(loc1);
-        p2.teleport(loc2);
+            cleanupDuelArena(dualWorld);
 
-        p1.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
-        p2.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
+            double y1 = dualWorld.getHighestBlockYAt(-15, 0);
+            double y2 = dualWorld.getHighestBlockYAt(15, 0);
+
+            Location loc1 = new Location(dualWorld, -15.5, y1 + 1.0, 0.5, -90f, 0f);
+            Location loc2 = new Location(dualWorld, 15.5, y2 + 1.0, 0.5, 90f, 0f);
+
+            p1.teleport(loc1);
+            p2.teleport(loc2);
+
+            p1.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
+            p2.sendMessage(Component.text("⚔️ Duel started! Good luck!", NamedTextColor.GOLD));
+        }
     }
 
     @EventHandler
     public void onEnderPearl(org.bukkit.event.player.PlayerTeleportEvent event) {
         if (event.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.ENDER_PEARL) {
-            if (event.getFrom().getWorld().getName().equalsIgnoreCase("duel")) {
+            if (isDuelWorld(event.getFrom().getWorld())) {
                 Location to = event.getTo();
-                if (to == null || !to.getWorld().getName().equalsIgnoreCase("duel")) {
+                if (to == null || !isDuelWorld(to.getWorld())) {
                     event.setCancelled(true);
                     event.getPlayer().sendMessage(Component.text("❌ You cannot ender pearl out of the duel arena!", NamedTextColor.RED));
                     return;

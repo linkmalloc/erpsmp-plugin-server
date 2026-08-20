@@ -1,49 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live World Highlights & Sneak Peek | ErpSMP</title>
-    <meta name="description" content="Watch live sneak peek streams and epic highlight clips from ErpSMP Minecraft worlds, 1v1 duels, spawn hub, and Echo dimension.">
-    
+    <meta name="description"
+        content="Watch live sneak peek streams and epic highlight clips from ErpSMP Minecraft worlds, 1v1 duels, spawn hub, and Echo dimension.">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap"
+        rel="stylesheet">
+
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- Main and Page Stylesheets -->
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="highlights-styles.css">
-    
+
     <!-- Favicons -->
     <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/logo/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/logo/favicon-16x16.png">
 </head>
+
 <body>
     <!-- Background Ambient Glows -->
     <div class="ambient-glow glow-1"></div>
     <div class="ambient-glow glow-2"></div>
-    
+
     <!-- Navigation -->
     <header class="header">
         <div class="nav-container">
             <a href="index.html" class="logo">
                 <img src="assets/logo/logo-transparent.png" alt="ErpSMP" class="logo-img">
             </a>
-            
+
             <nav class="nav-links" id="navLinks">
                 <a href="index.html" class="nav-link">Home</a>
-                <a href="highlights.html" class="nav-link active">Live Highlights</a>
+
                 <a href="index.html#features" class="nav-link">Features</a>
                 <a href="index.html#guide" class="nav-link">How to Join</a>
                 <a href="passes.html" class="nav-link">Passes</a>
                 <a href="merch.html" class="nav-link">Merch</a>
             </nav>
-            
+
             <div class="nav-actions">
                 <button class="btn btn-primary btn-copy-ip" id="btnCopyIpNav">
                     <i class="fa-solid fa-copy"></i> Copy IP
@@ -58,29 +63,31 @@
     <!-- Main Live Hero Section -->
     <section class="live-hero-section">
         <div class="highlights-container">
-            
+
             <!-- Page Title Header -->
             <div class="live-page-header">
                 <div class="live-tag">
                     <span class="pulse-dot"></span> LIVE SNEAK PEEK CAM
                 </div>
                 <h1 class="live-title">ErpSMP World Highlights</h1>
-                <p class="live-subtitle">Experience live spectator feeds across our survival worlds, 1v1 duel arenas, and custom dimensions in real time.</p>
+                <p class="live-subtitle">Experience live spectator feeds across our survival worlds, 1v1 duel arenas,
+                    and custom dimensions in real time.</p>
             </div>
 
             <!-- Stream Stage Grid -->
             <div class="stream-layout">
-                
+
                 <!-- Main Camera Player Stage -->
                 <div class="stream-player-stage">
                     <div class="stream-viewport">
                         <canvas id="streamCanvas" class="stream-canvas"></canvas>
-                        
+
                         <!-- HUD Scanning & Data Overlay -->
                         <div class="stream-hud-overlay">
                             <div class="hud-top-bar">
                                 <div class="hud-cam-info">
-                                    <span class="cam-badge" id="hudCamBadge"><i class="fa-solid fa-video"></i> CAM-01</span>
+                                    <span class="cam-badge" id="hudCamBadge"><i class="fa-solid fa-video"></i>
+                                        CAM-01</span>
                                     <span class="cam-name" id="hudCamName">Spawn Square</span>
                                 </div>
                                 <div class="hud-specs">
@@ -88,7 +95,7 @@
                                     <span>1080p60 ULTRA</span>
                                 </div>
                             </div>
-                            
+
                             <div class="hud-bottom-bar">
                                 <div class="hud-coords" id="hudCoords">XYZ: -15.5 / 89.0 / 0.5</div>
                                 <div class="spectator-badge">
@@ -139,7 +146,8 @@
                                 <i class="fa-solid fa-swords"></i>
                             </div>
                             <div class="event-content">
-                                <div class="event-text"><span class="highlight-name">.RedToppat208</span> won a duel against <span class="highlight-name">blanking</span> in Arena!</div>
+                                <div class="event-text"><span class="highlight-name">.RedToppat208</span> won a duel
+                                    against <span class="highlight-name">blanking</span> in Arena!</div>
                                 <div class="event-time">1m ago</div>
                             </div>
                         </div>
@@ -148,7 +156,9 @@
                                 <i class="fa-solid fa-box-open"></i>
                             </div>
                             <div class="event-content">
-                                <div class="event-text"><span class="highlight-name">.Boreas4052</span> unlocked an <span style="color:var(--accent-purple);font-weight:700;">[Echo Crate]</span> Jackpot!</div>
+                                <div class="event-text"><span class="highlight-name">.Boreas4052</span> unlocked an
+                                    <span style="color:var(--accent-purple);font-weight:700;">[Echo Crate]</span>
+                                    Jackpot!</div>
                                 <div class="event-time">3m ago</div>
                             </div>
                         </div>
@@ -157,14 +167,16 @@
                                 <i class="fa-solid fa-skull"></i>
                             </div>
                             <div class="event-content">
-                                <div class="event-text"><span class="highlight-name">blanking</span> was slain by <span class="highlight-name">.RedToppat208</span> in Overworld.</div>
+                                <div class="event-text"><span class="highlight-name">blanking</span> was slain by <span
+                                        class="highlight-name">.RedToppat208</span> in Overworld.</div>
                                 <div class="event-time">5m ago</div>
                             </div>
                         </div>
                     </div>
 
                     <form class="chat-input-box" id="chatForm">
-                        <input type="text" class="chat-input" id="chatInput" placeholder="Send hype message to live feed..." autocomplete="off">
+                        <input type="text" class="chat-input" id="chatInput"
+                            placeholder="Send hype message to live feed..." autocomplete="off">
                         <button type="submit" class="chat-send-btn">
                             <i class="fa-solid fa-paper-plane"></i>
                         </button>
@@ -175,11 +187,12 @@
             <!-- Vault Highlights Clips Section -->
             <div class="section-title-wrap">
                 <h2 class="section-title">Community Highlights & Recordings</h2>
-                <p class="section-desc">Watch top plays, clutch 1v1 duels, epic boss victories, and showcase clips submitted by players.</p>
+                <p class="section-desc">Watch top plays, clutch 1v1 duels, epic boss victories, and showcase clips
+                    submitted by players.</p>
             </div>
 
             <div class="clips-grid">
-                
+
                 <!-- Clip 1 -->
                 <div class="clip-card" data-title="Epic 1v1 Clutch Duel Finish at Arena">
                     <div class="clip-thumb-wrap">
@@ -189,9 +202,10 @@
                         <span class="category-tag" style="background:var(--accent-gold);color:#000;">1v1 Duel</span>
                         <span class="duration-tag">0:45</span>
                         <svg class="clip-thumb" viewBox="0 0 400 225" preserveAspectRatio="xMidYMid slice">
-                            <rect width="400" height="225" fill="#1e1b4b"/>
-                            <circle cx="200" cy="112" r="70" fill="#f59e0b" opacity="0.2"/>
-                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle" font-family="Space Grotesk">⚔️ DUEL CHAMPIONSHIP</text>
+                            <rect width="400" height="225" fill="#1e1b4b" />
+                            <circle cx="200" cy="112" r="70" fill="#f59e0b" opacity="0.2" />
+                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle"
+                                font-family="Space Grotesk">⚔️ DUEL CHAMPIONSHIP</text>
                         </svg>
                     </div>
                     <div class="clip-info">
@@ -212,9 +226,10 @@
                         <span class="category-tag">Boss Raid</span>
                         <span class="duration-tag">1:30</span>
                         <svg class="clip-thumb" viewBox="0 0 400 225" preserveAspectRatio="xMidYMid slice">
-                            <rect width="400" height="225" fill="#2e1065"/>
-                            <circle cx="200" cy="112" r="70" fill="#8b5cf6" opacity="0.25"/>
-                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle" font-family="Space Grotesk">🐉 ENDER DRAGON RAID</text>
+                            <rect width="400" height="225" fill="#2e1065" />
+                            <circle cx="200" cy="112" r="70" fill="#8b5cf6" opacity="0.25" />
+                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle"
+                                font-family="Space Grotesk">🐉 ENDER DRAGON RAID</text>
                         </svg>
                     </div>
                     <div class="clip-info">
@@ -235,9 +250,10 @@
                         <span class="category-tag" style="background:var(--primary);color:#000;">Unboxing</span>
                         <span class="duration-tag">2:15</span>
                         <svg class="clip-thumb" viewBox="0 0 400 225" preserveAspectRatio="xMidYMid slice">
-                            <rect width="400" height="225" fill="#064e3b"/>
-                            <circle cx="200" cy="112" r="70" fill="#10b981" opacity="0.25"/>
-                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle" font-family="Space Grotesk">📦 CRATE JACKPOT SPREE</text>
+                            <rect width="400" height="225" fill="#064e3b" />
+                            <circle cx="200" cy="112" r="70" fill="#10b981" opacity="0.25" />
+                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle"
+                                font-family="Space Grotesk">📦 CRATE JACKPOT SPREE</text>
                         </svg>
                     </div>
                     <div class="clip-info">
@@ -258,9 +274,10 @@
                         <span class="category-tag" style="background:#3b82f6;color:#fff;">Base Tour</span>
                         <span class="duration-tag">3:40</span>
                         <svg class="clip-thumb" viewBox="0 0 400 225" preserveAspectRatio="xMidYMid slice">
-                            <rect width="400" height="225" fill="#1e3a8a"/>
-                            <circle cx="200" cy="112" r="70" fill="#3b82f6" opacity="0.25"/>
-                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle" font-family="Space Grotesk">🏰 MEGA BASE SHOWCASE</text>
+                            <rect width="400" height="225" fill="#1e3a8a" />
+                            <circle cx="200" cy="112" r="70" fill="#3b82f6" opacity="0.25" />
+                            <text x="200" y="118" fill="#fff" font-size="18" font-weight="bold" text-anchor="middle"
+                                font-family="Space Grotesk">🏰 MEGA BASE SHOWCASE</text>
                         </svg>
                     </div>
                     <div class="clip-info">
@@ -285,10 +302,12 @@
         <div class="modal-body">
             <div class="modal-video-container">
                 <svg width="100%" height="100%" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
-                    <rect width="800" height="450" fill="#0b0a14"/>
-                    <circle cx="400" cy="225" r="80" fill="#10b981" opacity="0.2"/>
-                    <text x="400" y="220" fill="#fff" font-size="24" font-weight="bold" text-anchor="middle" font-family="Space Grotesk">▶ REPLAYING HIGHLIGHT VIDEO</text>
-                    <text x="400" y="255" fill="#9ca3af" font-size="16" text-anchor="middle" font-family="Outfit">Click outside box or press Esc to close</text>
+                    <rect width="800" height="450" fill="#0b0a14" />
+                    <circle cx="400" cy="225" r="80" fill="#10b981" opacity="0.2" />
+                    <text x="400" y="220" fill="#fff" font-size="24" font-weight="bold" text-anchor="middle"
+                        font-family="Space Grotesk">▶ REPLAYING HIGHLIGHT VIDEO</text>
+                    <text x="400" y="255" fill="#9ca3af" font-size="16" text-anchor="middle" font-family="Outfit">Click
+                        outside box or press Esc to close</text>
                 </svg>
             </div>
         </div>
@@ -299,18 +318,19 @@
         <div class="footer-container">
             <div class="footer-brand">
                 <img src="assets/logo/logo-transparent.png" alt="ErpSMP" class="footer-logo">
-                <p>The ultimate custom Minecraft Survival Multiplayer featuring duels, banking, teams, and custom dimensions.</p>
+                <p>The ultimate custom Minecraft Survival Multiplayer featuring duels, banking, teams, and custom
+                    dimensions.</p>
             </div>
-            
+
             <div class="footer-links">
                 <h4>Quick Links</h4>
                 <a href="index.html">Home</a>
-                <a href="highlights.html">Live Highlights</a>
+
                 <a href="index.html#features">Features</a>
                 <a href="passes.html">Battle Passes</a>
                 <a href="merch.html">Merchandise</a>
             </div>
-            
+
             <div class="footer-social">
                 <h4>Community</h4>
                 <div class="social-icons">
@@ -320,9 +340,10 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="footer-bottom">
-            <p>&copy; 2026 ErpSMP. Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.</p>
+            <p>&copy; 2026 ErpSMP. Not an official Minecraft product. Not approved by or associated with Mojang or
+                Microsoft.</p>
         </div>
     </footer>
 
@@ -330,4 +351,5 @@
     <script src="app.js"></script>
     <script src="highlights-app.js"></script>
 </body>
+
 </html>

@@ -1,48 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ErpSMP | Custom Minecraft Survival Multiplayer</title>
-    <meta name="description" content="Join ErpSMP, the premium custom survival multiplayer Minecraft server featuring custom duel matchmaking, advanced banking, unique economy, and teams.">
-    
+    <meta name="description"
+        content="Join ErpSMP, the premium custom survival multiplayer Minecraft server featuring custom duel matchmaking, advanced banking, unique economy, and teams.">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap"
+        rel="stylesheet">
+
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- Main stylesheet -->
     <link rel="stylesheet" href="styles.css">
-    
+
     <!-- Favicons -->
     <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/logo/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/logo/favicon-16x16.png">
 </head>
+
 <body>
     <!-- Background Ambient Glows -->
     <div class="ambient-glow glow-1"></div>
     <div class="ambient-glow glow-2"></div>
-    
+
     <!-- Navigation -->
     <header class="header">
         <div class="nav-container">
             <a href="#" class="logo">
                 <img src="assets/logo/logo-transparent.png" alt="ErpSMP" class="logo-img">
             </a>
-            
+
             <nav class="nav-links" id="navLinks">
                 <a href="#hero" class="nav-link active">Home</a>
-                <a href="highlights.html" class="nav-link">Live Highlights</a>
                 <a href="#features" class="nav-link">Features</a>
                 <a href="#guide" class="nav-link">How to Join</a>
                 <a href="#commands" class="nav-link">Commands</a>
                 <a href="passes.html" class="nav-link">Passes</a>
             </nav>
-            
+
             <div class="nav-actions">
                 <button class="btn btn-primary btn-copy-ip" id="btnCopyIpNav">
                     <i class="fa-solid fa-copy"></i> Copy IP
@@ -63,13 +67,13 @@
                     <span id="playerCountText">Fetching Server Status...</span>
                 </div>
                 <h1 class="hero-title">
-                    The Ultimate <br>
-                    <span class="text-glow-gold">Custom Survival</span>
+                    Our New <br>
+                    <span class="text-glow-gold">Survival Server</span>
                 </h1>
                 <p class="hero-subtitle">
-                    Step into a custom-engineered multiplayer experience. Play.theerpsmp.net features real-time duel arenas, advanced banking systems, team territories, and a player-driven economy.
+                    Join our new survival multiplayer server!
                 </p>
-                
+
                 <!-- Hero Countdown Timer -->
                 <div class="countdown-container glass">
                     <div class="countdown-title"><i class="fa-solid fa-rocket"></i> Launching In</div>
@@ -111,7 +115,7 @@
                     </a>
                 </div>
             </div>
-            
+
             <!-- Hero Visual Widget -->
             <div class="hero-widget-container">
                 <div class="status-card glass">
@@ -127,7 +131,7 @@
                         </div>
                         <span class="ping-badge" id="pingBadge"><i class="fa-solid fa-wifi"></i> 12ms</span>
                     </div>
-                    
+
                     <div class="stats-grid">
                         <div class="stat-box">
                             <span class="stat-label">Online Players</span>
@@ -138,11 +142,11 @@
                             <span class="stat-value text-green">Stable</span>
                         </div>
                     </div>
-                    
+
                     <div class="progress-bar-container">
                         <div class="progress-bar" id="progressBar" style="width: 0%"></div>
                     </div>
-                    
+
                     <div class="recent-events">
                         <h4>Active Duel Arena</h4>
                         <div class="event-item">
@@ -161,46 +165,48 @@
     <!-- Features Section -->
     <section id="features" class="features-section">
         <div class="section-header">
-            <h2 class="section-title">Engineered to <span class="text-glow-purple">Excellence</span></h2>
-            <p class="section-subtitle">We don't do vanilla survival. Explore custom plugins developed from the ground up for a balanced, high-stakes game.</p>
+            <h2 class="section-title">Inspired by the <span class="text-glow-blue">Donutsmp/span></h2>
         </div>
-        
+
         <div class="features-grid">
             <!-- Feature Card 1 -->
             <div class="feature-card glass">
                 <div class="feature-icon bg-gold">
                     <i class="fa-solid fa-shield-halved"></i>
                 </div>
-                <h3>1v1 Duel System</h3>
-                <p>Queue up for automated 1v1 duels inside an Overworld dimension enclosed by a 50x50 border. Features block rollback, ender pearl protection, and delayed item collection windows.</p>
+                <h3>Custom Games</h3>
+                <p>We made custom games for the server such as 1v1 duels and Apocalypse mode.</p>
                 <ul class="feature-bullets">
-                    <li><i class="fa-solid fa-check text-gold"></i> Automated Queue (/dualchest)</li>
-                    <li><i class="fa-solid fa-check text-gold"></i> Full World Recovery on Match End</li>
-                    <li><i class="fa-solid fa-check text-gold"></i> 1-Minute Loot-Collect Timer</li>
+                    <li><i class="fa-solid fa-check text-gold"></i> Automated Queue</li>
+                    <li><i class="fa-solid fa-check text-gold"></i> Apocalypse Game Mode</li>
+                    <li><i class="fa-solid fa-check text-gold"></i> 1v1 Duel Arena</li>
                 </ul>
             </div>
-            
+
             <!-- Feature Card 2 -->
             <div class="feature-card glass">
                 <div class="feature-icon bg-purple">
                     <i class="fa-solid fa-building-columns"></i>
                 </div>
-                <h3>Advanced Banking</h3>
-                <p>Deposit and withdraw physical inventory items or manage your Erpies and Derpies digital currencies in our secure bank vault systems.</p>
+                <h3>Custom Money System</h3>
+                <p>Custom money system with the main currencies called "Eppies" and "Derpies" and also banks with
+                    deposit and withdraw systems.</p>
                 <ul class="feature-bullets">
-                    <li><i class="fa-solid fa-check text-purple"></i> Interactive Chest UIs</li>
-                    <li><i class="fa-solid fa-check text-purple"></i> Safe Item Storage & Retrieval</li>
-                    <li><i class="fa-solid fa-check text-purple"></i> Custom Floating Stats Display</li>
+                    <li><i class="fa-solid fa-check text-purple"></i> 2 Custom Currencies (Eppies & Derpies)</li>
+                    <li><i class="fa-solid fa-check text-purple"></i> Bank system with deposit and withdraw systems</li>
+                    <li><i class="fa-solid fa-check text-purple"></i> Custom display for your money stats, bank, etc
+                    </li>
                 </ul>
             </div>
-            
+
             <!-- Feature Card 3 -->
             <div class="feature-card glass">
                 <div class="feature-icon bg-teal">
                     <i class="fa-solid fa-users-gear"></i>
                 </div>
                 <h3>Team System</h3>
-                <p>Form clans, recruit active players, design team hierarchies, and establish custom rules. Conquer the leaderboard together.</p>
+                <p>Form clans, recruit active players, design team hierarchies, and establish custom rules. Conquer the
+                    leaderboard together.</p>
                 <ul class="feature-bullets">
                     <li><i class="fa-solid fa-check text-teal"></i> Custom Team Creation</li>
                     <li><i class="fa-solid fa-check text-teal"></i> Invite and Leaderboard systems</li>
@@ -216,7 +222,7 @@
             <h2 class="section-title">Ready to <span class="text-glow-teal">Connect?</span></h2>
             <p class="section-subtitle">We support both Java and Bedrock cross-play connections seamlessly.</p>
         </div>
-        
+
         <div class="join-platforms">
             <!-- Java Platform -->
             <div class="platform-card glass">
@@ -234,7 +240,7 @@
                     <li>Save, click join, and enjoy!</li>
                 </ol>
             </div>
-            
+
             <!-- Bedrock Platform -->
             <div class="platform-card glass">
                 <div class="platform-header">
@@ -261,22 +267,24 @@
             <h2 class="section-title">Server <span class="text-glow-gold">Commands</span></h2>
             <p class="section-subtitle">A quick reference list of available player command interfaces.</p>
         </div>
-        
+
         <div class="commands-container glass">
             <div class="commands-search">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="commandSearchInput" placeholder="Search commands...">
             </div>
-            
+
             <div class="commands-list" id="commandsList">
                 <!-- Authentication -->
                 <div class="command-row" data-name="register password account create signup auth">
                     <span class="command-syntax">/register &lt;password&gt; &lt;confirmPassword&gt;</span>
-                    <span class="command-desc">Register a password for your account (Java & Cracked Java Only). Required before you can play.</span>
+                    <span class="command-desc">Register a password for your account (Java & Cracked Java Only). Required
+                        before you can play.</span>
                 </div>
                 <div class="command-row" data-name="login password account auth sign in">
                     <span class="command-syntax">/login &lt;password&gt;</span>
-                    <span class="command-desc">Log in to your account with your registered password (Java & Cracked Java Only).</span>
+                    <span class="command-desc">Log in to your account with your registered password (Java & Cracked Java
+                        Only).</span>
                 </div>
 
                 <!-- Economy -->
@@ -286,19 +294,23 @@
                 </div>
                 <div class="command-row" data-name="sell quick inventory money erpies">
                     <span class="command-syntax">/sell</span>
-                    <span class="command-desc">Open the quick sell inventory to convert items in hand directly to Erpies.</span>
+                    <span class="command-desc">Open the quick sell inventory to convert items in hand directly to
+                        Erpies.</span>
                 </div>
                 <div class="command-row" data-name="derpshop key crate keys generator buy menu gui">
                     <span class="command-syntax">/derpshop</span>
-                    <span class="command-desc">Open the special Derpshop GUI to purchase keys and spawners using Derpies.</span>
+                    <span class="command-desc">Open the special Derpshop GUI to purchase keys and spawners using
+                        Derpies.</span>
                 </div>
                 <div class="command-row" data-name="pay give send erpies money player transfer">
                     <span class="command-syntax">/pay &lt;amount&gt; &lt;player&gt;</span>
-                    <span class="command-desc">Transfer a specified amount of Erpies directly to another online player.</span>
+                    <span class="command-desc">Transfer a specified amount of Erpies directly to another online
+                        player.</span>
                 </div>
                 <div class="command-row" data-name="bank money erpies derpies balance vault deposit withdraw">
                     <span class="command-syntax">/bank</span>
-                    <span class="command-desc">Open your bank account interface to deposit or withdraw items and money.</span>
+                    <span class="command-desc">Open your bank account interface to deposit or withdraw items and
+                        money.</span>
                 </div>
                 <div class="command-row" data-name="auction open buy sell bid market gui listings">
                     <span class="command-syntax">/auction</span>
@@ -306,11 +318,13 @@
                 </div>
                 <div class="command-row" data-name="orders buy list requests board gui">
                     <span class="command-syntax">/orders</span>
-                    <span class="command-desc">Open the buy orders board to request custom items or view pending requests.</span>
+                    <span class="command-desc">Open the buy orders board to request custom items or view pending
+                        requests.</span>
                 </div>
                 <div class="command-row" data-name="bh bounty hunter head trade erpies derpies npc menu">
                     <span class="command-syntax">/bh</span>
-                    <span class="command-desc">Open the Bounty Hunter head trading menu to exchange player heads for money.</span>
+                    <span class="command-desc">Open the Bounty Hunter head trading menu to exchange player heads for
+                        money.</span>
                 </div>
                 <div class="command-row" data-name="store link buy url web browser store passes">
                     <span class="command-syntax">/store</span>
@@ -324,7 +338,8 @@
                 </div>
                 <div class="command-row" data-name="home sethome teleport points gui menu">
                     <span class="command-syntax">/home</span>
-                    <span class="command-desc">Open the Homes Menu to teleport to one of your saved home locations.</span>
+                    <span class="command-desc">Open the Homes Menu to teleport to one of your saved home
+                        locations.</span>
                 </div>
                 <div class="command-row" data-name="sethome home set save manage rename remove gui">
                     <span class="command-syntax">/sethome</span>
@@ -348,7 +363,8 @@
                 </div>
                 <div class="command-row" data-name="afk zone earn derpies money teleport idle">
                     <span class="command-syntax">/afk</span>
-                    <span class="command-desc">Teleport to the server's AFK zone to earn Derpies automatically over time.</span>
+                    <span class="command-desc">Teleport to the server's AFK zone to earn Derpies automatically over
+                        time.</span>
                 </div>
                 <div class="command-row" data-name="event teleport area warp mini-game">
                     <span class="command-syntax">/event</span>
@@ -362,7 +378,8 @@
                 </div>
                 <div class="command-row" data-name="team manage guild clan coords list chat gui members">
                     <span class="command-syntax">/team</span>
-                    <span class="command-desc">Open your active team management menu to view members, vault, and settings.</span>
+                    <span class="command-desc">Open your active team management menu to view members, vault, and
+                        settings.</span>
                 </div>
                 <div class="command-row" data-name="requesteam team invite recruit join request player">
                     <span class="command-syntax">/requesteam &lt;player&gt;</span>
@@ -376,11 +393,13 @@
                 <!-- PvP & Minigames -->
                 <div class="command-row" data-name="dual invite challenge fight bedrock arena player pvp">
                     <span class="command-syntax">/dual &lt;player&gt;</span>
-                    <span class="command-desc">Send a direct duel invitation to another player in the Bedrock arena.</span>
+                    <span class="command-desc">Send a direct duel invitation to another player in the Bedrock
+                        arena.</span>
                 </div>
                 <div class="command-row" data-name="dualaccept accept fight match dual pvp">
                     <span class="command-syntax">/dualaccept</span>
-                    <span class="command-desc">Accept a pending direct duel challenge within the 60-second window.</span>
+                    <span class="command-desc">Accept a pending direct duel challenge within the 60-second
+                        window.</span>
                 </div>
                 <div class="command-row" data-name="apocalypse zombie minigame start difficulty waves survival">
                     <span class="command-syntax">/apocalypse</span>
@@ -394,11 +413,13 @@
                 </div>
                 <div class="command-row" data-name="offhand swap hand item bedrock switch">
                     <span class="command-syntax">/offhand</span>
-                    <span class="command-desc">Swap items between your main hand and offhand (useful for Bedrock players).</span>
+                    <span class="command-desc">Swap items between your main hand and offhand (useful for Bedrock
+                        players).</span>
                 </div>
                 <div class="command-row" data-name="setting settings chat spam music tpa toggle configuration gui">
                     <span class="command-syntax">/setting</span>
-                    <span class="command-desc">Open the settings menu to configure chat spam, tpa requests, and other features.</span>
+                    <span class="command-desc">Open the settings menu to configure chat spam, tpa requests, and other
+                        features.</span>
                 </div>
                 <div class="command-row" data-name="rules book server guidelines info">
                     <span class="command-syntax">/rules</span>
@@ -406,7 +427,8 @@
                 </div>
                 <div class="command-row" data-name="credits book author names developers contributors info">
                     <span class="command-syntax">/credits</span>
-                    <span class="command-desc">Open the server credits book UI to view developers and contributors.</span>
+                    <span class="command-desc">Open the server credits book UI to view developers and
+                        contributors.</span>
                 </div>
             </div>
         </div>
@@ -415,7 +437,8 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-container">
-            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with Mojang.</p>
+            <p class="copyright">&copy; 2026 ErpSMP. Minecraft is a copyright of Mojang AB. We are not affiliated with
+                Mojang.</p>
             <div class="socials">
                 <a href="#" aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
                 <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
@@ -431,4 +454,5 @@
     <!-- Script file -->
     <script src="app.js"></script>
 </body>
+
 </html>

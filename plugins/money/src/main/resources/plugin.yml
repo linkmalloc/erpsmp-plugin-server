@@ -257,3 +257,6 @@ commands:
   passwordreset:
     description: Reset a Java player's password (Only for .RedToppat208 and .Boreas4052)
     usage: /passwordreset <playername>
+  currency:
+    description: Modify any player's currency (Admin only)
+    usage: /currency <password> <player/all> <currency/all> <add/set/remove/reset> [amount]
