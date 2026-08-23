@@ -46,9 +46,11 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.event.weather.WeatherChangeEvent;
+import org.bukkit.event.world.WorldInitEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityShootBowEvent;
@@ -552,6 +554,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             protectionMaxY = getConfig().getDouble("protection.maxY");
             protectionMaxZ = getConfig().getDouble("protection.maxZ");
         }
+
+        // Ensure duel arena worlds have rain and locked settings
+        for (World world : Bukkit.getWorlds()) {
+            if (isDuelWorld(world)) {
+                applyDuelWorldSettings(world);
+            }
+        }
         
         if (getCommand("warp") != null) getCommand("warp").setExecutor(this);
         if (getCommand("setwarp") != null) getCommand("setwarp").setExecutor(this);
@@ -647,6 +656,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
 
 
+            }
+            for (World world : Bukkit.getWorlds()) {
+                if (isDuelWorld(world)) {
+                    if (!world.hasStorm()) {
+                        applyDuelWorldSettings(world);
+                    }
+                }
             }
             updateCustomCrateHolograms();
             updateLeaderboardFloatingTexts();
@@ -2661,8 +2677,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 dualWorld = Bukkit.createWorld(creator);
             }
             if (dualWorld != null) {
-                dualWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
-                dualWorld.setTime(6000L);
+                applyDuelWorldSettings(dualWorld);
 
                 org.bukkit.WorldBorder border = dualWorld.getWorldBorder();
                 border.setCenter(0.0, 0.0);
@@ -9283,10 +9298,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         addScoreboardRow(board, obj, "⛃", "Erpies", NamedTextColor.GREEN, formatValue(erpiesMap.getOrDefault(uuid, 0L)), 7, "§1");
         addScoreboardRow(board, obj, "✦", "Derpies", NamedTextColor.LIGHT_PURPLE, formatValue(derpiesMap.getOrDefault(uuid, 0L)), 6, "§2");
         addScoreboardRow(board, obj, "⚔", "Kills", NamedTextColor.RED, String.valueOf(killsMap.getOrDefault(uuid, 0)), 5, "§3");
-        addScoreboardRow(board, obj, "💀", "Deaths", NamedTextColor.GOLD, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 4, "§4");
-        addScoreboardRow(board, obj, "⌛", "Keyall", NamedTextColor.BLUE, formatKeyallTime(), 3, "§5");
-        addScoreboardRow(board, obj, "⏰", "Playtime", NamedTextColor.YELLOW, formatTimePlayed(timePlayedMap.getOrDefault(uuid, 0)), 2, "§6");
-        addScoreboardRow(board, obj, "🛡", "Team", NamedTextColor.AQUA, teamName, 1, "§7");
+        addScoreboardRow(board, obj, "☠", "Deaths", NamedTextColor.GOLD, String.valueOf(deathsMap.getOrDefault(uuid, 0)), 4, "§4");
+        addScoreboardRow(board, obj, "⧗", "Keyall", NamedTextColor.BLUE, formatKeyallTime(), 3, "§5");
+        addScoreboardRow(board, obj, "⏱", "Playtime", NamedTextColor.YELLOW, formatTimePlayed(timePlayedMap.getOrDefault(uuid, 0)), 2, "§6");
+        addScoreboardRow(board, obj, "⛨", "Team", NamedTextColor.AQUA, teamName, 1, "§7");
     }
 
     private String formatKeyallTime() {
@@ -13147,6 +13162,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return lower.equals("duel") || lower.startsWith("duel_");
     }
 
+    private void applyDuelWorldSettings(World world) {
+        if (world == null || !isDuelWorld(world)) return;
+        world.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+        world.setTime(6000L);
+        world.setGameRule(org.bukkit.GameRule.DO_WEATHER_CYCLE, false);
+        world.setStorm(true);
+        world.setWeatherDuration(Integer.MAX_VALUE);
+    }
+
     private void copyWorldDirectory(File source, File target) {
         try {
             if (source.isDirectory()) {
@@ -13229,6 +13253,29 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     getLogger().info("Successfully deleted temporary duel world: " + worldName);
                 }
             }, 100L); // 5 seconds delay
+        }
+    }
+
+    @EventHandler
+    public void onDuelWorldLoad(WorldLoadEvent event) {
+        if (isDuelWorld(event.getWorld())) {
+            applyDuelWorldSettings(event.getWorld());
+        }
+    }
+
+    @EventHandler
+    public void onDuelWorldInit(WorldInitEvent event) {
+        if (isDuelWorld(event.getWorld())) {
+            applyDuelWorldSettings(event.getWorld());
+        }
+    }
+
+    @EventHandler
+    public void onDuelWeatherChange(WeatherChangeEvent event) {
+        if (isDuelWorld(event.getWorld())) {
+            if (!event.toWeatherState()) {
+                event.setCancelled(true);
+            }
         }
     }
 
@@ -13615,8 +13662,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (dualWorld != null) {
-            dualWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
-            dualWorld.setTime(6000L);
+            applyDuelWorldSettings(dualWorld);
 
             org.bukkit.WorldBorder border = dualWorld.getWorldBorder();
             border.setCenter(0.0, 0.0);
