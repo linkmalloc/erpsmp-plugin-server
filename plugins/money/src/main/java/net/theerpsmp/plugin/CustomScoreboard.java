@@ -311,7 +311,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Material.PUMPKIN_PIE, Material.SWEET_BERRIES
     );
     private static final UUID RED_TOPPAT_UUID = UUID.fromString("00000000-0000-0000-0009-01f06c518376");
+    private static final UUID MERP208_UUID = UUID.fromString("1ba04e2c-6696-3083-8059-c94736a7d303");
     private static final UUID BOREAS_UUID = UUID.fromString("00000000-0000-0000-0009-01f9fff22f06");
+
+    private static boolean isRedToppat(UUID uuid) {
+        return uuid != null && (uuid.equals(RED_TOPPAT_UUID) || uuid.equals(MERP208_UUID));
+    }
 
     // Stats for new nametags
     private final HashMap<UUID, Integer> oresMinedMap = new HashMap<>();
@@ -2076,7 +2081,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 invisibleKillsMap.put(killerUUID, invisibleKillsMap.getOrDefault(killerUUID, 0) + 1);
             }
 
-            if (victim.isOp() || victim.getUniqueId().equals(RED_TOPPAT_UUID) || victim.getUniqueId().equals(BOREAS_UUID)) {
+            if (victim.isOp() || isRedToppat(victim.getUniqueId()) || victim.getUniqueId().equals(BOREAS_UUID)) {
                 killedAdminMap.put(killerUUID, true);
             }
 
@@ -2295,7 +2300,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("setwarp")) {
-            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
+            if (!isRedToppat(player.getUniqueId())) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -2364,7 +2369,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("say")) {
-            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
+            if (!isRedToppat(player.getUniqueId())) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -2383,7 +2388,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // /rank <erp+|erp++|erp+++|vip|reset> <playername> or /rank <playername> reset — restricted to trusted admins
         if (command.getName().equalsIgnoreCase("rank")) {
             String senderName = player.getName();
-            boolean isTrusted = player.getUniqueId().equals(RED_TOPPAT_UUID) || player.getUniqueId().equals(BOREAS_UUID);
+            boolean isTrusted = isRedToppat(player.getUniqueId()) || player.getUniqueId().equals(BOREAS_UUID);
             if (!isTrusted) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command.", NamedTextColor.RED));
                 return true;
@@ -2955,7 +2960,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (command.getName().equalsIgnoreCase("player")) {
             String pName = player.getName();
-            if (!player.isOp() && !player.getUniqueId().equals(RED_TOPPAT_UUID) && !player.getUniqueId().equals(BOREAS_UUID)) {
+            if (!player.isOp() && !isRedToppat(player.getUniqueId()) && !player.getUniqueId().equals(BOREAS_UUID)) {
                 player.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -3560,7 +3565,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /admin <password> <add|remove> <player> (.RedToppat208 and .Boreas4052 Only) ---
         if (command.getName().equalsIgnoreCase("admin")) {
             String senderName = player.getName();
-            if (!player.getUniqueId().equals(RED_TOPPAT_UUID) && !player.getUniqueId().equals(BOREAS_UUID)) {
+            if (!isRedToppat(player.getUniqueId()) && !player.getUniqueId().equals(BOREAS_UUID)) {
                 player.sendMessage(Component.text("❌ Only trusted admins can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -3712,8 +3717,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (sender instanceof Player p) {
                 UUID senderUuid = p.getUniqueId();
                 String senderName = p.getName();
-                boolean isOwner = senderUuid.equals(RED_TOPPAT_UUID) || senderUuid.equals(BOREAS_UUID)
+                boolean isOwner = isRedToppat(senderUuid) || senderUuid.equals(BOREAS_UUID)
                         || senderName.equalsIgnoreCase(".RedToppat208") || senderName.equalsIgnoreCase("RedToppat208")
+                        || senderName.equalsIgnoreCase("Merp208")
                         || senderName.equalsIgnoreCase(".Boreas4052") || senderName.equalsIgnoreCase("Boreas4052");
                 if (!isOwner) {
                     p.sendMessage(Component.text("❌ You do not have permission to use this command!", NamedTextColor.RED));
@@ -3801,7 +3807,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // --- /setspawn <1-5> (.RedToppat208 Only, in 'spawn' dimension) ---
         if (command.getName().equalsIgnoreCase("setspawn")) {
-            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
+            if (!isRedToppat(player.getUniqueId())) {
                 player.sendMessage(Component.text("❌ Only .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -4795,7 +4801,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /edit (rules/credits) ---
         if (command.getName().equalsIgnoreCase("edit")) {
             String pName = player.getName();
-            if (!player.getUniqueId().equals(RED_TOPPAT_UUID)) {
+            if (!isRedToppat(player.getUniqueId())) {
                 player.sendMessage(Component.text("❌ Only player .RedToppat208 can use this command!", NamedTextColor.RED));
                 return true;
             }
@@ -5041,7 +5047,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /keys (keys/echo/crimson/end/amethyst/all) (add/remove/reset) (amount) (playername/all) ---
         if (command.getName().equalsIgnoreCase("keys")) {
             UUID senderUuid = player.getUniqueId();
-            boolean isOwnerOrCoOwner = senderUuid.equals(RED_TOPPAT_UUID) || senderUuid.equals(BOREAS_UUID);
+            boolean isOwnerOrCoOwner = isRedToppat(senderUuid) || senderUuid.equals(BOREAS_UUID);
             if (!isOwnerOrCoOwner) {
                 player.sendMessage(Component.text("❌ Only the owner and co-owner can use this command!", NamedTextColor.RED));
                 return true;
@@ -11586,7 +11592,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             UUID uuid = online.getUniqueId();
 
-            if (uuid.equals(RED_TOPPAT_UUID)) {
+            if (isRedToppat(uuid)) {
                 prefix = prefix.append(Component.text("[Owner o' Merp] ", NamedTextColor.RED));
                 team.color(NamedTextColor.RED);
             } else if (uuid.equals(BOREAS_UUID)) {
@@ -11643,7 +11649,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         List<Component> allTags = new java.util.ArrayList<>();
 
         // 2a. Admin tags
-        if (uuid.equals(RED_TOPPAT_UUID)) {
+        if (isRedToppat(uuid)) {
             allTags.add(Component.text("Owner o' Merp", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
         } else if (uuid.equals(BOREAS_UUID)) {
             allTags.add(Component.text("Co-Owner o' Lerp", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
@@ -12202,7 +12208,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (baseCmd.contains(":")) baseCmd = baseCmd.substring(baseCmd.indexOf(':') + 1);
 
         if (baseCmd.equals("op") || baseCmd.equals("deop")) {
-            if (!senderUuid.equals(RED_TOPPAT_UUID)) {
+            if (!isRedToppat(senderUuid)) {
                 event.setCancelled(true);
                 event.getPlayer().sendMessage(Component.text("❌ You are not allowed to use that command!", NamedTextColor.RED));
                 return;
@@ -12211,7 +12217,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // Ban/unban/kick protection: only RedToppat and Boreas can ban/unban/kick operators
         if ((baseCmd.equals("ban") || baseCmd.equals("unban") || baseCmd.equals("ban-ip") || baseCmd.equals("pardon") || baseCmd.equals("kick")) && cmdParts.length >= 2) {
-            if (!senderUuid.equals(RED_TOPPAT_UUID) && !senderUuid.equals(BOREAS_UUID)) {
+            if (!isRedToppat(senderUuid) && !senderUuid.equals(BOREAS_UUID)) {
                 String targetName = cmdParts[1];
                 Player targetPlayer = Bukkit.getPlayer(targetName);
                 if (targetPlayer != null && targetPlayer.isOp()) {
