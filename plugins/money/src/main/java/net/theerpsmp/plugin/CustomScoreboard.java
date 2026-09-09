@@ -56,6 +56,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.entity.Arrow;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.block.BlockFace;
@@ -3390,6 +3391,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "echo_sword" -> item = createEchoSword();
                 case "ender_sword" -> item = createEnderSword();
                 case "zeus_sword" -> item = createZeusSword();
+                case "goaty_sword", "goaty", "goatysword" -> item = createGoatySword();
                 case "gateway" -> item = createEndGatewayItem();
                 case "echo_crate" -> item = createEchoCrate();
                 case "crimson_crate" -> item = createCrimsonCrate();
@@ -3415,7 +3417,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "echo_frame" -> item = createEchoFrameItem();
                 case "echo_starter" -> item = createEchoStarterItem();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator, echo_frame, echo_starter", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, goaty_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator, echo_frame, echo_starter", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -5768,6 +5770,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                     weaponMeta.getPersistentDataContainer().set(hitKey, PersistentDataType.INTEGER, hits);
                     weapon.setItemMeta(weaponMeta);
+                }
+
+                if (customItem != null && customItem.equals("goaty_sword") && event.getDamager() instanceof Player) {
+                    if (!attacker.hasCooldown(Material.DIAMOND_SWORD)) {
+                        if (event.getEntity() instanceof LivingEntity livingTarget) {
+                            if (random.nextDouble() < 0.35) {
+                                executeGoatyAbility(attacker, livingTarget);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -9789,6 +9801,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         items.add(createEchoSword());
         items.add(createEnderSword());
         items.add(createZeusSword());
+        items.add(createGoatySword());
         items.add(createLungeSpear());
         items.add(createShopCrate());
         items.add(createEchoCrate());
@@ -10763,6 +10776,49 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                     return;
                 }
+
+                if (customItem != null && customItem.equals("goaty_sword")) {
+                    Player player = event.getPlayer();
+                    if (!shouldTriggerCustomWeaponAbility(player, event)) {
+                        return;
+                    }
+                    event.setCancelled(true);
+
+                    if (player.hasCooldown(Material.DIAMOND_SWORD)) {
+                        player.sendMessage(Component.text("❌ The Goaty Sword is on cooldown!", NamedTextColor.RED));
+                        return;
+                    }
+
+                    org.bukkit.util.RayTraceResult result = player.getWorld().rayTraceEntities(
+                        player.getEyeLocation(),
+                        player.getLocation().getDirection(),
+                        15.0,
+                        0.8,
+                        entity -> entity instanceof LivingEntity && !entity.equals(player)
+                    );
+
+                    LivingEntity target = null;
+                    if (result != null && result.getHitEntity() instanceof LivingEntity living) {
+                        target = living;
+                    } else {
+                        for (org.bukkit.entity.Entity nearby : player.getNearbyEntities(4.0, 4.0, 4.0)) {
+                            if (nearby instanceof LivingEntity living && !nearby.equals(player)) {
+                                org.bukkit.util.Vector toTarget = living.getLocation().toVector().subtract(player.getLocation().toVector()).normalize();
+                                if (player.getLocation().getDirection().dot(toTarget) > 0.5) {
+                                    target = living;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (target != null) {
+                        executeGoatyAbility(player, target);
+                    } else {
+                        player.sendMessage(Component.text("❌ No target in sight! Aim at an entity within 15 blocks.", NamedTextColor.RED));
+                    }
+                    return;
+                }
             }
         }
 
@@ -11452,6 +11508,91 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             sword.setItemMeta(meta);
         }
         return sword;
+    }
+
+    private ItemStack createGoatySword() {
+        ItemStack sword = new ItemStack(Material.DIAMOND_SWORD);
+        ItemMeta meta = sword.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("The Goaty Sword", NamedTextColor.GOLD).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
+            meta.lore(List.of(
+                Component.text("Right-click or strike to unleash the Goaty Ability.", NamedTextColor.YELLOW),
+                Component.text("Deals 1-10 hearts of random damage.", NamedTextColor.GRAY),
+                Component.text("Totems can still save players from death.", NamedTextColor.GRAY),
+                Component.text("Cooldown: 3s", NamedTextColor.DARK_GRAY)
+            ));
+            meta.addEnchant(Enchantment.SHARPNESS, 5, true);
+            meta.addEnchant(Enchantment.UNBREAKING, 3, true);
+            meta.addEnchant(Enchantment.MENDING, 1, true);
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "goaty_sword");
+            sword.setItemMeta(meta);
+        }
+        return sword;
+    }
+
+    private void executeGoatyAbility(Player attacker, LivingEntity target) {
+        if (target == null || target.isDead()) return;
+
+        if (attacker.getGameMode() == GameMode.SURVIVAL) {
+            if (attacker.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(target.getLocation())) {
+                attacker.sendMessage(Component.text("❌ PvP and damage are disabled at spawn!", NamedTextColor.RED));
+                return;
+            }
+            if (attacker.getWorld().getName().equalsIgnoreCase("afk_zone") || attacker.getWorld().getName().equalsIgnoreCase("afk")) {
+                attacker.sendMessage(Component.text("❌ PvP is disabled in the AFK zone!", NamedTextColor.RED));
+                return;
+            }
+        }
+
+        int hearts = 1 + random.nextInt(10); // 1 to 10 hearts
+        double damage = hearts * 2.0;
+
+        attacker.getWorld().playSound(attacker.getLocation(), org.bukkit.Sound.ENTITY_GOAT_SCREAMING_PREPARE_RAM, 1.2f, 1.0f);
+        target.getWorld().playSound(target.getLocation(), org.bukkit.Sound.ENTITY_GOAT_SCREAMING_RAM_IMPACT, 1.2f, 1.0f);
+
+        // Spawn cloud particle trail from attacker to target
+        Location start = attacker.getEyeLocation();
+        Location end = target.getLocation().add(0, 1.0, 0);
+        org.bukkit.util.Vector dir = end.toVector().subtract(start.toVector());
+        double dist = dir.length();
+        if (dist > 0.1) {
+            dir.normalize();
+            for (double d = 0.5; d < dist; d += 0.8) {
+                Location pLoc = start.clone().add(dir.clone().multiply(d));
+                attacker.getWorld().spawnParticle(Particle.CLOUD, pLoc, 1, 0.05, 0.05, 0.05, 0.01);
+            }
+        }
+
+        target.getWorld().spawnParticle(Particle.CRIT, end, 20, 0.4, 0.4, 0.4, 0.2);
+        target.getWorld().spawnParticle(Particle.CLOUD, end, 10, 0.3, 0.3, 0.3, 0.1);
+
+        double currentHealth = target.getHealth();
+
+        if (currentHealth - damage <= 0) {
+            // Lethal damage: target.damage(...) ensures totems pop and save the victim if held
+            target.damage(99999.0, attacker);
+        } else {
+            // Non-lethal true damage
+            target.setHealth(Math.max(0.1, currentHealth - damage));
+            target.playHurtAnimation(0);
+            target.getWorld().playSound(target.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
+
+            if (target instanceof Player victim && !victim.equals(attacker)) {
+                UUID victimUUID = victim.getUniqueId();
+                UUID attackerUUID = attacker.getUniqueId();
+                combatTagTicks.put(victimUUID, 20);
+                combatTagTicks.put(attackerUUID, 20);
+                victim.sendActionBar(Component.text("combat 20s", NamedTextColor.RED));
+                attacker.sendActionBar(Component.text("combat 20s", NamedTextColor.RED));
+            }
+        }
+
+        attacker.sendActionBar(Component.text("🐐 The Goaty Sword dealt " + hearts + " hearts! (" + (int) damage + " DMG)", NamedTextColor.GOLD));
+        if (target instanceof Player victim) {
+            victim.sendMessage(Component.text("🐐 You were struck by The Goaty Sword for " + hearts + " hearts!", NamedTextColor.RED));
+        }
+
+        attacker.setCooldown(Material.DIAMOND_SWORD, 60); // 3 seconds cooldown
     }
 
     private ItemStack createEndGatewayItem() {
