@@ -5847,7 +5847,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case WIND_CHARGE: return 75;
             case END_CRYSTAL: return 500;
             case OBSIDIAN: return 500;
-            case ENCHANTED_GOLDEN_APPLE: return 500;
+            case GOLDEN_APPLE: return 500;
+            case RESPAWN_ANCHOR: return 500;
+            case GLOWSTONE: return 100;
             case COOKED_BEEF: return 100;
             case COOKED_PORKCHOP: return 50;
             case BREAD: return 25;
@@ -5885,7 +5887,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case GHAST_TEAR:
             case SLIME_BALL:
             case SADDLE:
-            case GOLDEN_APPLE:
                 return 100;
 
             // Uncommon blocks/items (10)
@@ -6451,6 +6452,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         shop.setItem(20, createGuiItem(Material.SPAWNER, "Ore Generator", NamedTextColor.AQUA, "Cost: 2000 Derpies", "Generates diamonds every minute when placed.", "Right-click placed block to open inventory."));
         shop.setItem(21, createGuiItem(Material.SPAWNER, "Tools Generator", NamedTextColor.LIGHT_PURPLE, "Cost: 2000 Derpies", "Generates tools & armor (except netherite) every minute when placed.", "Right-click placed block to open inventory."));
         shop.setItem(22, createGuiItem(Material.SPAWNER, "Mob Generator", NamedTextColor.RED, "Cost: 2000 Derpies", "A custom spawner generator.", "Right-click placed block to open inventory."));
+        shop.setItem(26, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
 
         player.openInventory(shop);
     }
@@ -7557,6 +7559,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (slot == 9) {
                 player.sendMessage(Component.text("❌ Purchase cancelled.", NamedTextColor.RED));
                 returnToCategory(player);
+            } else if (slot == 22) {
+                cartItem.remove(uuid);
+                cartQuantity.remove(uuid);
+                cartUnitPrice.remove(uuid);
+                cartCategory.remove(uuid);
+                openMainMenu(player);
+                return;
             } else if (slot == 10) {
                 qty = Math.max(1, qty - 1);
                 cartQuantity.put(uuid, qty);
@@ -7611,6 +7620,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // 2. Main Shop GUI
         if (title.equals("The Erp SMP - Shop")) {
+            event.setCancelled(true);
             if (clicked.getType() == Material.ENDER_EYE) openEndMenu(player);
             else if (clicked.getType() == Material.DIAMOND_SWORD) openPvpMenu(player);
             else if (clicked.getType() == Material.COOKED_BEEF) openFoodMenu(player);
@@ -7619,6 +7629,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // 3. Derpshop GUI
         if (title.equals("Derp Shop - Keys")) {
+            event.setCancelled(true);
+            if (clicked.getType() == Material.ARROW) {
+                openMainMenu(player);
+                return;
+            }
             int rawSlot = event.getRawSlot();
 
             long derpCost = -1;
@@ -7889,14 +7904,22 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         // 8. Normal Categories Shop submenus
-        int cost = getPrice(clicked.getType(), title);
-        if (cost == -1) return;
+        if (title.startsWith("Shop - ")) {
+            event.setCancelled(true);
+            if (clicked.getType() == Material.ARROW) {
+                openMainMenu(player);
+                return;
+            }
+            int cost = getPrice(clicked.getType(), title);
+            if (cost == -1) return;
 
-        cartItem.put(uuid, clicked.getType());
-        cartQuantity.put(uuid, 1);
-        cartUnitPrice.put(uuid, cost);
-        cartCategory.put(uuid, title);
-        openCartGui(player);
+            cartItem.put(uuid, clicked.getType());
+            cartQuantity.put(uuid, 1);
+            cartUnitPrice.put(uuid, cost);
+            cartCategory.put(uuid, title);
+            openCartGui(player);
+            return;
+        }
     }
 
     private void openEndMenu(Player player) {
@@ -7905,16 +7928,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(12, createGuiItem(Material.ENDER_PEARL, "Ender Pearl", NamedTextColor.AQUA, "Cost: 75 Erpies"));
         inv.setItem(14, createGuiItem(Material.ENDER_CHEST, "Ender Chest", NamedTextColor.DARK_PURPLE, "Cost: 1200 Erpies"));
         inv.setItem(16, createGuiItem(Material.CHORUS_FRUIT, "Chorus Fruit", NamedTextColor.LIGHT_PURPLE, "Cost: 50 Erpies"));
+        inv.setItem(22, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
         player.openInventory(inv);
     }
 
     private void openPvpMenu(Player player) {
         Inventory inv = Bukkit.createInventory(null, 27, Component.text("Shop - PvP Combat"));
-        inv.setItem(11, createGuiItem(Material.TOTEM_OF_UNDYING, "Totem of Undying", NamedTextColor.GOLD, "Cost: 1500 Erpies"));
-        inv.setItem(12, createGuiItem(Material.WIND_CHARGE, "Wind Charge", NamedTextColor.GRAY, "Cost: 75 Erpies"));
-        inv.setItem(13, createGuiItem(Material.END_CRYSTAL, "End Crystal", NamedTextColor.LIGHT_PURPLE, "Cost: 500 Erpies"));
-        inv.setItem(14, createGuiItem(Material.OBSIDIAN, "Obsidian", NamedTextColor.DARK_GRAY, "Cost: 500 Erpies"));
-        inv.setItem(15, createGuiItem(Material.ENCHANTED_GOLDEN_APPLE, "Enchanted Golden Apple", NamedTextColor.DARK_PURPLE, "Cost: 500 Erpies"));
+        inv.setItem(10, createGuiItem(Material.TOTEM_OF_UNDYING, "Totem of Undying", NamedTextColor.GOLD, "Cost: 1500 Erpies"));
+        inv.setItem(11, createGuiItem(Material.WIND_CHARGE, "Wind Charge", NamedTextColor.GRAY, "Cost: 75 Erpies"));
+        inv.setItem(12, createGuiItem(Material.END_CRYSTAL, "End Crystal", NamedTextColor.LIGHT_PURPLE, "Cost: 500 Erpies"));
+        inv.setItem(13, createGuiItem(Material.OBSIDIAN, "Obsidian", NamedTextColor.DARK_GRAY, "Cost: 500 Erpies"));
+        inv.setItem(14, createGuiItem(Material.GOLDEN_APPLE, "Golden Apple", NamedTextColor.GOLD, "Cost: 500 Erpies"));
+        inv.setItem(15, createGuiItem(Material.RESPAWN_ANCHOR, "Respawn Anchor", NamedTextColor.DARK_PURPLE, "Cost: 500 Erpies"));
+        inv.setItem(16, createGuiItem(Material.GLOWSTONE, "Glowstone", NamedTextColor.YELLOW, "Cost: 100 Erpies"));
+        inv.setItem(22, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
         player.openInventory(inv);
     }
 
@@ -7924,6 +7951,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(12, createGuiItem(Material.COOKED_BEEF, "Steak", NamedTextColor.RED, "Cost: 100 Erpies"));
         inv.setItem(14, createGuiItem(Material.COOKED_PORKCHOP, "Porkchop", NamedTextColor.GOLD, "Cost: 50 Erpies"));
         inv.setItem(16, createGuiItem(Material.GOLDEN_CARROT, "Golden Carrot", NamedTextColor.GOLD, "Cost: 125 Erpies"));
+        inv.setItem(22, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
         player.openInventory(inv);
     }
 
@@ -7938,7 +7966,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (material == Material.WIND_CHARGE) return 75;
             if (material == Material.END_CRYSTAL) return 500;
             if (material == Material.OBSIDIAN) return 500;
-            if (material == Material.ENCHANTED_GOLDEN_APPLE) return 500;
+            if (material == Material.GOLDEN_APPLE) return 500;
+            if (material == Material.RESPAWN_ANCHOR) return 500;
+            if (material == Material.GLOWSTONE) return 100;
         } else if (title.contains("Food")) {
             if (material == Material.COOKED_BEEF) return 100;
             if (material == Material.COOKED_PORKCHOP) return 50;
@@ -13902,6 +13932,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(15, createGuiItem(Material.GREEN_DYE, "Add 1", NamedTextColor.GREEN, "Add 1 to cart"));
         inv.setItem(16, createGuiItem(Material.GREEN_DYE, "Add 5", NamedTextColor.GREEN, "Add 5 to cart"));
         inv.setItem(17, createGuiItem(Material.GREEN_DYE, "Add 10", NamedTextColor.GREEN, "Add 10 to cart"));
+        inv.setItem(22, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
 
         player.openInventory(inv);
     }
