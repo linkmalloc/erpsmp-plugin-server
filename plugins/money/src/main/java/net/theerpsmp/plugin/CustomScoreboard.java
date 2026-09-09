@@ -68,6 +68,7 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.entity.Display;
 import org.bukkit.Color;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -10294,6 +10295,150 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
+    private boolean isInteractableBlock(Block block) {
+        if (block == null) return false;
+        Material type = block.getType();
+        if (type.isAir()) return false;
+
+        // Blocks that should NOT count as interactable for combat weapon right-clicks
+        if (type == Material.TNT || type == Material.PUMPKIN || type == Material.CARVED_PUMPKIN
+                || type == Material.BEEHIVE || type == Material.BEE_NEST) {
+            return false;
+        }
+
+        // Custom server blocks (Ender Chest, Generators)
+        if (type == Material.ENDER_CHEST) return true;
+        if (type == Material.SPAWNER && generators.containsKey(block.getLocation())) return true;
+
+        // Standard containers
+        if (block.getState() instanceof org.bukkit.block.Container) return true;
+
+        org.bukkit.block.data.BlockData data = block.getBlockData();
+        if (data instanceof org.bukkit.block.data.type.Door
+                || data instanceof org.bukkit.block.data.type.TrapDoor
+                || data instanceof org.bukkit.block.data.type.Gate
+                || data instanceof org.bukkit.block.data.type.Switch
+                || data instanceof org.bukkit.block.data.type.Bed
+                || data instanceof org.bukkit.block.data.type.Lectern
+                || data instanceof org.bukkit.block.data.type.Bell
+                || data instanceof org.bukkit.block.data.type.RespawnAnchor
+                || data instanceof org.bukkit.block.data.type.Cake
+                || data instanceof org.bukkit.block.data.type.Comparator
+                || data instanceof org.bukkit.block.data.type.Repeater
+                || data instanceof org.bukkit.block.data.type.DaylightDetector) {
+            return true;
+        }
+
+        switch (type) {
+            case CRAFTING_TABLE:
+            case ANVIL:
+            case CHIPPED_ANVIL:
+            case DAMAGED_ANVIL:
+            case ENCHANTING_TABLE:
+            case BEACON:
+            case STONECUTTER:
+            case CARTOGRAPHY_TABLE:
+            case SMITHING_TABLE:
+            case GRINDSTONE:
+            case LOOM:
+            case NOTE_BLOCK:
+            case JUKEBOX:
+            case COMPOSTER:
+            case RESPAWN_ANCHOR:
+            case LODESTONE:
+            case LEVER:
+                return true;
+            default:
+                try {
+                    return type.isInteractable();
+                } catch (Exception e) {
+                    return false;
+                }
+        }
+    }
+
+    private boolean isInteractableItem(ItemStack item, boolean isBlockClick) {
+        if (item == null || item.getType().isAir()) return false;
+        Material type = item.getType();
+
+        // 1. Shield (blocking)
+        if (type == Material.SHIELD) return true;
+
+        // 2. Edible foods
+        if (type.isEdible()) return true;
+
+        // 3. Drinks and potions
+        if (type == Material.POTION || type == Material.SPLASH_POTION
+                || type == Material.LINGERING_POTION || type == Material.MILK_BUCKET
+                || type == Material.HONEY_BOTTLE || type == Material.OMINOUS_BOTTLE) {
+            return true;
+        }
+
+        // 4. Projectiles, ranged weapons, consumable tools
+        if (type == Material.BOW || type == Material.CROSSBOW || type == Material.TRIDENT
+                || type == Material.WIND_CHARGE || type == Material.ENDER_PEARL
+                || type == Material.ENDER_EYE || type == Material.CHORUS_FRUIT
+                || type == Material.EGG || type == Material.SNOWBALL
+                || type == Material.EXPERIENCE_BOTTLE || type == Material.FIREWORK_ROCKET
+                || type == Material.FISHING_ROD || type == Material.SPYGLASS
+                || type == Material.BRUSH || type == Material.FLINT_AND_STEEL
+                || type == Material.SHEARS) {
+            return true;
+        }
+
+        // 5. Buckets
+        if (type == Material.BUCKET || type.name().endsWith("_BUCKET")) {
+            return true;
+        }
+
+        // 6. Spawn Eggs
+        if (type.name().endsWith("_SPAWN_EGG")) {
+            return true;
+        }
+
+        // 7. When clicking a block: placeable blocks and end crystals are interactable (player places them)
+        if (isBlockClick) {
+            if (type == Material.END_CRYSTAL || type.isBlock()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private ItemStack getOtherHandItem(Player player, EquipmentSlot hand) {
+        if (hand == null || hand == EquipmentSlot.HAND) {
+            return player.getInventory().getItemInOffHand();
+        } else {
+            return player.getInventory().getItemInMainHand();
+        }
+    }
+
+    private boolean shouldTriggerCustomWeaponAbility(Player player, PlayerInteractEvent event) {
+        // 1. If player is sneaking (crouching), custom ability ALWAYS triggers!
+        if (player.isSneaking()) {
+            return true;
+        }
+
+        boolean isBlockClick = (event.getAction() == Action.RIGHT_CLICK_BLOCK);
+
+        // 2. If clicking on an interactable block, let the player interact with the block unless crouching
+        if (isBlockClick && isInteractableBlock(event.getClickedBlock())) {
+            return false;
+        }
+
+        // 3. If the other hand has an interactable item (shield, food, potion, or placeable block on block click),
+        // let the other hand item be used unless crouching
+        ItemStack otherHandItem = getOtherHandItem(player, event.getHand());
+        if (isInteractableItem(otherHandItem, isBlockClick)) {
+            return false;
+        }
+
+        // 4. Otherwise, the other hand is non-interactable (or empty, e.g. totem of undying)
+        // and we are not clicking an interactable block -> activate ability
+        return true;
+    }
+
     @EventHandler
     public void onCustomItemInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
@@ -10423,6 +10568,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                 } else if (customType.equals("lunge_spear")) {
                     if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                        if (!shouldTriggerCustomWeaponAbility(player, event)) {
+                            return;
+                        }
                         event.setCancelled(true);
                         if (player.hasCooldown(Material.TRIDENT)) {
                             player.sendMessage(Component.text("❌ Lunge Spear is on cooldown!", NamedTextColor.RED));
@@ -10574,6 +10722,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
                 if (customItem != null && customItem.equals("ender_sword")) {
                     Player player = event.getPlayer();
+                    if (!shouldTriggerCustomWeaponAbility(player, event)) {
+                        return;
+                    }
                     event.setCancelled(true);
                     
                     if (player.hasCooldown(Material.NETHERITE_SWORD)) {
@@ -10592,6 +10743,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 
                 if (customItem != null && customItem.equals("zeus_sword")) {
                     Player player = event.getPlayer();
+                    if (!shouldTriggerCustomWeaponAbility(player, event)) {
+                        return;
+                    }
                     event.setCancelled(true);
                     
                     if (player.hasCooldown(Material.NETHERITE_SWORD)) {
