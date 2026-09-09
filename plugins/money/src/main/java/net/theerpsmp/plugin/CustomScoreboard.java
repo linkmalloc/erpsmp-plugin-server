@@ -5747,30 +5747,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     event.getEntity().setFireTicks(160);
                 }
                 
-                if (customItem != null && customItem.equals("ender_sword") && event.getDamager() instanceof Player) {
-                    ItemMeta weaponMeta = weapon.getItemMeta();
-                    NamespacedKey hitKey = new NamespacedKey(this, "ender_sword_hits");
-                    int hits = weaponMeta.getPersistentDataContainer().getOrDefault(hitKey, PersistentDataType.INTEGER, 0);
-                    hits++;
-                    if (hits >= 10) {
-                        hits = 0;
-                        if (random.nextDouble() < 0.5) {
-                            org.bukkit.entity.Entity target = event.getEntity();
-                            org.bukkit.entity.AreaEffectCloud cloud = target.getWorld().spawn(target.getLocation(), org.bukkit.entity.AreaEffectCloud.class);
-                            cloud.setParticle(Particle.DRAGON_BREATH);
-                            cloud.setRadius(1.5f);
-                            cloud.setDuration(200);
-                            cloud.setRadiusOnUse(0.0f);
-                            cloud.setRadiusPerTick(-0.0075f);
-                            cloud.setSource(attacker);
-                            cloud.addCustomEffect(new PotionEffect(PotionEffectType.INSTANT_DAMAGE, 1, 0), true);
-                            
-                            target.getWorld().playSound(target.getLocation(), org.bukkit.Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f);
-                        }
-                    }
-                    weaponMeta.getPersistentDataContainer().set(hitKey, PersistentDataType.INTEGER, hits);
-                    weapon.setItemMeta(weaponMeta);
-                }
+
 
                 if (customItem != null && customItem.equals("goaty_sword") && event.getDamager() instanceof Player) {
                     if (!attacker.hasCooldown(Material.DIAMOND_SWORD)) {
@@ -11487,8 +11464,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (meta != null) {
             meta.displayName(Component.text("Ender Sword", NamedTextColor.LIGHT_PURPLE).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
             meta.lore(List.of(
-                Component.text("Right-click to throw a teleporting ender pearl.", NamedTextColor.GRAY),
-                Component.text("Every 10 hits spawns Dragon's Breath.", NamedTextColor.GRAY)
+                Component.text("Right-click to throw a teleporting ender pearl.", NamedTextColor.GRAY)
             ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "ender_sword");
             sword.setItemMeta(meta);
