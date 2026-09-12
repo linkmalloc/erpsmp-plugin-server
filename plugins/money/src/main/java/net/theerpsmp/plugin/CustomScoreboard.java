@@ -630,7 +630,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("dualaccept") != null) getCommand("dualaccept").setExecutor(this);
         if (getCommand("say") != null) getCommand("say").setExecutor(this);
         if (getCommand("dualchest") != null) getCommand("dualchest").setExecutor(this);
-        if (getCommand("apocalypse") != null) getCommand("apocalypse").setExecutor(this);
         if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
         if (getCommand("setrank") != null) getCommand("setrank").setExecutor(this);
         loadAdminToken();
@@ -2933,11 +2932,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             Inventory sellInv = Bukkit.createInventory(null, 27, Component.text("Drop items here to Sell"));
             player.openInventory(sellInv);
-            return true;
-        }
-
-        if (command.getName().equalsIgnoreCase("apocalypse")) {
-            openApocalypseGui(player);
             return true;
         }
 

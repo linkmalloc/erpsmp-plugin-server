@@ -224,9 +224,6 @@ commands:
   dualchest:
     description: Open the duel chest interface (OP only)
     usage: /dualchest
-  apocalypse:
-    description: Open the Apocalypse mini-game menu
-    usage: /apocalypse
   warp:
     description: Teleport to a saved warp point
     usage: /warp <name>
