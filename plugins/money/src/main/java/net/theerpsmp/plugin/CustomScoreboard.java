@@ -10642,9 +10642,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 Location loc = homes[i];
                 String name = homeNames[i] != null ? homeNames[i] : "Home " + (i + 1);
                 if (loc != null) {
-                    String locStr = String.format("%.0f, %.0f, %.0f (%s)", loc.getX(), loc.getY(), loc.getZ(), loc.getWorld().getName());
+                    String dimName = "Overworld";
+                    if (loc.getWorld() != null) {
+                        String wName = loc.getWorld().getName().toLowerCase();
+                        if (wName.contains("nether")) dimName = "Nether";
+                        else if (wName.contains("end")) dimName = "The End";
+                    }
                     inv.setItem(i, createGuiItem(Material.RED_BED, name, NamedTextColor.GREEN, 
-                        "Location: " + locStr, 
+                        "§7Status: §aLocation Saved", 
+                        "§7Dimension: §b" + dimName, 
                         modeLore));
                 } else {
                     boolean isSethome = openedWithSethome.getOrDefault(uuid, false);
@@ -10678,10 +10684,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String thLore = isSethome ? (isLeader ? "§aClick to set your current location as Team Home" : "§cOnly the team leader can set this") : "§7Click to teleport to your team's home.";
             if (teamDataForGui != null && teamDataForGui.teamHome != null) {
                 Location th = teamDataForGui.teamHome;
-                String thLoc = String.format("%.0f, %.0f, %.0f (%s)", th.getX(), th.getY(), th.getZ(), th.getWorld().getName());
+                String thDim = "Overworld";
+                if (th.getWorld() != null) {
+                    String wName = th.getWorld().getName().toLowerCase();
+                    if (wName.contains("nether")) thDim = "Nether";
+                    else if (wName.contains("end")) thDim = "The End";
+                }
                 inv.setItem(53, createGuiItem(Material.BEACON, "Team Home", NamedTextColor.AQUA,
                     "Team: §b" + teamDataForGui.name,
-                    "Location: " + thLoc,
+                    "§7Status: §aLocation Saved",
+                    "§7Dimension: §b" + thDim,
                     thLore));
             } else {
                 inv.setItem(53, createGuiItem(Material.BEACON, "Team Home", NamedTextColor.GRAY,
