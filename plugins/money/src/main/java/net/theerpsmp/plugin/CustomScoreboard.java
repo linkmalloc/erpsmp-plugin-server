@@ -12723,20 +12723,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
-        // 2d. Leaderboard tags
-        int killsRank = getPlayerLeaderboardRank(uuid, "kills");
-        if (killsRank >= 1 && killsRank <= 10) {
-            allTags.add(Component.text("🏆 #" + killsRank + " Kills", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
-        }
-        int erpiesRank = getPlayerLeaderboardRank(uuid, "erpies");
-        if (erpiesRank >= 1 && erpiesRank <= 10) {
-            allTags.add(Component.text("🪙 #" + erpiesRank + " Erpies", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD));
-        }
-        int derpiesRank = getPlayerLeaderboardRank(uuid, "derpies");
-        if (derpiesRank >= 1 && derpiesRank <= 10) {
-            allTags.add(Component.text("💎 #" + derpiesRank + " Derpies", NamedTextColor.LIGHT_PURPLE, net.kyori.adventure.text.format.TextDecoration.BOLD));
-        }
-
         if (allTags.isEmpty()) {
             return;
         }
