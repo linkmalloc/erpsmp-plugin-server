@@ -38,7 +38,7 @@ commands:
     usage: /tpaccept
   pay:
     description: Pay Erpies to another player
-    usage: /pay <amount> <player>
+    usage: /pay <player> <amount>
   stash:
     description: Spawn a shulker with elytra (OP only)
     usage: /stash

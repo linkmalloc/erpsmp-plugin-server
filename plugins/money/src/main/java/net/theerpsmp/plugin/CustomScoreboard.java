@@ -3203,42 +3203,139 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        // --- /pay <amount> <player> ---
+        // --- /pay <player> <amount> (also supports /pay <amount> <player>) ---
         if (command.getName().equalsIgnoreCase("pay")) {
             if (args.length < 2) {
-                player.sendMessage(Component.text("❌ Usage: /pay <amount> <player>", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /pay <player> <amount>", NamedTextColor.RED));
                 return true;
             }
+
+            String targetArg;
+            String amountArg;
+
+            // Determine argument positions: whether /pay <player> <amount> or /pay <amount> <player>
+            boolean firstIsAmount = false;
+            try {
+                parseAmountWithSuffix(args[0]);
+                firstIsAmount = true;
+            } catch (NumberFormatException ignored) {}
+
+            boolean secondIsAmount = false;
+            try {
+                parseAmountWithSuffix(args[1]);
+                secondIsAmount = true;
+            } catch (NumberFormatException ignored) {}
+
+            if (secondIsAmount && !firstIsAmount) {
+                targetArg = args[0];
+                amountArg = args[1];
+            } else if (firstIsAmount && !secondIsAmount) {
+                amountArg = args[0];
+                targetArg = args[1];
+            } else if (secondIsAmount) {
+                // Both can be numbers (e.g. player named '123' or numeric string)
+                targetArg = args[0];
+                amountArg = args[1];
+            } else {
+                player.sendMessage(Component.text("❌ Invalid amount format! E.g. 500, 10k, 1.5m, 1b", NamedTextColor.RED));
+                return true;
+            }
+
             long amount;
             try {
-                amount = parseAmountWithSuffix(args[0]);
+                amount = parseAmountWithSuffix(amountArg);
             } catch (NumberFormatException e) {
                 player.sendMessage(Component.text("❌ Invalid amount format! E.g. 500, 10k, 1.5m, 1b", NamedTextColor.RED));
                 return true;
             }
+
             if (amount <= 0) {
                 player.sendMessage(Component.text("❌ Amount must be greater than 0!", NamedTextColor.RED));
                 return true;
             }
-            Player target = Bukkit.getPlayer(args[1]);
+
+            // Locate target player (supporting Bedrock dot prefix and case-insensitivity)
+            Player target = Bukkit.getPlayer(targetArg);
             if (target == null) {
-                player.sendMessage(Component.text("❌ Player not found!", NamedTextColor.RED));
-                return true;
+                target = Bukkit.getPlayerExact(targetArg);
             }
-            if (target.equals(player)) {
-                player.sendMessage(Component.text("❌ You cannot pay yourself!", NamedTextColor.RED));
-                return true;
+            if (target == null && !targetArg.startsWith(".")) {
+                target = Bukkit.getPlayer("." + targetArg);
             }
+            if (target == null && targetArg.startsWith(".")) {
+                target = Bukkit.getPlayer(targetArg.substring(1));
+            }
+            if (target == null) {
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    String pName = p.getName();
+                    if (pName.equalsIgnoreCase(targetArg) ||
+                        pName.replaceFirst("^\\.", "").equalsIgnoreCase(targetArg.replaceFirst("^\\.", "")) ||
+                        pName.toLowerCase().startsWith(targetArg.toLowerCase()) ||
+                        pName.replaceFirst("^\\.", "").toLowerCase().startsWith(targetArg.replaceFirst("^\\.", "").toLowerCase())) {
+                        target = p;
+                        break;
+                    }
+                }
+            }
+
             UUID uuid = player.getUniqueId();
             long balance = erpiesMap.getOrDefault(uuid, 0L);
             if (balance < amount) {
-                player.sendMessage(Component.text("❌ You don't have enough Erpies! Balance: " + balance, NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ You don't have enough Erpies! Balance: " + String.format("%,d", balance) + " Erpies", NamedTextColor.RED));
                 return true;
             }
-            erpiesMap.put(uuid, balance - amount);
-            erpiesMap.put(target.getUniqueId(), erpiesMap.getOrDefault(target.getUniqueId(), 0L) + amount);
-            player.sendMessage(Component.text("💸 Paid " + amount + " Erpies to " + target.getName() + "!", NamedTextColor.GREEN));
-            target.sendMessage(Component.text("💰 " + player.getName() + " paid you " + amount + " Erpies!", NamedTextColor.GREEN));
+
+            if (target != null) {
+                if (target.equals(player) || target.getUniqueId().equals(uuid)) {
+                    player.sendMessage(Component.text("❌ You cannot pay yourself!", NamedTextColor.RED));
+                    return true;
+                }
+
+                UUID targetUUID = target.getUniqueId();
+                erpiesMap.put(uuid, balance - amount);
+                erpiesMap.put(targetUUID, erpiesMap.getOrDefault(targetUUID, 0L) + amount);
+
+                player.sendMessage(Component.text("💸 Paid " + String.format("%,d", amount) + " Erpies to " + target.getName() + "!", NamedTextColor.GREEN));
+                target.sendMessage(Component.text("💰 " + player.getName() + " paid you " + String.format("%,d", amount) + " Erpies!", NamedTextColor.GOLD));
+
+                updateScoreboard(player);
+                updateScoreboard(target);
+                savePlayerData(player);
+                savePlayerData(target);
+                return true;
+            }
+
+            // Offline player handling
+            org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetArg);
+            if (offlineTarget == null || (!offlineTarget.hasPlayedBefore() && offlineTarget.getName() == null)) {
+                if (!targetArg.startsWith(".")) {
+                    offlineTarget = Bukkit.getOfflinePlayer("." + targetArg);
+                }
+            }
+
+            if (offlineTarget != null && (offlineTarget.hasPlayedBefore() || offlineTarget.getName() != null)) {
+                UUID targetUUID = offlineTarget.getUniqueId();
+                if (uuid.equals(targetUUID)) {
+                    player.sendMessage(Component.text("❌ You cannot pay yourself!", NamedTextColor.RED));
+                    return true;
+                }
+
+                erpiesMap.put(uuid, balance - amount);
+                updateScoreboard(player);
+                savePlayerData(player);
+
+                loadPlayerData(targetUUID);
+                long targetBal = erpiesMap.getOrDefault(targetUUID, 0L);
+                erpiesMap.put(targetUUID, targetBal + amount);
+                savePlayerData(targetUUID);
+                unloadPlayerData(targetUUID);
+
+                String displayName = offlineTarget.getName() != null ? offlineTarget.getName() : targetArg;
+                player.sendMessage(Component.text("💸 Paid " + String.format("%,d", amount) + " Erpies to " + displayName + " (Offline)!", NamedTextColor.GREEN));
+                return true;
+            }
+
+            player.sendMessage(Component.text("❌ Player '" + targetArg + "' not found!", NamedTextColor.RED));
             return true;
         }
 
@@ -13184,7 +13281,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private long parseAmountWithSuffix(String input) throws NumberFormatException {
         if (input == null) throw new NumberFormatException("Null input");
-        String clean = input.replaceAll("[()\\s]", "").toLowerCase();
+        String clean = input.replaceAll("[,()\\s]", "").toLowerCase();
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^(\\d+(\\.\\d+)?)(k|m|b|t)?$");
         java.util.regex.Matcher matcher = pattern.matcher(clean);
         if (!matcher.matches()) {
