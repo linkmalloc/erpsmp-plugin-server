@@ -2908,9 +2908,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         player.sendMessage(Component.text("❌ You cannot sell starter loot!", NamedTextColor.RED));
                         return true;
                     }
-                    long unitPrice = getItemRarityValue(handItem.getType());
+                    long total = getItemSellPrice(handItem);
                     int amount = handItem.getAmount();
-                    long total = unitPrice * amount;
                     player.getInventory().setItemInMainHand(null);
                     UUID uuid = player.getUniqueId();
                     erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + total);
@@ -2923,9 +2922,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         player.sendMessage(Component.text("❌ You are not holding any item!", NamedTextColor.RED));
                         return true;
                     }
-                    long unitPrice = getItemRarityValue(handItem.getType());
-                    player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
-                            .append(Component.text(String.format("%,d", unitPrice) + " Erpies each", NamedTextColor.WHITE)));
+                    long totalValue = getItemSellPrice(handItem);
+                    if (isShulkerWithContents(handItem)) {
+                        player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
+                                .append(Component.text(String.format("%,d", totalValue) + " Erpies (shulker + contents)", NamedTextColor.WHITE)));
+                    } else if (handItem.getAmount() > 1) {
+                        long unitPrice = getItemRarityValue(handItem.getType());
+                        player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
+                                .append(Component.text(String.format("%,d", unitPrice) + " Erpies each (" + String.format("%,d", totalValue) + " total)", NamedTextColor.WHITE)));
+                    } else {
+                        player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
+                                .append(Component.text(String.format("%,d", totalValue) + " Erpies each", NamedTextColor.WHITE)));
+                    }
                     return true;
                 }
             }
@@ -5935,10 +5943,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 continue;
             }
 
-            int valueMultiplier = item.getAmount();
-            long baseValue = getItemRarityValue(item.getType());
-            totalPayout += (baseValue * valueMultiplier);
+            totalPayout += getItemSellPrice(item);
         }
+
+        inv.clear();
 
         if (totalPayout > 0) {
             UUID uuid = player.getUniqueId();
@@ -5946,6 +5954,44 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             player.sendMessage(Component.text("💰 Items sold! Received: ", NamedTextColor.GREEN)
                     .append(Component.text(String.format("%,d", totalPayout) + " Erpies", NamedTextColor.WHITE)));
         }
+    }
+
+    public long getItemSellPrice(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) return 0L;
+        if (isStarterLoot(item)) return 0L;
+
+        long baseValue = getItemRarityValue(item.getType());
+        long contentsValue = 0L;
+
+        if (item.hasItemMeta() && item.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta bsm) {
+            try {
+                if (bsm.getBlockState() instanceof org.bukkit.block.ShulkerBox shulker) {
+                    for (ItemStack inside : shulker.getInventory().getContents()) {
+                        if (inside != null && inside.getType() != Material.AIR && !isStarterLoot(inside)) {
+                            contentsValue += getItemSellPrice(inside);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        return (baseValue + contentsValue) * item.getAmount();
+    }
+
+    private boolean isShulkerWithContents(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR || !item.hasItemMeta()) return false;
+        if (item.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta bsm) {
+            try {
+                if (bsm.getBlockState() instanceof org.bukkit.block.ShulkerBox shulker) {
+                    for (ItemStack inside : shulker.getInventory().getContents()) {
+                        if (inside != null && inside.getType() != Material.AIR) {
+                            return true;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return false;
     }
 
     private long getItemRarityValue(Material material) {
