@@ -387,6 +387,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Boolean> deleteModeActive = new HashMap<>();
     private final HashMap<UUID, Integer> renamingHomeIndex = new HashMap<>();
     private final HashMap<UUID, Boolean> openedWithSethome = new HashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<UUID, Long> goatyArmorProtectionUntil = new java.util.concurrent.ConcurrentHashMap<>();
 
     // Shop Crates
     private final HashMap<Location, ShopCrateData> shopCrates = new HashMap<>();
@@ -5882,6 +5883,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
 
                 if (customItem != null && customItem.equals("goaty_sword") && event.getDamager() instanceof Player) {
+                    if (event.getEntity() instanceof Player victim) {
+                        goatyArmorProtectionUntil.put(victim.getUniqueId(), System.currentTimeMillis() + 1000L);
+                    }
                     if (!attacker.hasCooldown(Material.DIAMOND_SWORD)) {
                         if (event.getEntity() instanceof LivingEntity livingTarget) {
                             if (random.nextDouble() < 0.35) {
@@ -11536,7 +11540,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     event.setCancelled(true);
 
                     if (player.hasCooldown(Material.DIAMOND_SWORD)) {
-                        player.sendMessage(Component.text("❌ The Goaty Sword is on cooldown!", NamedTextColor.RED));
+                        int remainingTicks = player.getCooldown(Material.DIAMOND_SWORD);
+                        int remainingSec = (int) Math.ceil(remainingTicks / 20.0);
+                        player.sendMessage(Component.text("❌ The Goaty Sword is on cooldown! (" + remainingSec + "s left)", NamedTextColor.RED));
                         return;
                     }
 
@@ -12269,11 +12275,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 Component.text("Right-click or strike to unleash the Goaty Ability.", NamedTextColor.YELLOW),
                 Component.text("Deals 1-10 hearts of random damage.", NamedTextColor.GRAY),
                 Component.text("Totems can still save players from death.", NamedTextColor.GRAY),
-                Component.text("Cooldown: 3s", NamedTextColor.DARK_GRAY)
+                Component.text("Does not damage or break armor.", NamedTextColor.GRAY),
+                Component.text("Cooldown: 10s", NamedTextColor.DARK_GRAY)
             ));
             meta.addEnchant(Enchantment.SHARPNESS, 5, true);
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.MENDING, 1, true);
+            meta.setUnbreakable(true);
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "goaty_sword");
             sword.setItemMeta(meta);
         }
@@ -12318,22 +12326,59 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         double currentHealth = target.getHealth();
 
-        if (currentHealth - damage <= 0) {
-            // Lethal damage: target.damage(...) ensures totems pop and save the victim if held
-            target.damage(99999.0, attacker);
-        } else {
-            // Non-lethal true damage
-            target.setHealth(Math.max(0.1, currentHealth - damage));
-            target.playHurtAnimation(0);
-            target.getWorld().playSound(target.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
+        if (target instanceof Player victim) {
+            goatyArmorProtectionUntil.put(victim.getUniqueId(), System.currentTimeMillis() + 1000L);
 
-            if (target instanceof Player victim && !victim.equals(attacker)) {
-                UUID victimUUID = victim.getUniqueId();
-                UUID attackerUUID = attacker.getUniqueId();
-                combatTagTicks.put(victimUUID, 20);
-                combatTagTicks.put(attackerUUID, 20);
-                victim.sendActionBar(Component.text("combat 20s", NamedTextColor.RED));
-                attacker.sendActionBar(Component.text("combat 20s", NamedTextColor.RED));
+            ItemStack[] armorBefore = victim.getInventory().getArmorContents();
+            ItemStack[] armorClones = new ItemStack[armorBefore.length];
+            for (int i = 0; i < armorBefore.length; i++) {
+                if (armorBefore[i] != null) {
+                    armorClones[i] = armorBefore[i].clone();
+                }
+            }
+
+            if (currentHealth - damage <= 0) {
+                // Lethal damage: trigger totem pop / death without breaking armor
+                target.damage(Math.max(currentHealth * 5.0, 50.0), attacker);
+
+                if (victim.isValid() && !victim.isDead()) {
+                    // Victim survived (e.g. totem popped) -> guarantee armor is intact with original durability
+                    ItemStack[] currentArmor = victim.getInventory().getArmorContents();
+                    for (int i = 0; i < armorClones.length; i++) {
+                        if (armorClones[i] != null) {
+                            if (currentArmor[i] == null || currentArmor[i].getType().isAir()) {
+                                currentArmor[i] = armorClones[i];
+                            } else if (currentArmor[i].getItemMeta() instanceof org.bukkit.inventory.meta.Damageable currentDmg &&
+                                       armorClones[i].getItemMeta() instanceof org.bukkit.inventory.meta.Damageable cloneDmg) {
+                                currentDmg.setDamage(cloneDmg.getDamage());
+                                currentArmor[i].setItemMeta(currentDmg);
+                            }
+                        }
+                    }
+                    victim.getInventory().setArmorContents(currentArmor);
+                }
+            } else {
+                // Non-lethal true damage
+                target.setHealth(Math.max(0.1, currentHealth - damage));
+                target.playHurtAnimation(0);
+                target.getWorld().playSound(target.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_HURT, 1.0f, 1.0f);
+
+                if (!victim.equals(attacker)) {
+                    UUID victimUUID = victim.getUniqueId();
+                    UUID attackerUUID = attacker.getUniqueId();
+                    combatTagTicks.put(victimUUID, 20);
+                    combatTagTicks.put(attackerUUID, 20);
+                    victim.sendActionBar(Component.text("combat 20s", NamedTextColor.RED));
+                    attacker.sendActionBar(Component.text("combat 20s", NamedTextColor.RED));
+                }
+            }
+        } else {
+            // Target is a mob / non-player
+            if (currentHealth - damage <= 0) {
+                target.damage(Math.max(currentHealth * 5.0, 50.0), attacker);
+            } else {
+                target.setHealth(Math.max(0.1, currentHealth - damage));
+                target.playHurtAnimation(0);
             }
         }
 
@@ -12342,7 +12387,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             victim.sendMessage(Component.text("🐐 You were struck by The Goaty Sword for " + hearts + " hearts!", NamedTextColor.RED));
         }
 
-        attacker.setCooldown(Material.DIAMOND_SWORD, 60); // 3 seconds cooldown
+        attacker.setCooldown(Material.DIAMOND_SWORD, 200); // 10 seconds cooldown
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+    public void onPlayerItemDamage(org.bukkit.event.player.PlayerItemDamageEvent event) {
+        Long until = goatyArmorProtectionUntil.get(event.getPlayer().getUniqueId());
+        if (until != null && System.currentTimeMillis() < until) {
+            if (isArmor(event.getItem().getType())) {
+                event.setDamage(0);
+                event.setCancelled(true);
+            }
+        }
+    }
+
+    private boolean isArmor(Material material) {
+        if (material == null) return false;
+        String name = material.name();
+        return name.endsWith("_HELMET") || name.endsWith("_CHESTPLATE") || 
+               name.endsWith("_LEGGINGS") || name.endsWith("_BOOTS") || 
+               material == Material.ELYTRA || material == Material.TURTLE_HELMET ||
+               material == Material.SHIELD;
     }
 
     private ItemStack createEndGatewayItem() {
