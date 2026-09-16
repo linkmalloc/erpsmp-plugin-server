@@ -248,157 +248,145 @@
                 <!-- Authentication -->
                 <div class="command-row" data-name="register password account create signup auth">
                     <span class="command-syntax">/register &lt;password&gt; &lt;confirmPassword&gt;</span>
-                    <span class="command-desc">Register a password for your account (Java & Cracked Java Only). Required
-                        before you can play.</span>
+                    <span class="command-desc">Register a password for your account or update your password (for offline & cracked players).</span>
                 </div>
                 <div class="command-row" data-name="login password account auth sign in">
                     <span class="command-syntax">/login &lt;password&gt;</span>
-                    <span class="command-desc">Log in to your account with your registered password (Java & Cracked Java
-                        Only).</span>
+                    <span class="command-desc">Log in to your account with your registered password upon joining.</span>
                 </div>
 
-                <!-- Economy -->
-                <div class="command-row" data-name="shop buy sell economy market gui">
+                <!-- Economy & Trading -->
+                <div class="command-row" data-name="shop buy sell economy market gui erpies">
                     <span class="command-syntax">/shop</span>
-                    <span class="command-desc">Open the main player shop to trade items using Erpies.</span>
+                    <span class="command-desc">Open the main player shop GUI to trade items, blocks, and gear using Erpies.</span>
                 </div>
-                <div class="command-row" data-name="sell quick inventory money erpies">
-                    <span class="command-syntax">/sell</span>
-                    <span class="command-desc">Open the quick sell inventory to convert items in hand directly to
-                        Erpies.</span>
+                <div class="command-row" data-name="sell quick inventory money erpies hand price value">
+                    <span class="command-syntax">/sell [hand|price]</span>
+                    <span class="command-desc">Open the sell inventory to quickly sell items/shulkers for Erpies, or use <code>/sell hand</code> / <code>/sell price</code>.</span>
                 </div>
-                <div class="command-row" data-name="derpshop key crate keys generator buy menu gui">
+                <div class="command-row" data-name="derpshop key crate keys generator buy menu gui derpies">
                     <span class="command-syntax">/derpshop</span>
-                    <span class="command-desc">Open the special Derpshop GUI to purchase keys and spawners using
-                        Derpies.</span>
+                    <span class="command-desc">Open the special Derpshop GUI to purchase crate keys, spawners, and generators using Derpies.</span>
                 </div>
                 <div class="command-row" data-name="pay give send erpies money player transfer">
-                    <span class="command-syntax">/pay &lt;amount&gt; &lt;player&gt;</span>
-                    <span class="command-desc">Transfer a specified amount of Erpies directly to another online
-                        player.</span>
+                    <span class="command-syntax">/pay &lt;player&gt; &lt;amount&gt;</span>
+                    <span class="command-desc">Transfer a specified amount of Erpies directly to another online player.</span>
                 </div>
                 <div class="command-row" data-name="bank money erpies derpies balance vault deposit withdraw">
                     <span class="command-syntax">/bank</span>
-                    <span class="command-desc">Open your bank account interface to deposit or withdraw items and
-                        money.</span>
+                    <span class="command-desc">Open your personal bank account interface to securely deposit, withdraw, and store money or items.</span>
                 </div>
-                <div class="command-row" data-name="auction open buy sell bid market gui listings">
+                <div class="command-row" data-name="auction open buy sell bid market gui listings ah">
                     <span class="command-syntax">/auction</span>
-                    <span class="command-desc">Open the global Auction House menu to buy or sell player listings.</span>
+                    <span class="command-desc">Open the global Auction House menu (/ah) to browse listings, buy goods, or sell items to players.</span>
                 </div>
                 <div class="command-row" data-name="orders buy list requests board gui">
                     <span class="command-syntax">/orders</span>
-                    <span class="command-desc">Open the buy orders board to request custom items or view pending
-                        requests.</span>
+                    <span class="command-desc">Open the buy orders board to request specific items to purchase from other players.</span>
                 </div>
                 <div class="command-row" data-name="bh bounty hunter head trade erpies derpies npc menu">
                     <span class="command-syntax">/bh</span>
-                    <span class="command-desc">Open the Bounty Hunter head trading menu to exchange player heads for
-                        money.</span>
+                    <span class="command-desc">Open the Bounty Hunter head trading menu to exchange player heads for Erpies & Derpies.</span>
                 </div>
-                <div class="command-row" data-name="store link buy url web browser store passes">
+                <div class="command-row" data-name="store link buy url web browser store passes perks">
                     <span class="command-syntax">/store</span>
-                    <span class="command-desc">Show the official store web page link to browse and buy passes.</span>
+                    <span class="command-desc">Display the official server web store link in chat to browse passes and perks.</span>
                 </div>
 
                 <!-- Teleportation -->
-                <div class="command-row" data-name="spawn teleport home lobby safe">
+                <div class="command-row" data-name="spawn teleport lobby safe hub">
                     <span class="command-syntax">/spawn</span>
                     <span class="command-desc">Teleport safely back to the spawn protection zone.</span>
                 </div>
                 <div class="command-row" data-name="home sethome teleport points gui menu">
                     <span class="command-syntax">/home</span>
-                    <span class="command-desc">Open the Homes Menu to teleport to one of your saved home
-                        locations.</span>
+                    <span class="command-desc">Open the Homes Menu to teleport directly to any of your saved home points.</span>
                 </div>
                 <div class="command-row" data-name="sethome home set save manage rename remove gui">
                     <span class="command-syntax">/sethome</span>
-                    <span class="command-desc">Open the Homes Menu to save or manage your home points.</span>
+                    <span class="command-desc">Open the Homes Menu to create, manage, or rename your saved home points.</span>
                 </div>
-                <div class="command-row" data-name="rtp random teleport overworld nether end dimension">
+                <div class="command-row" data-name="rtp random teleport overworld nether end dimension wild">
                     <span class="command-syntax">/rtp [overworld|nether|end]</span>
-                    <span class="command-desc">Randomly teleport within the Overworld, Nether, or End dimensions.</span>
+                    <span class="command-desc">Randomly teleport across the wilderness in the Overworld, Nether, or End dimensions.</span>
                 </div>
                 <div class="command-row" data-name="tpa teleport request player send">
                     <span class="command-syntax">/tpa &lt;player&gt;</span>
-                    <span class="command-desc">Send a teleport request to another online player.</span>
+                    <span class="command-desc">Send a teleport request to travel to another online player's location.</span>
                 </div>
-                <div class="command-row" data-name="tpaccept accept teleport request">
+                <div class="command-row" data-name="tpahere teleport request player invite bring here">
+                    <span class="command-syntax">/tpahere &lt;player&gt;</span>
+                    <span class="command-desc">Send a request asking another player to teleport directly to your current location.</span>
+                </div>
+                <div class="command-row" data-name="tpaccept accept teleport request incoming">
                     <span class="command-syntax">/tpaccept</span>
-                    <span class="command-desc">Accept a pending teleport request.</span>
+                    <span class="command-desc">Accept a pending incoming teleport request (/tpa or /tpahere).</span>
                 </div>
-                <div class="command-row" data-name="warp warps list teleport point locations">
+                <div class="command-row" data-name="warp warps list teleport point locations public">
                     <span class="command-syntax">/warp &lt;name&gt;</span>
                     <span class="command-desc">Teleport directly to any public server warp point.</span>
                 </div>
-                <div class="command-row" data-name="afk zone earn derpies money teleport idle">
+                <div class="command-row" data-name="afk zone earn derpies money teleport idle rewards">
                     <span class="command-syntax">/afk</span>
-                    <span class="command-desc">Teleport to the server's AFK zone to earn Derpies automatically over
-                        time.</span>
+                    <span class="command-desc">Teleport to the server's AFK zone to earn Derpies automatically over time.</span>
                 </div>
-                <div class="command-row" data-name="event teleport area warp mini-game">
+                <div class="command-row" data-name="event teleport area warp mini-game arena">
                     <span class="command-syntax">/event</span>
-                    <span class="command-desc">Teleport to the server's event area.</span>
+                    <span class="command-desc">Teleport to the server's special event arena.</span>
                 </div>
 
                 <!-- Teams -->
                 <div class="command-row" data-name="maketeam team create clan guild new">
                     <span class="command-syntax">/maketeam &lt;name&gt;</span>
-                    <span class="command-desc">Create a new player team/clan on the server.</span>
+                    <span class="command-desc">Create a new player team/clan on the server with you as the leader.</span>
                 </div>
-                <div class="command-row" data-name="team manage guild clan coords list chat gui members">
+                <div class="command-row" data-name="team manage guild clan coords list chat gui members vault">
                     <span class="command-syntax">/team</span>
-                    <span class="command-desc">Open your active team management menu to view members, vault, and
-                        settings.</span>
+                    <span class="command-desc">Open your active team management menu to view members, vault, and team settings.</span>
                 </div>
                 <div class="command-row" data-name="requesteam team invite recruit join request player">
                     <span class="command-syntax">/requesteam &lt;player&gt;</span>
-                    <span class="command-desc">Send a join request to another player's team.</span>
+                    <span class="command-desc">Send a join request or invite a player to join your team.</span>
                 </div>
                 <div class="command-row" data-name="teamaccept accept request join team invitation">
                     <span class="command-syntax">/teamaccept</span>
-                    <span class="command-desc">Accept a pending team invitation request.</span>
+                    <span class="command-desc">Accept a pending team invitation or join request.</span>
                 </div>
 
-                <!-- PvP & Minigames -->
-                <div class="command-row" data-name="dual invite challenge fight bedrock arena player pvp">
+                <!-- PvP & Dueling -->
+                <div class="command-row" data-name="dual invite challenge fight bedrock arena player pvp 1v1">
                     <span class="command-syntax">/dual &lt;player&gt;</span>
-                    <span class="command-desc">Send a direct duel invitation to another player in the Bedrock
-                        arena.</span>
+                    <span class="command-desc">Send a 1v1 duel challenge to another player in the Bedrock arena.</span>
                 </div>
-                <div class="command-row" data-name="dualaccept accept fight match dual pvp">
+                <div class="command-row" data-name="dualaccept accept fight match dual pvp 1v1">
                     <span class="command-syntax">/dualaccept</span>
-                    <span class="command-desc">Accept a pending direct duel challenge within the 60-second
-                        window.</span>
-                </div>
-                <div class="command-row" data-name="apocalypse zombie minigame start difficulty waves survival">
-                    <span class="command-syntax">/apocalypse</span>
-                    <span class="command-desc">Open the Apocalypse mini-game menu to challenge waves of zombies.</span>
+                    <span class="command-desc">Accept a pending duel challenge within the 60-second window.</span>
                 </div>
 
-                <!-- Utility -->
-                <div class="command-row" data-name="nametag tag title name floating display custom">
+                <!-- Utility & Customization -->
+                <div class="command-row" data-name="nametag tag title name floating display custom overhead">
                     <span class="command-syntax">/nametag</span>
-                    <span class="command-desc">Open the nametag menu to manage and equip your floating name tags.</span>
+                    <span class="command-desc">Open the nametag menu to select and equip your unlocked floating title tags.</span>
                 </div>
-                <div class="command-row" data-name="offhand swap hand item bedrock switch">
+                <div class="command-row" data-name="offhand swap hand item bedrock switch shield">
                     <span class="command-syntax">/offhand</span>
-                    <span class="command-desc">Swap items between your main hand and offhand (useful for Bedrock
-                        players).</span>
+                    <span class="command-desc">Swap items between your main hand and offhand (especially convenient for Bedrock / mobile players).</span>
                 </div>
-                <div class="command-row" data-name="setting settings chat spam music tpa toggle configuration gui">
+                <div class="command-row" data-name="skin skins custom avatar change skinsrestorer">
+                    <span class="command-syntax">/skin &lt;name|url&gt;</span>
+                    <span class="command-desc">Change your player skin using any Minecraft username or web image URL.</span>
+                </div>
+                <div class="command-row" data-name="setting settings chat spam music tpa toggle configuration gui preferences">
                     <span class="command-syntax">/setting</span>
-                    <span class="command-desc">Open the settings menu to configure chat spam, tpa requests, and other
-                        features.</span>
+                    <span class="command-desc">Open the settings menu to configure chat spam filtering, TPA requests, music, and preferences.</span>
                 </div>
-                <div class="command-row" data-name="rules book server guidelines info">
+                <div class="command-row" data-name="rules book server guidelines info guidelines">
                     <span class="command-syntax">/rules</span>
-                    <span class="command-desc">Open the server rules book UI to read the server guidelines.</span>
+                    <span class="command-desc">Open the interactive server rules book UI to read community guidelines.</span>
                 </div>
-                <div class="command-row" data-name="credits book author names developers contributors info">
+                <div class="command-row" data-name="credits book author names developers contributors info team">
                     <span class="command-syntax">/credits</span>
-                    <span class="command-desc">Open the server credits book UI to view developers and
-                        contributors.</span>
+                    <span class="command-desc">Open the server credits book UI to view the server developers and contributors.</span>
                 </div>
             </div>
         </div>
