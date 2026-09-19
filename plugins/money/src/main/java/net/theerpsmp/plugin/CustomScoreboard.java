@@ -13,6 +13,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.file.YamlConfiguration;
+import java.util.Comparator;
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import org.bukkit.Sound;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -86,23 +94,21 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 public class CustomScoreboard extends JavaPlugin implements Listener, CommandExecutor {
 
-    private Connection connection;
+    private final Object dbLock = new Object();
 
-    public synchronized Connection getConnection() {
+    public Connection getConnection() {
         try {
-            if (connection == null || connection.isClosed()) {
-                File dataFolder = getDataFolder();
-                if (!dataFolder.exists()) {
-                    dataFolder.mkdirs();
-                }
-                File dbFile = new File(dataFolder, "playerdata.db");
-                Class.forName("org.sqlite.JDBC");
-                connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
+            File dataFolder = getDataFolder();
+            if (!dataFolder.exists()) {
+                dataFolder.mkdirs();
             }
+            File dbFile = new File(dataFolder, "playerdata.db");
+            Class.forName("org.sqlite.JDBC");
+            return DriverManager.getConnection("jdbc:sqlite:" + dbFile.getAbsolutePath());
         } catch (Exception e) {
-            e.printStackTrace();
+            getLogger().severe("Database connection error: " + e.getMessage());
+            return null;
         }
-        return connection;
     }
 
     private final HashMap<UUID, Integer> timePlayedMap = new HashMap<>();
@@ -147,7 +153,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final List<OrderRequest> orders = new ArrayList<>();
     private final HashMap<UUID, PendingSignInput> pendingSigns = new HashMap<>();
     private final HashMap<UUID, ItemStack> pendingListItems = new HashMap<>();
-    private final HashMap<UUID, String> pendingOrderItemName = new HashMap<>(); // stores item name between ORDER_ITEM and ORDER_PRICE signs
+    private final HashMap<UUID, String> pendingOrderItemName = new HashMap<>(); // stores item name between order steps
+    private final HashMap<UUID, Integer> pendingOrderQuantity = new HashMap<>(); // stores chosen quantity (max 1M)
+    private final HashMap<UUID, String> pendingOrderSearchQuery = new HashMap<>(); // stores active item search filter
+    private final HashMap<UUID, Integer> pendingOrderPage = new HashMap<>(); // stores active Choose Item page
     private boolean breakingCustom = false;
 
     // Combat tag system
@@ -418,7 +427,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private final Random random = new Random();
 
-    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH, HOME_SEARCH, HOME_RENAME, WITHDRAW_ERPIES_ONLY, WITHDRAW_DERPIES_ONLY, DEPOSIT_MONEY_ONLY }
+    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH, HOME_SEARCH, HOME_RENAME, WITHDRAW_ERPIES_ONLY, WITHDRAW_DERPIES_ONLY, DEPOSIT_MONEY_ONLY, ORDER_QUANTITY, ORDER_SEARCH }
 
     public static class PendingSignInput {
         public final Location loc;
@@ -497,6 +506,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         initDatabase();
         migrateYamlToDatabase();
         getServer().getPluginManager().registerEvents(this, this);
+
+        // Load data for all currently online players (e.g. after reload or plugin update)
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            loadPlayerData(online.getUniqueId());
+        }
 
         // Ensure "spawn" world is loaded/created flat
         World spawnWorld = Bukkit.getWorld("spawn");
@@ -650,6 +664,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 UUID uuid = player.getUniqueId();
                 timePlayedMap.put(uuid, timePlayedMap.getOrDefault(uuid, 0) + 1);
                 updateScoreboard(player);
+
+                // Ensure floating nametags match spectator and invisibility state
+                boolean hideTags = shouldHideNametag(player);
+                boolean hasDisplays = playerTagDisplays.containsKey(uuid);
+                if (hideTags && hasDisplays) {
+                    updatePlayerFloatingTags(player);
+                } else if (!hideTags && !hasDisplays && hasAnyFloatingTags(player)) {
+                    updatePlayerFloatingTags(player);
+                }
 
                 if (isDuelWorld(player.getWorld())) {
                     if (!player.hasPotionEffect(PotionEffectType.NIGHT_VISION) || !dualNightVisionPlayers.contains(uuid)) {
@@ -1068,9 +1091,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private void initDatabase() {
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("CREATE TABLE IF NOT EXISTS player_stats (" +
+        synchronized (dbLock) {
+            try (Connection conn = getConnection()) {
+                if (conn == null) return;
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("PRAGMA journal_mode=WAL;");
+                    stmt.execute("PRAGMA busy_timeout=5000;");
+                    stmt.execute("CREATE TABLE IF NOT EXISTS player_stats (" +
                          "uuid TEXT PRIMARY KEY, " +
                          "lastKnownName TEXT, " +
                          "timePlayed INTEGER, " +
@@ -1126,10 +1153,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                          "PRIMARY KEY (uuid, slot)" +
                          ");");
             
-            getLogger().info("[Database] SQLite database initialized successfully.");
-        } catch (Exception e) {
-            getLogger().severe("[Database] Failed to initialize SQLite database: " + e.getMessage());
-            e.printStackTrace();
+                    getLogger().info("[Database] SQLite database initialized successfully.");
+                }
+            } catch (Exception e) {
+                getLogger().severe("[Database] Failed to initialize SQLite database: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
 
@@ -1463,36 +1492,74 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }
             
-            Location[] homes = new Location[54];
-            String[] homeNames = new String[54];
-            psHomes.setString(1, uuid.toString());
-            try (ResultSet rs = psHomes.executeQuery()) {
-                while (rs.next()) {
-                    int slot = rs.getInt("slot");
-                    if (slot >= 0 && slot < 54) {
-                        String worldName = rs.getString("world");
-                        double x = rs.getDouble("x");
-                        double y = rs.getDouble("y");
-                        double z = rs.getDouble("z");
-                        float pitch = rs.getFloat("pitch");
-                        float yaw = rs.getFloat("yaw");
-                        String homeName = rs.getString("name");
-                        
-                        World w = Bukkit.getWorld(worldName);
-                        if (w != null) {
-                            homes[slot] = new Location(w, x, y, z, yaw, pitch);
-                            homeNames[slot] = homeName;
-                        }
-                    }
-                }
-            }
-            playerHomes.put(uuid, homes);
-            playerHomeNames.put(uuid, homeNames);
-            
+            loadPlayerHomesFromDb(uuid);
         } catch (Exception e) {
             getLogger().severe("Failed to load player data for UUID: " + uuid);
             e.printStackTrace();
         }
+    }
+
+    private void loadPlayerHomesFromDb(UUID uuid) {
+        synchronized (dbLock) {
+            Location[] homes = new Location[54];
+            String[] homeNames = new String[54];
+            for (int i = 0; i < 54; i++) {
+                homeNames[i] = "Home " + (i + 1);
+            }
+            try (Connection conn = getConnection()) {
+                if (conn == null) return;
+                try (PreparedStatement psHomes = conn.prepareStatement("SELECT * FROM player_homes WHERE uuid = ?")) {
+                    psHomes.setString(1, uuid.toString());
+                    try (ResultSet rs = psHomes.executeQuery()) {
+                        while (rs.next()) {
+                            int slot = rs.getInt("slot");
+                            if (slot >= 0 && slot < 54) {
+                                String worldName = rs.getString("world");
+                                double x = rs.getDouble("x");
+                                double y = rs.getDouble("y");
+                                double z = rs.getDouble("z");
+                                float pitch = rs.getFloat("pitch");
+                                float yaw = rs.getFloat("yaw");
+                                String homeName = rs.getString("name");
+                                
+                                World w = Bukkit.getWorld(worldName);
+                                if (w != null) {
+                                    homes[slot] = new Location(w, x, y, z, yaw, pitch);
+                                    if (homeName != null && !homeName.trim().isEmpty()) {
+                                        homeNames[slot] = homeName;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                playerHomes.put(uuid, homes);
+                playerHomeNames.put(uuid, homeNames);
+            } catch (Exception e) {
+                getLogger().severe("Failed to load player homes for UUID: " + uuid);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private Location[] getPlayerHomes(UUID uuid) {
+        if (!playerHomes.containsKey(uuid)) {
+            loadPlayerHomesFromDb(uuid);
+        }
+        return playerHomes.computeIfAbsent(uuid, k -> new Location[54]);
+    }
+
+    private String[] getPlayerHomeNames(UUID uuid) {
+        if (!playerHomeNames.containsKey(uuid)) {
+            loadPlayerHomesFromDb(uuid);
+        }
+        return playerHomeNames.computeIfAbsent(uuid, k -> {
+            String[] names = new String[54];
+            for (int i = 0; i < 54; i++) {
+                names[i] = "Home " + (i + 1);
+            }
+            return names;
+        });
     }
 
     private void savePlayerData(Player player) {
@@ -1573,102 +1640,119 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         String bankItemsStr = serializeItemList(bankItems);
         
+        final boolean hasHomesLoaded = playerHomes.containsKey(uuid);
         Location[] homes = playerHomes.get(uuid);
         String[] homeNames = playerHomeNames.get(uuid);
-        final Location[] homesCopy = homes != null ? homes.clone() : null;
-        final String[] homeNamesCopy = homeNames != null ? homeNames.clone() : null;
+        final Location[] homesCopy = (hasHomesLoaded && homes != null) ? homes.clone() : null;
+        final String[] homeNamesCopy = (hasHomesLoaded && homeNames != null) ? homeNames.clone() : null;
         
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            String insertStats = "REPLACE INTO player_stats (uuid, lastKnownName, timePlayed, erpies, derpies, keys, kills, deaths, " +
-                                 "regularKeys, crimsonKeys, echoKeys, endKeys, amethystKeys, hasErpPlus, hasErpPro, hasErpProMax, hasVip, " +
-                                 "bankErpies, bankDerpies, lastInterestTime, chatSpamDisabled, tpaDisabled, voiceChatEnabled, musicDisabled, " +
-                                 "starterLootDisabled, activeNametagsList, killedAdmin, killedDragon, manuallyUnlockedNametags, " +
-                                 "oresMined, invisibleKills, blocksPlaced, starvationDeaths, apocalypseZombieKills, " +
-                                 "apocalypseLongestSurvival, apocalypseMaxWavesSurvived, password, foodsEaten, enderChest, bankItems) " +
-                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
-            
-            try (Connection conn = getConnection();
-                 PreparedStatement psStats = conn.prepareStatement(insertStats);
-                 PreparedStatement psHomeDelete = conn.prepareStatement("DELETE FROM player_homes WHERE uuid = ?");
-                 PreparedStatement psHomeInsert = conn.prepareStatement("REPLACE INTO player_homes (uuid, slot, world, x, y, z, pitch, yaw, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")) {
+            synchronized (dbLock) {
+                String insertStats = "REPLACE INTO player_stats (uuid, lastKnownName, timePlayed, erpies, derpies, keys, kills, deaths, " +
+                                     "regularKeys, crimsonKeys, echoKeys, endKeys, amethystKeys, hasErpPlus, hasErpPro, hasErpProMax, hasVip, " +
+                                     "bankErpies, bankDerpies, lastInterestTime, chatSpamDisabled, tpaDisabled, voiceChatEnabled, musicDisabled, " +
+                                     "starterLootDisabled, activeNametagsList, killedAdmin, killedDragon, manuallyUnlockedNametags, " +
+                                     "oresMined, invisibleKills, blocksPlaced, starvationDeaths, apocalypseZombieKills, " +
+                                     "apocalypseLongestSurvival, apocalypseMaxWavesSurvived, password, foodsEaten, enderChest, bankItems) " +
+                                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
                 
-                psStats.setString(1, uuid.toString());
-                psStats.setString(2, name);
-                psStats.setInt(3, timePlayed);
-                psStats.setLong(4, erpies);
-                psStats.setLong(5, derpies);
-                psStats.setInt(6, keys);
-                psStats.setInt(7, kills);
-                psStats.setInt(8, deaths);
-                
-                psStats.setInt(9, regularKeys);
-                psStats.setInt(10, crimsonKeys);
-                psStats.setInt(11, echoKeys);
-                psStats.setInt(12, endKeys);
-                psStats.setInt(13, amethystKeys);
-                psStats.setInt(14, hasErpPlus ? 1 : 0);
-                psStats.setInt(15, hasErpPro ? 1 : 0);
-                psStats.setInt(16, hasErpProMax ? 1 : 0);
-                psStats.setInt(17, hasVip ? 1 : 0);
-                
-                psStats.setLong(18, bankErpies);
-                psStats.setLong(19, bankDerpies);
-                psStats.setLong(20, lastInterestTime);
-                
-                psStats.setInt(21, chatSpam ? 1 : 0);
-                psStats.setInt(22, tpa ? 1 : 0);
-                psStats.setInt(23, voice ? 1 : 0);
-                psStats.setInt(24, music ? 1 : 0);
-                psStats.setInt(25, starter ? 1 : 0);
-                
-                psStats.setString(26, String.join(",", activeList));
-                
-                psStats.setInt(27, admin ? 1 : 0);
-                psStats.setInt(28, dragon ? 1 : 0);
-                
-                psStats.setString(29, String.join(",", unlockedList));
-                
-                psStats.setInt(30, ores);
-                psStats.setInt(31, invKills);
-                psStats.setInt(32, blocks);
-                psStats.setInt(33, starvation);
-                psStats.setInt(34, apocZombies);
-                psStats.setLong(35, apocLongest);
-                psStats.setInt(36, apocMaxWaves);
-                psStats.setString(37, pass);
-                psStats.setString(38, foodsEatenStr);
-                psStats.setString(39, enderChestStr);
-                psStats.setString(40, bankItemsStr);
-                psStats.executeUpdate();
-                
-                psHomeDelete.setString(1, uuid.toString());
-                psHomeDelete.executeUpdate();
-                
-                if (homesCopy != null) {
-                    for (int i = 0; i < 54; i++) {
-                        if (homesCopy[i] != null && homesCopy[i].getWorld() != null) {
-                            psHomeInsert.setString(1, uuid.toString());
-                            psHomeInsert.setInt(2, i);
-                            psHomeInsert.setString(3, homesCopy[i].getWorld().getName());
-                            psHomeInsert.setDouble(4, homesCopy[i].getX());
-                            psHomeInsert.setDouble(5, homesCopy[i].getY());
-                            psHomeInsert.setDouble(6, homesCopy[i].getZ());
-                            psHomeInsert.setFloat(7, homesCopy[i].getPitch());
-                            psHomeInsert.setFloat(8, homesCopy[i].getYaw());
-                            psHomeInsert.setString(9, (homeNamesCopy != null && homeNamesCopy[i] != null) ? homeNamesCopy[i] : null);
-                            psHomeInsert.executeUpdate();
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    conn.setAutoCommit(false);
+                    try {
+                        try (PreparedStatement psStats = conn.prepareStatement(insertStats)) {
+                            psStats.setString(1, uuid.toString());
+                            psStats.setString(2, name);
+                            psStats.setInt(3, timePlayed);
+                            psStats.setLong(4, erpies);
+                            psStats.setLong(5, derpies);
+                            psStats.setInt(6, keys);
+                            psStats.setInt(7, kills);
+                            psStats.setInt(8, deaths);
+                            
+                            psStats.setInt(9, regularKeys);
+                            psStats.setInt(10, crimsonKeys);
+                            psStats.setInt(11, echoKeys);
+                            psStats.setInt(12, endKeys);
+                            psStats.setInt(13, amethystKeys);
+                            psStats.setInt(14, hasErpPlus ? 1 : 0);
+                            psStats.setInt(15, hasErpPro ? 1 : 0);
+                            psStats.setInt(16, hasErpProMax ? 1 : 0);
+                            psStats.setInt(17, hasVip ? 1 : 0);
+                            
+                            psStats.setLong(18, bankErpies);
+                            psStats.setLong(19, bankDerpies);
+                            psStats.setLong(20, lastInterestTime);
+                            
+                            psStats.setInt(21, chatSpam ? 1 : 0);
+                            psStats.setInt(22, tpa ? 1 : 0);
+                            psStats.setInt(23, voice ? 1 : 0);
+                            psStats.setInt(24, music ? 1 : 0);
+                            psStats.setInt(25, starter ? 1 : 0);
+                            
+                            psStats.setString(26, String.join(",", activeList));
+                            
+                            psStats.setInt(27, admin ? 1 : 0);
+                            psStats.setInt(28, dragon ? 1 : 0);
+                            
+                            psStats.setString(29, String.join(",", unlockedList));
+                            
+                            psStats.setInt(30, ores);
+                            psStats.setInt(31, invKills);
+                            psStats.setInt(32, blocks);
+                            psStats.setInt(33, starvation);
+                            psStats.setInt(34, apocZombies);
+                            psStats.setLong(35, apocLongest);
+                            psStats.setInt(36, apocMaxWaves);
+                            psStats.setString(37, pass);
+                            psStats.setString(38, foodsEatenStr);
+                            psStats.setString(39, enderChestStr);
+                            psStats.setString(40, bankItemsStr);
+                            psStats.executeUpdate();
                         }
+                        
+                        if (hasHomesLoaded && homesCopy != null) {
+                            try (PreparedStatement psHomeDelete = conn.prepareStatement("DELETE FROM player_homes WHERE uuid = ?");
+                                 PreparedStatement psHomeInsert = conn.prepareStatement("REPLACE INTO player_homes (uuid, slot, world, x, y, z, pitch, yaw, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")) {
+                                psHomeDelete.setString(1, uuid.toString());
+                                psHomeDelete.executeUpdate();
+                                
+                                for (int i = 0; i < 54; i++) {
+                                    if (homesCopy[i] != null && homesCopy[i].getWorld() != null) {
+                                        psHomeInsert.setString(1, uuid.toString());
+                                        psHomeInsert.setInt(2, i);
+                                        psHomeInsert.setString(3, homesCopy[i].getWorld().getName());
+                                        psHomeInsert.setDouble(4, homesCopy[i].getX());
+                                        psHomeInsert.setDouble(5, homesCopy[i].getY());
+                                        psHomeInsert.setDouble(6, homesCopy[i].getZ());
+                                        psHomeInsert.setFloat(7, homesCopy[i].getPitch());
+                                        psHomeInsert.setFloat(8, homesCopy[i].getYaw());
+                                        psHomeInsert.setString(9, (homeNamesCopy != null && homeNamesCopy[i] != null) ? homeNamesCopy[i] : null);
+                                        psHomeInsert.executeUpdate();
+                                    }
+                                }
+                            }
+                        }
+                        conn.commit();
+                    } catch (Exception ex) {
+                        conn.rollback();
+                        throw ex;
+                    } finally {
+                        conn.setAutoCommit(true);
                     }
+                } catch (Exception e) {
+                    getLogger().severe("Failed to save player data asynchronously for UUID: " + uuid);
+                    e.printStackTrace();
                 }
-                
-            } catch (Exception e) {
-                getLogger().severe("Failed to save player data asynchronously for UUID: " + uuid);
-                e.printStackTrace();
             }
         });
     }
 
     private void unloadPlayerData(UUID uuid) {
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null && online.isOnline()) {
+            return;
+        }
         timePlayedMap.remove(uuid);
         erpiesMap.remove(uuid);
         derpiesMap.remove(uuid);
@@ -2046,6 +2130,35 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerGameModeChange(org.bukkit.event.player.PlayerGameModeChangeEvent event) {
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTask(this, () -> {
+            if (player.isOnline()) {
+                updatePlayerFloatingTags(player);
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    updateScoreboard(online);
+                }
+            }
+        });
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityPotionEffect(org.bukkit.event.entity.EntityPotionEffectEvent event) {
+        if (event.getEntity() instanceof Player player) {
+            if (event.getModifiedType().equals(PotionEffectType.INVISIBILITY)) {
+                Bukkit.getScheduler().runTask(this, () -> {
+                    if (player.isOnline()) {
+                        updatePlayerFloatingTags(player);
+                        for (Player online : Bukkit.getOnlinePlayers()) {
+                            updateScoreboard(online);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
     @EventHandler
     public void onPlayerKill(PlayerDeathEvent event) {
         Player victim = event.getEntity();
@@ -2065,6 +2178,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         UUID victimUUID = victim.getUniqueId();
         deathsMap.put(victimUUID, deathsMap.getOrDefault(victimUUID, 0) + 1);
+
+        // Remove floating nametag displays on death
+        List<org.bukkit.entity.TextDisplay> victimOldTags = playerTagDisplays.remove(victimUUID);
+        if (victimOldTags != null) {
+            for (org.bukkit.entity.TextDisplay td : victimOldTags) {
+                if (td.isValid()) td.remove();
+            }
+        }
 
         if (victim.getWorld().getName().equalsIgnoreCase("apocalypse")) {
             endApocalypseRun(victim);
@@ -3663,26 +3784,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
 
-            Location[] homes = playerHomes.get(targetUUID);
-            if (homes == null) {
-                homes = new Location[5];
-                String path = "players." + targetUUID.toString() + ".";
-                for (int i = 0; i < 5; i++) {
-                    String homePath = path + "homes." + i;
-                    if (getConfig().contains(homePath)) {
-                        String worldName = getConfig().getString(homePath + ".world");
-                        double x = getConfig().getDouble(homePath + ".x");
-                        double y = getConfig().getDouble(homePath + ".y");
-                        double z = getConfig().getDouble(homePath + ".z");
-                        float pitch = (float) getConfig().getDouble(homePath + ".pitch");
-                        float yaw = (float) getConfig().getDouble(homePath + ".yaw");
-                        World w = Bukkit.getWorld(worldName);
-                        if (w != null) {
-                            homes[i] = new Location(w, x, y, z, yaw, pitch);
-                        }
-                    }
-                }
-            }
+            Location[] homes = getPlayerHomes(targetUUID);
 
             Inventory inv = Bukkit.createInventory(null, 27, Component.text(targetName + "'s Homes"));
             for (int i = 0; i < 5; i++) {
@@ -5848,6 +5950,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             HashMap<Material, Integer> playerFoods = foodsEatenMap.computeIfAbsent(uuid, k -> new HashMap<>());
             playerFoods.put(mat, playerFoods.getOrDefault(mat, 0) + 1);
         }
+        if (item != null && item.getType() == Material.MILK_BUCKET) {
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                if (player.isOnline()) {
+                    updatePlayerFloatingTags(player);
+                    for (Player online : Bukkit.getOnlinePlayers()) {
+                        updateScoreboard(online);
+                    }
+                }
+            }, 1L);
+        }
     }
 
     @EventHandler
@@ -7221,6 +7333,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 && !title.equals("Homes Menu") && !title.equals("Settings")
                 && !title.equals("Setup Crate Shop") && !title.equals("Buy from Shop")
                 && !title.equals("Order Board") && !title.equals("Order Board - Your Orders")
+                && !title.startsWith("Choose Item") && !title.startsWith("Choose Quantity") && !title.startsWith("Choose Price")
                 && !title.endsWith("'s Homes") && !title.startsWith("Team: ") && !title.startsWith("Kick: ")
                 && !title.equals("Bank") && !title.equals("Deposit Items") && !title.equals("Withdraw Items") && !title.equals("Bank Stats")
                 && !title.equals("Duel Menu") && !title.startsWith("Select Player to Duel") && !title.startsWith("Challenge ")
@@ -7892,28 +8005,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
 
                     if (targetUUID != null) {
-                        Location[] homes = playerHomes.get(targetUUID);
-                        if (homes == null) {
-                            homes = new Location[5];
-                            String path = "players." + targetUUID.toString() + ".";
-                            int homeIdx = rawSlot - 11;
-                            String homePath = path + "homes." + homeIdx;
-                            if (getConfig().contains(homePath)) {
-                                String worldName = getConfig().getString(homePath + ".world");
-                                double x = getConfig().getDouble(homePath + ".x");
-                                double y = getConfig().getDouble(homePath + ".y");
-                                double z = getConfig().getDouble(homePath + ".z");
-                                float pitch = (float) getConfig().getDouble(homePath + ".pitch");
-                                float yaw = (float) getConfig().getDouble(homePath + ".yaw");
-                                World w = Bukkit.getWorld(worldName);
-                                if (w != null) {
-                                    Location dest = new Location(w, x, y, z, yaw, pitch);
-                                    player.closeInventory();
-                                    teleportationSync(player, dest, "🚀 Teleported to " + targetName + "'s Home " + (homeIdx + 1) + "!");
-                                }
-                            }
-                        } else {
-                            int homeIdx = rawSlot - 11;
+                        Location[] homes = getPlayerHomes(targetUUID);
+                        int homeIdx = rawSlot - 11;
+                        if (homeIdx >= 0 && homeIdx < homes.length) {
                             Location dest = homes[homeIdx];
                             if (dest != null) {
                                 player.closeInventory();
@@ -7997,14 +8091,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (title.equals("Homes Menu")) {
             event.setCancelled(true);
             int rawSlot = event.getRawSlot();
-            Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[54]);
-            String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
-                String[] names = new String[54];
-                for (int i = 0; i < 54; i++) {
-                    names[i] = "Home " + (i + 1);
-                }
-                return names;
-            });
+            Location[] homes = getPlayerHomes(uuid);
+            String[] homeNames = getPlayerHomeNames(uuid);
 
             boolean renameMode = renameModeActive.getOrDefault(uuid, false);
             boolean deleteMode = deleteModeActive.getOrDefault(uuid, false);
@@ -8569,8 +8657,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return;
             }
             if (rawSlot == 48) {
-                // Post a new order — sign input for item name
-                openSignInput(player, SignAction.ORDER_ITEM, null, "item name");
+                // Post a new order — open Choose Item GUI/Dialog
+                openChooseItemFlow(player, 0, null);
                 return;
             }
             if (rawSlot < 45) {
@@ -8596,13 +8684,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 for (ItemStack it : player.getInventory().getContents()) {
                     if (it != null && it.getType() == mat) inInv += it.getAmount();
                 }
-                if (inInv < needed) {
-                    player.sendMessage(Component.text("❌ You need " + needed + "x " + target.itemName + " to fulfill this order! You have " + inInv + ".", NamedTextColor.RED));
+                if (inInv <= 0) {
+                    player.sendMessage(Component.text("❌ You don't have any " + formatItemDisplayName(mat) + " in your inventory to fulfill this order!", NamedTextColor.RED));
                     return;
                 }
 
+                // Support partial fulfillment for large quantities up to 1,000,000
+                int toDeliver = Math.min(inInv, needed);
+                long pay = (toDeliver == needed) ? target.price : Math.max(1, (long) (((double) target.price * toDeliver) / target.quantity));
+
                 // Remove items from fulfiller's inventory
-                int toRemove = needed;
+                int toRemove = toDeliver;
                 for (ItemStack it : player.getInventory().getContents()) {
                     if (it != null && it.getType() == mat && toRemove > 0) {
                         int take = Math.min(it.getAmount(), toRemove);
@@ -8612,19 +8704,171 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
 
                 // Pay fulfiller
-                erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + target.price);
+                erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + pay);
 
-                // Give item to buyer
+                // Give items in safe stacks (<= maxStackSize) to buyer
                 Player buyerPlayer = Bukkit.getPlayer(target.buyer);
                 if (buyerPlayer != null) {
-                    HashMap<Integer, ItemStack> rem = buyerPlayer.getInventory().addItem(new ItemStack(mat, needed));
-                    for (ItemStack left : rem.values()) buyerPlayer.getWorld().dropItemNaturally(buyerPlayer.getLocation(), left);
-                    buyerPlayer.sendMessage(Component.text("📦 Your order for " + needed + "x " + target.itemName + " was fulfilled by " + player.getName() + "!", NamedTextColor.GREEN));
+                    int remainingToGive = toDeliver;
+                    int maxStack = mat.getMaxStackSize();
+                    while (remainingToGive > 0) {
+                        int batch = Math.min(remainingToGive, maxStack);
+                        HashMap<Integer, ItemStack> rem = buyerPlayer.getInventory().addItem(new ItemStack(mat, batch));
+                        for (ItemStack left : rem.values()) buyerPlayer.getWorld().dropItemNaturally(buyerPlayer.getLocation(), left);
+                        remainingToGive -= batch;
+                    }
+                    buyerPlayer.sendMessage(Component.text("📦 Your order for " + formatItemDisplayName(mat) + " received " + String.format("%,d", toDeliver) + "x items from " + player.getName() + "!", NamedTextColor.GREEN));
                 }
 
-                orders.remove(target);
-                player.sendMessage(Component.text("✅ Order fulfilled! You received " + target.price + " Erpies.", NamedTextColor.GREEN));
+                if (toDeliver >= needed) {
+                    orders.remove(target);
+                    player.sendMessage(Component.text("✅ Order fully fulfilled! You delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + String.format("%,d", pay) + " Erpies.", NamedTextColor.GREEN));
+                } else {
+                    int remainingQty = needed - toDeliver;
+                    long remainingPrice = Math.max(1, target.price - pay);
+                    int index = orders.indexOf(target);
+                    if (index >= 0) {
+                        orders.set(index, new OrderRequest(target.buyer, target.buyerName, target.itemName, remainingQty, remainingPrice));
+                    }
+                    player.sendMessage(Component.text("✅ Partial order fulfilled! Delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + String.format("%,d", pay) + " Erpies. (" + String.format("%,d", remainingQty) + " remaining)", NamedTextColor.GREEN));
+                }
+                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
                 openOrdersGui(player, null);
+            }
+            return;
+        }
+
+        // Choose Item GUI
+        if (title.startsWith("Choose Item")) {
+            event.setCancelled(true);
+            int rawSlot = event.getRawSlot();
+            if (rawSlot == 45) {
+                // Previous page
+                int page = pendingOrderPage.getOrDefault(uuid, 0);
+                if (page > 0) {
+                    openChooseItemChestGui(player, page - 1, pendingOrderSearchQuery.get(uuid));
+                }
+                return;
+            }
+            if (rawSlot == 46) {
+                // Search
+                openSignInput(player, SignAction.ORDER_SEARCH, null, "search item");
+                return;
+            }
+            if (rawSlot == 48) {
+                // Cancel! button
+                player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.8f, 0.8f);
+                openOrdersGui(player, null);
+                return;
+            }
+            if (rawSlot == 53) {
+                // Next page
+                int page = pendingOrderPage.getOrDefault(uuid, 0);
+                openChooseItemChestGui(player, page + 1, pendingOrderSearchQuery.get(uuid));
+                return;
+            }
+            if (rawSlot >= 0 && rawSlot < 45) {
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem != null && clickedItem.getType() != Material.AIR) {
+                    Material selectedMat = clickedItem.getType();
+                    pendingOrderItemName.put(uuid, selectedMat.name());
+                    player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.8f, 1.2f);
+                    openChooseQuantityGui(player, selectedMat);
+                }
+            }
+            return;
+        }
+
+        // Choose Quantity GUI (Max 1M)
+        if (title.startsWith("Choose Quantity")) {
+            event.setCancelled(true);
+            int rawSlot = event.getRawSlot();
+            if (rawSlot == 18) {
+                // Back to Choose Item
+                openChooseItemFlow(player, pendingOrderPage.getOrDefault(uuid, 0), pendingOrderSearchQuery.get(uuid));
+                return;
+            }
+            if (rawSlot == 26) {
+                // Cancel
+                pendingOrderItemName.remove(uuid);
+                pendingOrderQuantity.remove(uuid);
+                openOrdersGui(player, null);
+                return;
+            }
+            String itemName = pendingOrderItemName.get(uuid);
+            if (itemName == null) {
+                openOrdersGui(player, null);
+                return;
+            }
+            Material mat = Material.matchMaterial(itemName);
+            if (mat == null) return;
+
+            int selectedQty = -1;
+            if (rawSlot == 10) selectedQty = 1;
+            else if (rawSlot == 11) selectedQty = 16;
+            else if (rawSlot == 12) selectedQty = 64;
+            else if (rawSlot == 13) selectedQty = 576;
+            else if (rawSlot == 14) selectedQty = 1728;
+            else if (rawSlot == 15) selectedQty = 10000;
+            else if (rawSlot == 16) selectedQty = 100000;
+            else if (rawSlot == 22) selectedQty = 1000000;
+            else if (rawSlot == 24) {
+                // Custom Quantity
+                openSignInput(player, SignAction.ORDER_QUANTITY, null, "qty (max 1M)");
+                return;
+            }
+
+            if (selectedQty > 0) {
+                pendingOrderQuantity.put(uuid, selectedQty);
+                player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 0.8f, 1.2f);
+                openChoosePriceGui(player, mat, selectedQty);
+            }
+            return;
+        }
+
+        // Choose Price GUI
+        if (title.startsWith("Choose Price")) {
+            event.setCancelled(true);
+            int rawSlot = event.getRawSlot();
+            String itemName = pendingOrderItemName.get(uuid);
+            int qty = pendingOrderQuantity.getOrDefault(uuid, 1);
+            if (itemName == null) {
+                openOrdersGui(player, null);
+                return;
+            }
+            Material mat = Material.matchMaterial(itemName);
+            if (mat == null) return;
+
+            if (rawSlot == 18) {
+                // Back to Choose Quantity
+                openChooseQuantityGui(player, mat);
+                return;
+            }
+            if (rawSlot == 26) {
+                // Cancel
+                pendingOrderItemName.remove(uuid);
+                pendingOrderQuantity.remove(uuid);
+                openOrdersGui(player, null);
+                return;
+            }
+
+            long worth = getItemWorth(mat);
+            long selectedPrice = -1;
+            if (rawSlot == 11) selectedPrice = Math.max(1, worth * qty);
+            else if (rawSlot == 12) selectedPrice = 100;
+            else if (rawSlot == 13) selectedPrice = 1000;
+            else if (rawSlot == 14) selectedPrice = 10000;
+            else if (rawSlot == 15) selectedPrice = 100000;
+            else if (rawSlot == 20) selectedPrice = 500000;
+            else if (rawSlot == 21) selectedPrice = 1000000;
+            else if (rawSlot == 23) {
+                // Custom Price
+                openSignInput(player, SignAction.ORDER_PRICE, null, "price (erpies)");
+                return;
+            }
+
+            if (selectedPrice > 0) {
+                finishOrderCreation(player, itemName, qty, selectedPrice);
             }
             return;
         }
@@ -8938,16 +9182,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (order.buyer.equals(player.getUniqueId())) continue; // skip own orders
             Material mat = Material.matchMaterial(order.itemName);
             if (mat == null) mat = Material.PAPER;
-            if (query != null && !order.itemName.toLowerCase().contains(query.toLowerCase())) continue;
+            if (query != null && !order.itemName.toLowerCase().contains(query.toLowerCase()) && !formatItemDisplayName(mat).toLowerCase().contains(query.toLowerCase())) continue;
 
             ItemStack display = new ItemStack(mat);
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
-                meta.displayName(Component.text(order.itemName, NamedTextColor.YELLOW));
+                meta.displayName(Component.text(formatItemDisplayName(mat), NamedTextColor.YELLOW));
                 meta.lore(List.of(
                     Component.text("Buyer: " + order.buyerName, NamedTextColor.GRAY),
-                    Component.text("Wants: " + order.quantity + "x " + order.itemName, NamedTextColor.WHITE),
-                    Component.text("Paying: " + order.price + " Erpies", NamedTextColor.GOLD),
+                    Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE),
+                    Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD),
                     Component.text("Click to fulfill (needs item in inv)", NamedTextColor.GREEN)
                 ));
                 display.setItemMeta(meta);
@@ -8973,10 +9217,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             ItemStack display = new ItemStack(mat);
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
-                meta.displayName(Component.text(order.itemName, NamedTextColor.YELLOW));
+                meta.displayName(Component.text(formatItemDisplayName(mat), NamedTextColor.YELLOW));
                 meta.lore(List.of(
-                    Component.text("Wants: " + order.quantity + "x " + order.itemName, NamedTextColor.WHITE),
-                    Component.text("Paying: " + order.price + " Erpies", NamedTextColor.GOLD),
+                    Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE),
+                    Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD),
                     Component.text("Click to cancel (refunds Erpies)", NamedTextColor.RED)
                 ));
                 display.setItemMeta(meta);
@@ -8986,6 +9230,462 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
         inv.setItem(49, createGuiItem(Material.BARRIER, "Back to Order Board", NamedTextColor.RED, "Return to main page"));
         player.openInventory(inv);
+    }
+
+    // --- Redesigned Order Creation System ---
+
+    public static final List<Material> ORDERABLE_ITEMS = new ArrayList<>();
+    static {
+        for (Material mat : Material.values()) {
+            if (!mat.isItem()) continue;
+            if (mat.isAir()) continue;
+            if (mat.isLegacy()) continue;
+            String name = mat.name();
+            if (name.contains("SPAWN_EGG")) continue;
+            if (name.contains("COMMAND_BLOCK")) continue;
+            if (name.contains("STRUCTURE_")) continue;
+            if (name.contains("INFESTED_")) continue;
+            if (name.equals("BEDROCK") || name.equals("BARRIER") || name.equals("LIGHT") ||
+                name.equals("DEBUG_STICK") || name.equals("KNOWLEDGE_BOOK") || name.equals("JIGSAW") ||
+                name.equals("TEST_BLOCK") || name.equals("BUNDLE")) continue;
+            ORDERABLE_ITEMS.add(mat);
+        }
+        ORDERABLE_ITEMS.sort(Comparator.comparing(CustomScoreboard::formatItemDisplayName));
+    }
+
+    public static String formatItemDisplayName(Material mat) {
+        if (mat == null) return "Unknown";
+        if (mat == Material.AMETHYST_BLOCK) return "Block of Amethyst";
+        String name = mat.name().toLowerCase();
+        String[] parts = name.split("_");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty()) continue;
+            String part = parts[i];
+            if (i > 0 && (part.equals("of") || part.equals("with") || part.equals("and") || part.equals("the"))) {
+                sb.append(part);
+            } else {
+                sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+            }
+            if (i < parts.length - 1) sb.append(" ");
+        }
+        return sb.toString();
+    }
+
+    public static long getItemWorth(Material mat) {
+        if (mat == null) return 10;
+        String name = mat.name();
+
+        // Exact screenshot match: Acacia Fence Gate -> $ 12
+        if (name.equals("ACACIA_FENCE_GATE")) return 12;
+
+        // Wood products / fence gates / fences / doors / signs / boats
+        if (name.endsWith("_FENCE_GATE")) return 12;
+        if (name.endsWith("_FENCE")) return 8;
+        if (name.endsWith("_DOOR")) return 10;
+        if (name.endsWith("_TRAPDOOR")) return 10;
+        if (name.endsWith("_BOAT")) return 15;
+        if (name.endsWith("_BOAT_WITH_CHEST") || name.endsWith("_CHEST_BOAT")) return 25;
+        if (name.endsWith("_BUTTON")) return 2;
+        if (name.endsWith("_PRESSURE_PLATE")) return 5;
+        if (name.endsWith("_STAIRS")) return 6;
+        if (name.endsWith("_SLAB")) return 4;
+        if (name.endsWith("_SIGN")) return 8;
+        if (name.endsWith("_HANGING_SIGN")) return 12;
+        if (name.endsWith("_LOG") || name.endsWith("_WOOD") || name.endsWith("_STEM") || name.endsWith("_HYPHAE")) return 10;
+        if (name.endsWith("_PLANKS")) return 3;
+        if (name.endsWith("_SAPLING") || name.endsWith("_PROPAGULE")) return 10;
+        if (name.endsWith("_LEAVES")) return 5;
+
+        // Netherite items
+        if (name.equals("NETHERITE_UPGRADE_SMITHING_TEMPLATE")) return 5000;
+        if (name.equals("NETHERITE_BLOCK")) return 27000;
+        if (name.equals("NETHERITE_INGOT")) return 3000;
+        if (name.equals("NETHERITE_SCRAP")) return 750;
+        if (name.equals("ANCIENT_DEBRIS")) return 800;
+        if (name.startsWith("NETHERITE_")) return 4000;
+
+        // Diamonds
+        if (name.equals("DIAMOND_BLOCK")) return 2700;
+        if (name.equals("DIAMOND")) return 300;
+        if (name.startsWith("DIAMOND_")) return 600;
+
+        // Gold
+        if (name.equals("GOLD_BLOCK")) return 675;
+        if (name.equals("GOLD_INGOT")) return 75;
+        if (name.equals("GOLD_NUGGET")) return 8;
+        if (name.startsWith("GOLDEN_")) return 150;
+
+        // Iron
+        if (name.equals("IRON_BLOCK")) return 450;
+        if (name.equals("IRON_INGOT")) return 50;
+        if (name.equals("IRON_NUGGET")) return 5;
+        if (name.startsWith("IRON_")) return 100;
+
+        // Copper
+        if (name.equals("COPPER_BLOCK")) return 180;
+        if (name.equals("COPPER_INGOT")) return 20;
+
+        // Rare / Special items
+        if (name.equals("ELYTRA")) return 10000;
+        if (name.equals("NETHER_STAR")) return 8000;
+        if (name.equals("BEACON")) return 10000;
+        if (name.equals("TOTEM_OF_UNDYING")) return 1500;
+        if (name.equals("ENCHANTED_GOLDEN_APPLE")) return 5000;
+        if (name.equals("GOLDEN_APPLE")) return 250;
+        if (name.equals("SHULKER_BOX") || name.endsWith("_SHULKER_BOX")) return 800;
+        if (name.equals("SHULKER_SHELL")) return 400;
+        if (name.equals("TRIDENT")) return 3500;
+        if (name.equals("HEAVY_CORE")) return 15000;
+        if (name.equals("MACE")) return 20000;
+        if (name.equals("HEART_OF_THE_SEA")) return 2500;
+        if (name.equals("NAUTILUS_SHELL")) return 200;
+        if (name.equals("ENDER_PEARL")) return 75;
+        if (name.equals("ENDER_EYE")) return 100;
+        if (name.equals("END_CRYSTAL")) return 500;
+        if (name.equals("RESPAWN_ANCHOR")) return 500;
+        if (name.equals("OBSIDIAN") || name.equals("CRYING_OBSIDIAN")) return 50;
+        if (name.equals("WIND_CHARGE")) return 75;
+        if (name.equals("BREEZE_ROD")) return 250;
+        if (name.equals("BLAZE_ROD")) return 50;
+        if (name.equals("BLAZE_POWDER")) return 25;
+        if (name.equals("GHAST_TEAR")) return 150;
+        if (name.equals("WITHER_SKELETON_SKULL")) return 2000;
+        if (name.equals("DRAGON_BREATH")) return 100;
+        if (name.equals("DRAGON_EGG")) return 50000;
+        if (name.equals("EXPERIENCE_BOTTLE")) return 50;
+        if (name.equals("NAME_TAG")) return 150;
+        if (name.equals("SADDLE")) return 150;
+        if (name.equals("LEAD")) return 20;
+
+        // Food & consumables
+        if (name.equals("ENCHANTED_GOLDEN_CARROT")) return 500;
+        if (name.equals("GOLDEN_CARROT")) return 50;
+        if (name.equals("COOKED_BEEF") || name.equals("COOKED_PORKCHOP")) return 20;
+        if (name.equals("BREAD")) return 10;
+        if (name.equals("APPLE")) return 10;
+        if (name.equals("CARROT") || name.equals("POTATO") || name.equals("BAKED_POTATO")) return 5;
+
+        // Amethyst & ores
+        if (name.equals("AMETHYST_CLUSTER")) return 60;
+        if (name.equals("AMETHYST_SHARD")) return 25;
+        if (name.equals("BLOCK_OF_AMETHYST")) return 100;
+        if (name.equals("COAL")) return 10;
+        if (name.equals("COAL_BLOCK")) return 90;
+        if (name.equals("LAPIS_LAZULI")) return 15;
+        if (name.equals("LAPIS_BLOCK")) return 135;
+        if (name.equals("REDSTONE")) return 15;
+        if (name.equals("REDSTONE_BLOCK")) return 135;
+        if (name.equals("EMERALD")) return 50;
+        if (name.equals("EMERALD_BLOCK")) return 450;
+
+        // Default based on material properties
+        if (mat.isEdible()) return 15;
+        if (name.contains("RAW_")) return 30;
+        if (name.contains("ORE")) return 50;
+        if (name.contains("CORAL")) return 40;
+        if (name.contains("POTTERY_SHERD")) return 100;
+        if (name.contains("ARMOR_TRIM")) return 1000;
+        if (name.contains("BANNER_PATTERN")) return 500;
+        if (name.contains("MUSIC_DISC")) return 1500;
+        if (name.contains("BUCKET")) return 60;
+
+        return 20;
+    }
+
+    private void openChooseItemFlow(Player player, int page, String query) {
+        if (!isBedrockPlayer(player)) {
+            try {
+                openChooseItemDialog(player, query);
+                return;
+            } catch (Throwable ignored) {
+                // Fallback to chest GUI if client doesn't support dialogs
+            }
+        }
+        openChooseItemChestGui(player, page, query);
+    }
+
+    private void openChooseItemDialog(Player player, String query) {
+        List<Material> filtered = new ArrayList<>();
+        String q = (query != null) ? query.trim().toLowerCase() : "";
+        for (Material mat : ORDERABLE_ITEMS) {
+            String dName = formatItemDisplayName(mat);
+            if (q.isEmpty() || dName.toLowerCase().contains(q) || mat.name().toLowerCase().contains(q)) {
+                filtered.add(mat);
+            }
+        }
+
+        Dialog dialog = Dialog.create(factory -> {
+            var builder = factory.empty();
+            builder.base(DialogBase.builder(Component.text("Choose Item ⚠", NamedTextColor.WHITE))
+                .inputs(List.of(
+                    DialogInput.text("search", Component.text("Search"))
+                        .initial(query != null ? query : "")
+                        .build()
+                ))
+                .build());
+
+            List<ActionButton> actions = new ArrayList<>();
+
+            // 1. Search button
+            actions.add(ActionButton.create(
+                Component.text("Search", NamedTextColor.WHITE),
+                Component.text("Click to filter items"),
+                100,
+                DialogAction.customClick((view, aud) -> {
+                    if (aud instanceof Player p) {
+                        String inputQuery = view.getText("search");
+                        Bukkit.getScheduler().runTask(this, () -> openChooseItemFlow(p, 0, (inputQuery != null && !inputQuery.trim().isEmpty()) ? inputQuery.trim() : null));
+                    }
+                }, null)
+            ));
+
+            // 2. Action buttons for filtered items (first 100)
+            int count = 0;
+            for (Material mat : filtered) {
+                if (count++ >= 100) break;
+                String displayName = formatItemDisplayName(mat);
+                long worth = getItemWorth(mat);
+                Component tooltip = Component.text(displayName, NamedTextColor.WHITE)
+                    .append(Component.newline())
+                    .append(Component.text("Worth: ", NamedTextColor.LIGHT_PURPLE))
+                    .append(Component.text("$ ", NamedTextColor.GREEN))
+                    .append(Component.text(worth, NamedTextColor.WHITE));
+
+                actions.add(ActionButton.create(
+                    Component.text(displayName, NamedTextColor.WHITE),
+                    tooltip,
+                    120,
+                    DialogAction.customClick((view, aud) -> {
+                        if (aud instanceof Player p) {
+                            Bukkit.getScheduler().runTask(this, () -> {
+                                pendingOrderItemName.put(p.getUniqueId(), mat.name());
+                                openChooseQuantityGui(p, mat);
+                            });
+                        }
+                    }, null)
+                ));
+            }
+
+            ActionButton cancelBtn = ActionButton.create(
+                Component.text("Cancel!", NamedTextColor.RED),
+                Component.text("Cancel order creation"),
+                100,
+                DialogAction.customClick((view, aud) -> {
+                    if (aud instanceof Player p) {
+                        Bukkit.getScheduler().runTask(this, () -> openOrdersGui(p, null));
+                    }
+                }, null)
+            );
+
+            builder.type(DialogType.multiAction(actions, cancelBtn, 4));
+        });
+
+        ((net.kyori.adventure.audience.Audience) player).showDialog(dialog);
+    }
+
+    private void openChooseItemChestGui(Player player, int page, String query) {
+        pendingOrderPage.put(player.getUniqueId(), page);
+        pendingOrderSearchQuery.put(player.getUniqueId(), query);
+
+        List<Material> filtered = new ArrayList<>();
+        String q = (query != null) ? query.trim().toLowerCase() : "";
+        for (Material mat : ORDERABLE_ITEMS) {
+            String dName = formatItemDisplayName(mat);
+            if (q.isEmpty() || dName.toLowerCase().contains(q) || mat.name().toLowerCase().contains(q)) {
+                filtered.add(mat);
+            }
+        }
+
+        int pageSize = 45;
+        int totalItems = filtered.size();
+        int maxPages = Math.max(1, (int) Math.ceil((double) totalItems / pageSize));
+        int currentPage = Math.max(0, Math.min(page, maxPages - 1));
+        pendingOrderPage.put(player.getUniqueId(), currentPage);
+
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text("Choose Item ⚠"));
+
+        int start = currentPage * pageSize;
+        int end = Math.min(start + pageSize, totalItems);
+        int slot = 0;
+        for (int i = start; i < end; i++) {
+            Material mat = filtered.get(i);
+            ItemStack item = new ItemStack(mat);
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null) {
+                String dName = formatItemDisplayName(mat);
+                long worth = getItemWorth(mat);
+                meta.displayName(Component.text(dName, NamedTextColor.WHITE));
+                meta.lore(List.of(
+                    Component.text("Worth: ", NamedTextColor.LIGHT_PURPLE)
+                        .append(Component.text("$ ", NamedTextColor.GREEN))
+                        .append(Component.text(worth, NamedTextColor.WHITE)),
+                    Component.text("Click to choose this item", NamedTextColor.YELLOW)
+                ));
+                item.setItemMeta(meta);
+            }
+            inv.setItem(slot++, item);
+        }
+
+        // Fill row 6 with border and controls
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int c = 45; c < 54; c++) {
+            inv.setItem(c, pane);
+        }
+
+        if (currentPage > 0) {
+            inv.setItem(45, createGuiItem(Material.ARROW, "Previous Page", NamedTextColor.YELLOW, "Go to page " + currentPage));
+        }
+
+        String searchLabel = (query != null && !query.isEmpty()) ? "Search: \"" + query + "\"" : "Search";
+        inv.setItem(46, createGuiItem(Material.OAK_SIGN, searchLabel, NamedTextColor.AQUA, "Click to filter items by name"));
+
+        inv.setItem(48, createGuiItem(Material.RED_CONCRETE, "Cancel!", NamedTextColor.RED, "Cancel order creation and return to Order Board"));
+
+        inv.setItem(49, createGuiItem(Material.BOOK, "Page " + (currentPage + 1) + " / " + maxPages, NamedTextColor.GOLD, "Total items: " + totalItems));
+
+        if (currentPage < maxPages - 1) {
+            inv.setItem(53, createGuiItem(Material.ARROW, "Next Page", NamedTextColor.YELLOW, "Go to page " + (currentPage + 2)));
+        }
+
+        player.openInventory(inv);
+    }
+
+    private void openChooseQuantityGui(Player player, Material mat) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Choose Quantity (Max 1M)"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) inv.setItem(i, pane);
+
+        String dName = formatItemDisplayName(mat);
+        long worth = getItemWorth(mat);
+
+        // Slot 4: Item info
+        ItemStack itemDisplay = new ItemStack(mat);
+        ItemMeta meta = itemDisplay.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Selected: " + dName, NamedTextColor.GOLD));
+            meta.lore(List.of(
+                Component.text("Unit Worth: ", NamedTextColor.GRAY)
+                    .append(Component.text("$ ", NamedTextColor.GREEN))
+                    .append(Component.text(worth, NamedTextColor.WHITE)),
+                Component.text("Maximum Limit: ", NamedTextColor.RED)
+                    .append(Component.text("1,000,000 (1M)", NamedTextColor.YELLOW)),
+                Component.text("Click a preset below or enter custom quantity", NamedTextColor.YELLOW)
+            ));
+            itemDisplay.setItemMeta(meta);
+        }
+        inv.setItem(4, itemDisplay);
+
+        // Preset quantity buttons
+        inv.setItem(10, createGuiItem(Material.IRON_NUGGET, "1x", NamedTextColor.WHITE, "Order 1 item", "Cost approx: " + worth + " Erpies"));
+        inv.setItem(11, createGuiItem(Material.COPPER_INGOT, "16x", NamedTextColor.GOLD, "Order 16 items", "Cost approx: " + (worth * 16) + " Erpies"));
+        inv.setItem(12, createGuiItem(Material.GOLD_INGOT, "64x (1 Stack)", NamedTextColor.YELLOW, "Order 64 items (1 full stack)", "Cost approx: " + (worth * 64) + " Erpies"));
+        inv.setItem(13, createGuiItem(Material.DIAMOND, "576x (9 Stacks)", NamedTextColor.AQUA, "Order 576 items (9 stacks)", "Cost approx: " + (worth * 576) + " Erpies"));
+        inv.setItem(14, createGuiItem(Material.EMERALD, "1,728x (1 Shulker)", NamedTextColor.GREEN, "Order 1,728 items (27 stacks)", "Cost approx: " + (worth * 1728) + " Erpies"));
+        inv.setItem(15, createGuiItem(Material.NETHERITE_SCRAP, "10,000x (10k)", NamedTextColor.LIGHT_PURPLE, "Order 10,000 items", "Cost approx: " + (worth * 10000) + " Erpies"));
+        inv.setItem(16, createGuiItem(Material.NETHERITE_INGOT, "100,000x (100k)", NamedTextColor.DARK_PURPLE, "Order 100,000 items", "Cost approx: " + (worth * 100000) + " Erpies"));
+
+        inv.setItem(22, createGuiItem(Material.BEACON, "1,000,000x (1M Max)", NamedTextColor.GOLD, "Order 1,000,000 items (Maximum Limit)", "Cost approx: " + (worth * 1000000) + " Erpies"));
+
+        inv.setItem(24, createGuiItem(Material.NAME_TAG, "Custom Quantity", NamedTextColor.YELLOW, "Click to type exact quantity", "Range: 1 to 1,000,000 (1M)"));
+
+        inv.setItem(18, createGuiItem(Material.ARROW, "Back", NamedTextColor.GRAY, "Return to Choose Item"));
+        inv.setItem(26, createGuiItem(Material.RED_CONCRETE, "Cancel!", NamedTextColor.RED, "Cancel and return to Order Board"));
+
+        player.openInventory(inv);
+    }
+
+    private void openChoosePriceGui(Player player, Material mat, int quantity) {
+        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Choose Price for Order"));
+        ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 0; i < 27; i++) inv.setItem(i, pane);
+
+        String dName = formatItemDisplayName(mat);
+        long worth = getItemWorth(mat);
+        long estWorth = worth * quantity;
+        long playerBal = erpiesMap.getOrDefault(player.getUniqueId(), 0L);
+
+        // Slot 4: Item info
+        int stackIcon = Math.min(Math.max(1, quantity), mat.getMaxStackSize());
+        ItemStack itemDisplay = new ItemStack(mat, stackIcon);
+        ItemMeta meta = itemDisplay.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Order: " + String.format("%,d", quantity) + "x " + dName, NamedTextColor.GOLD));
+            meta.lore(List.of(
+                Component.text("Unit Worth: ", NamedTextColor.GRAY)
+                    .append(Component.text("$ ", NamedTextColor.GREEN))
+                    .append(Component.text(worth, NamedTextColor.WHITE)),
+                Component.text("Total Est. Worth: ", NamedTextColor.GRAY)
+                    .append(Component.text("$ ", NamedTextColor.GREEN))
+                    .append(Component.text(String.format("%,d", estWorth), NamedTextColor.WHITE)),
+                Component.text("Your Balance: ", NamedTextColor.GRAY)
+                    .append(Component.text(String.format("%,d", playerBal) + " Erpies", NamedTextColor.GOLD)),
+                Component.text("Select total price to offer sellers:", NamedTextColor.YELLOW)
+            ));
+            itemDisplay.setItemMeta(meta);
+        }
+        inv.setItem(4, itemDisplay);
+
+        // Presets
+        inv.setItem(11, createGuiItem(Material.EMERALD, "Est. Worth (" + String.format("%,d", estWorth) + " Erpies)", NamedTextColor.GREEN, "Pay market estimated price: " + String.format("%,d", estWorth) + " Erpies"));
+        inv.setItem(12, createGuiItem(Material.GOLD_NUGGET, "100 Erpies", NamedTextColor.YELLOW, "Offer total: 100 Erpies"));
+        inv.setItem(13, createGuiItem(Material.GOLD_INGOT, "1,000 Erpies (1k)", NamedTextColor.GOLD, "Offer total: 1,000 Erpies"));
+        inv.setItem(14, createGuiItem(Material.DIAMOND, "10,000 Erpies (10k)", NamedTextColor.AQUA, "Offer total: 10,000 Erpies"));
+        inv.setItem(15, createGuiItem(Material.NETHERITE_INGOT, "100,000 Erpies (100k)", NamedTextColor.LIGHT_PURPLE, "Offer total: 100,000 Erpies"));
+        inv.setItem(20, createGuiItem(Material.NETHERITE_BLOCK, "500,000 Erpies (500k)", NamedTextColor.DARK_PURPLE, "Offer total: 500,000 Erpies"));
+        inv.setItem(21, createGuiItem(Material.BEACON, "1,000,000 Erpies (1M)", NamedTextColor.GOLD, "Offer total: 1,000,000 Erpies"));
+
+        inv.setItem(23, createGuiItem(Material.NAME_TAG, "Custom Price", NamedTextColor.YELLOW, "Click to type custom price", "Examples: 500, 10k, 1m"));
+
+        inv.setItem(18, createGuiItem(Material.ARROW, "Back", NamedTextColor.GRAY, "Return to Choose Quantity"));
+        inv.setItem(26, createGuiItem(Material.RED_CONCRETE, "Cancel!", NamedTextColor.RED, "Cancel and return to Order Board"));
+
+        player.openInventory(inv);
+    }
+
+    private void finishOrderCreation(Player player, String itemName, int quantity, long price) {
+        UUID uuid = player.getUniqueId();
+        long bal = erpiesMap.getOrDefault(uuid, 0L);
+        Material mat = Material.matchMaterial(itemName);
+        String display = (mat != null) ? formatItemDisplayName(mat) : itemName;
+
+        if (quantity < 1) {
+            player.sendMessage(Component.text("❌ Quantity must be at least 1!", NamedTextColor.RED));
+            return;
+        }
+        if (quantity > 1_000_000) {
+            player.sendMessage(Component.text("❌ Maximum quantity is 1,000,000 (1M)!", NamedTextColor.RED));
+            return;
+        }
+        if (price <= 0) {
+            player.sendMessage(Component.text("❌ Price must be greater than 0!", NamedTextColor.RED));
+            return;
+        }
+        if (bal < price) {
+            player.sendMessage(Component.text("❌ You don't have enough Erpies! Need: " + String.format("%,d", price) + ", Have: " + String.format("%,d", bal), NamedTextColor.RED));
+            return;
+        }
+
+        // Deduct Erpies upfront
+        erpiesMap.put(uuid, bal - price);
+
+        // Add order
+        orders.add(new OrderRequest(uuid, player.getName(), itemName, quantity, price));
+
+        // Cleanup pending state
+        pendingOrderItemName.remove(uuid);
+        pendingOrderQuantity.remove(uuid);
+
+        // Success notification & sound
+        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
+        player.sendMessage(Component.text("§a======================================="));
+        player.sendMessage(Component.text("§a✅ Buy order successfully posted!"));
+        player.sendMessage(Component.text("§fItem: §e" + String.format("%,d", quantity) + "x " + display));
+        player.sendMessage(Component.text("§fTotal Paid: §6" + String.format("%,d", price) + " Erpies §7(held in escrow)"));
+        player.sendMessage(Component.text("§7Your order is now live on the Order Board!"));
+        player.sendMessage(Component.text("§a======================================="));
+
+        openOrdersGui(player, null);
     }
 
     // --- Auction House ---
@@ -9187,13 +9887,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     player.sendMessage(Component.text("❌ Search cancelled.", NamedTextColor.RED));
                 } else {
                     String query = input.toLowerCase();
-                    Location[] homes = playerHomes.get(uuid);
-                    String[] homeNames = playerHomeNames.get(uuid);
+                    Location[] homes = getPlayerHomes(uuid);
+                    String[] homeNames = getPlayerHomeNames(uuid);
                     
                     int foundIdx = -1;
                     if (homes != null && homeNames != null) {
-                        for (int i = 0; i < 5; i++) {
-                            if (homes[i] != null && homeNames[i] != null && homeNames[i].toLowerCase().contains(query)) {
+                        for (int i = 0; i < 45; i++) {
+                            if (i < homes.length && homes[i] != null && i < homeNames.length && homeNames[i] != null && homeNames[i].toLowerCase().contains(query)) {
                                 foundIdx = i;
                                 break;
                             }
@@ -9524,30 +10224,53 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         player.sendMessage(Component.text("❌ Unknown item: '" + input + "'. Use the Minecraft item name (e.g. diamond, oak_log).", NamedTextColor.RED));
                     } else {
                         pendingOrderItemName.put(uuid, mat.name());
-                        Bukkit.getScheduler().runTask(this, () -> openSignInput(player, SignAction.ORDER_PRICE, null, "price (erpies)"));
+                        Bukkit.getScheduler().runTask(this, () -> openChooseQuantityGui(player, mat));
+                    }
+                }
+            } else if (pending.action == SignAction.ORDER_QUANTITY) {
+                String itemName = pendingOrderItemName.get(uuid);
+                if (itemName == null || input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Order cancelled.", NamedTextColor.RED));
+                } else {
+                    Material mat = Material.matchMaterial(itemName);
+                    try {
+                        long rawQty = parseAmountWithSuffix(input);
+                        if (rawQty < 1) {
+                            player.sendMessage(Component.text("❌ Quantity must be at least 1!", NamedTextColor.RED));
+                            if (mat != null) Bukkit.getScheduler().runTask(this, () -> openChooseQuantityGui(player, mat));
+                        } else if (rawQty > 1_000_000) {
+                            player.sendMessage(Component.text("❌ Maximum quantity is 1,000,000 (1M)!", NamedTextColor.RED));
+                            if (mat != null) Bukkit.getScheduler().runTask(this, () -> openChooseQuantityGui(player, mat));
+                        } else {
+                            int qty = (int) rawQty;
+                            pendingOrderQuantity.put(uuid, qty);
+                            if (mat != null) Bukkit.getScheduler().runTask(this, () -> openChoosePriceGui(player, mat, qty));
+                        }
+                    } catch (NumberFormatException e) {
+                        player.sendMessage(Component.text("❌ Invalid quantity! Use a number (e.g. 64, 1k, 1m).", NamedTextColor.RED));
+                        if (mat != null) Bukkit.getScheduler().runTask(this, () -> openChooseQuantityGui(player, mat));
                     }
                 }
             } else if (pending.action == SignAction.ORDER_PRICE) {
-                String itemName = pendingOrderItemName.remove(uuid);
+                String itemName = pendingOrderItemName.get(uuid);
+                int qty = pendingOrderQuantity.getOrDefault(uuid, 1);
                 if (itemName == null || input.isEmpty()) {
                     player.sendMessage(Component.text("❌ Order cancelled.", NamedTextColor.RED));
                 } else {
                     try {
                         long price = parseAmountWithSuffix(input);
-                        if (price <= 0) {
-                            player.sendMessage(Component.text("❌ Price must be greater than 0!", NamedTextColor.RED));
-                        } else if (erpiesMap.getOrDefault(uuid, 0L) < price) {
-                            player.sendMessage(Component.text("❌ You don't have enough Erpies! Need: " + price + ", Have: " + erpiesMap.getOrDefault(uuid, 0L), NamedTextColor.RED));
-                        } else {
-                            erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) - price);
-                            orders.add(new OrderRequest(uuid, player.getName(), itemName, 1, price));
-                            player.sendMessage(Component.text("✅ Buy order posted for 1x " + itemName + " at " + price + " Erpies!", NamedTextColor.GREEN));
-                            Bukkit.getScheduler().runTask(this, () -> openOrdersGui(player, null));
-                        }
+                        Bukkit.getScheduler().runTask(this, () -> finishOrderCreation(player, itemName, qty, price));
                     } catch (NumberFormatException e) {
-                        player.sendMessage(Component.text("❌ Invalid price! Use a number (e.g. 500, 1k).", NamedTextColor.RED));
+                        player.sendMessage(Component.text("❌ Invalid price! Use a number (e.g. 500, 10k, 1m).", NamedTextColor.RED));
+                        Material mat = Material.matchMaterial(itemName);
+                        if (mat != null) Bukkit.getScheduler().runTask(this, () -> openChoosePriceGui(player, mat, qty));
                     }
                 }
+            } else if (pending.action == SignAction.ORDER_SEARCH) {
+                String query = input.trim();
+                pendingOrderSearchQuery.put(uuid, query.isEmpty() ? null : query);
+                pendingOrderPage.put(uuid, 0);
+                Bukkit.getScheduler().runTask(this, () -> openChooseItemFlow(player, 0, query.isEmpty() ? null : query));
             } else if (pending.action == SignAction.LIST_PRICE) {
                 if (input.isEmpty()) {
                     player.sendMessage(Component.text("❌ Listing cancelled. Item returned.", NamedTextColor.RED));
@@ -10755,14 +11478,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private void openUnifiedHomeGui(Player player) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Homes Menu"));
         UUID uuid = player.getUniqueId();
-        Location[] homes = playerHomes.computeIfAbsent(uuid, k -> new Location[54]);
-        String[] homeNames = playerHomeNames.computeIfAbsent(uuid, k -> {
-            String[] names = new String[54];
-            for (int i = 0; i < 54; i++) {
-                names[i] = "Home " + (i + 1);
-            }
-            return names;
-        });
+        Location[] homes = getPlayerHomes(uuid);
+        String[] homeNames = getPlayerHomeNames(uuid);
 
         // Fill with decorative background gray stained glass pane
         ItemStack pane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
@@ -12716,6 +13433,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 team.addEntry(name);
             }
 
+            team.setOption(Team.Option.NAME_TAG_VISIBILITY,
+                    shouldHideNametag(online) ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS);
+
             Component prefix = Component.empty();
 
             String onlineTeamNameLower = playerTeams.get(online.getUniqueId());
@@ -12741,7 +13461,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             } else if (name.equalsIgnoreCase(".Ironwarden7425") || name.equalsIgnoreCase(".IronWarden7425")) {
                 prefix = prefix.append(Component.text("[Admin o' Derp] ", NamedTextColor.DARK_PURPLE));
                 team.color(NamedTextColor.DARK_PURPLE);
-            } else if (name.equalsIgnoreCase(".AlberTogofound") || name.equalsIgnoreCase("AlberTogofound")) {
+            } else if (name.equalsIgnoreCase(".AlberTogotfound") || name.equalsIgnoreCase("AlberTogofound")) {
                 prefix = prefix.append(Component.text("[Albert!! the pizza lover] ", NamedTextColor.YELLOW));
                 team.color(NamedTextColor.YELLOW);
             } else if (online.isOp()) {
@@ -12772,6 +13492,23 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
+    private boolean shouldHideNametag(Player player) {
+        if (player == null || !player.isOnline()) return true;
+        if (player.getGameMode() == GameMode.SPECTATOR) return true;
+        if (player.hasPotionEffect(PotionEffectType.INVISIBILITY) || player.isInvisible()) return true;
+        return false;
+    }
+
+    private boolean hasAnyFloatingTags(Player player) {
+        if (player == null) return false;
+        UUID uuid = player.getUniqueId();
+        if (isRedToppat(uuid) || uuid.equals(BOREAS_UUID)) return true;
+        String teamNameLower = playerTeams.get(uuid);
+        if (teamNameLower != null && teams.containsKey(teamNameLower)) return true;
+        java.util.Set<String> activeTags = activeNametags.get(uuid);
+        return activeTags != null && !activeTags.isEmpty();
+    }
+
     private void updatePlayerFloatingTags(Player player) {
         UUID uuid = player.getUniqueId();
         
@@ -12783,6 +13520,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (td.isValid()) td.remove();
                 if (hidden != null) hidden.remove(td.getUniqueId());
             }
+        }
+
+        // Hide floating nametags if player is in spectator mode or invisible!
+        if (shouldHideNametag(player)) {
+            return;
         }
         
         // 2. Build list of all tag components to display
