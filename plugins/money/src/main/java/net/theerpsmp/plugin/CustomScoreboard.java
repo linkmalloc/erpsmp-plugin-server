@@ -6443,88 +6443,72 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (material == null || material.isAir()) return 0L;
 
         switch (material) {
-            // === 100,000,000 Tier (100M - Pinnacle Endgame / Server Trophies) ===
+            // === 100,000 Tier (100k - Pinnacle Endgame / Server Trophies) ===
             case ELYTRA:
             case DRAGON_EGG:
-                return 100000000L;
+                return 100000L;
 
-            // === 40,000,000 - 50,000,000 Tier (Trial Chamber & Ultra-Endgame Weaponry) ===
+            // === 40,000 - 50,000 Tier (Trial Chamber & Ultra-Endgame Weaponry) ===
             case MACE:
-                return 50000000L;
+                return 50000L;
             case HEAVY_CORE:
-                return 40000000L;
+                return 40000L;
 
-            // === 15,000,000 - 25,000,000 Tier (End & Wither Boss Relics) ===
+            // === 15,000 - 25,000 Tier (End & Wither Boss Relics) ===
             case DRAGON_HEAD:
-                return 25000000L;
+                return 25000L;
             case BEACON:
-                return 20000000L;
+                return 20000L;
             case NETHER_STAR:
-                return 15000000L;
+                return 15000L;
 
-            // === 10,800,000 Tier (Netherite Block = 9x Netherite Ingot) ===
+            // === 10,800 Tier (Netherite Block = 9x Netherite Ingot) ===
             case NETHERITE_BLOCK:
-                return 10800000L;
+                return 10800L;
 
-            // === 5,000,000 - 6,500,000 Tier (Oceanic & Netherite Armor) ===
+            // === 4,500 - 6,500 Tier (Oceanic & Netherite Armor / Weapons) ===
             case TRIDENT:
             case NETHERITE_CHESTPLATE:
-                return 6500000L;
+                return 6500L;
             case NETHERITE_LEGGINGS:
-                return 5500000L;
+                return 5500L;
             case CONDUIT:
-                return 5000000L;
-
-            // === 4,500,000 - 4,800,000 Tier (Netherite Tools & Weapons) ===
-            case NETHERITE_SWORD: // Benchmark: 4.8M
+                return 5000L;
+            case NETHERITE_SWORD:
             case NETHERITE_PICKAXE:
             case NETHERITE_AXE:
             case NETHERITE_HELMET:
-                return 4800000L;
+                return 4800L;
             case NETHERITE_BOOTS:
-                return 4500000L;
+                return 4500L;
 
-            // === 2,000,000 - 3,500,000 Tier (Netherite Tools, Heart of the Sea, Templates) ===
+            // === 2,000 - 3,500 Tier (Netherite Tools, Heart of the Sea, Templates) ===
             case HEART_OF_THE_SEA:
-                return 3500000L;
+                return 3500L;
             case NETHERITE_UPGRADE_SMITHING_TEMPLATE:
-                return 3000000L;
+                return 3000L;
             case NETHERITE_SHOVEL:
             case ENCHANTED_GOLDEN_APPLE:
             case OMINOUS_TRIAL_KEY:
-                return 2500000L;
+                return 2500L;
             case NETHERITE_HOE:
             case RECOVERY_COMPASS:
-                return 2000000L;
+                return 2000L;
 
-            // === 1,000,000 - 1,500,000 Tier (Wither Skull, Ingot, Ominous Bottle) ===
+            // === 1,000 - 1,500 Tier (Wither Skull, Ingot, Ominous Bottle, Totem, Ender Chest) ===
+            case TOTEM_OF_UNDYING: // Matched to /shop (1500 Erpies)
+                return 1500L;
             case WITHER_SKELETON_SKULL:
-                return 1500000L;
+                return 1500L;
             case NETHERITE_INGOT:
-                return 1200000L;
+                return 1200L;
+            case ENDER_CHEST: // Matched to /shop (1200 Erpies)
+                return 1200L;
             case OMINOUS_BOTTLE:
-                return 1000000L;
+                return 1000L;
 
-            // === 450,000 - 750,000 Tier (Bastion Gold, Diamond Blocks & Armor, Skulls) ===
-            case GILDED_BLACKSTONE:
-                return 750000L;
-            case DIAMOND_BLOCK:
-                return 585000L;
-            case DIAMOND_CHESTPLATE:
-                return 520000L;
-            case TRIAL_KEY:
-            case SKELETON_SKULL:
-            case WITHER_SKELETON_WALL_SKULL:
-            case ZOMBIE_HEAD:
-            case CREEPER_HEAD:
-            case PIGLIN_HEAD:
-            case PLAYER_HEAD:
-                return 500000L;
-            case DIAMOND_LEGGINGS:
-                return 450000L;
-
-            // === 200,000 - 350,000 Tier (Shulkers, Debris, Diamond Gear, Emerald Block) ===
-            case SHULKER_BOX:
+            // === 500 - 800 Tier (Shulkers, Anvils, Diamond Blocks/Armor, Skulls, Shop PvP items) ===
+            case SHULKER_BOX: // Matched to /shop (800 Erpies)
             case WHITE_SHULKER_BOX:
             case ORANGE_SHULKER_BOX:
             case MAGENTA_SHULKER_BOX:
@@ -6541,86 +6525,135 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case GREEN_SHULKER_BOX:
             case RED_SHULKER_BOX:
             case BLACK_SHULKER_BOX:
-                return 350000L;
+                return 800L;
+            case ANVIL:
+                return 775L;
+            case DIAMOND_BLOCK:
+                return 585L;
+            case DIAMOND_CHESTPLATE:
+                return 520L;
+            case CHIPPED_ANVIL:
+            case TRIAL_KEY:
+            case SKELETON_SKULL:
+            case WITHER_SKELETON_WALL_SKULL:
+            case ZOMBIE_HEAD:
+            case CREEPER_HEAD:
+            case PIGLIN_HEAD:
+            case PLAYER_HEAD:
+                return 500L;
+            case END_CRYSTAL: // Matched to /shop (500 Erpies)
+            case OBSIDIAN: // Matched to /shop (500 Erpies)
+            case GOLDEN_APPLE: // Matched to /shop (500 Erpies)
+            case RESPAWN_ANCHOR: // Matched to /shop (500 Erpies)
+                return 500L;
+            case DIAMOND_LEGGINGS:
+                return 450L;
+
+            // === 150 - 400 Tier (Shulker Shells, Diamond Gear, Gold Block, Iron Block, Debris) ===
+            case SHULKER_SHELL:
+                return 400L;
+            case GOLD_BLOCK:
+                return 360L;
+            case SPONGE:
+                return 350L;
             case DIAMOND_HELMET:
-                return 325000L;
+                return 325L;
+            case RAW_GOLD_BLOCK:
             case EMERALD_BLOCK:
-                return 315000L;
-            case NETHERITE_SCRAP:
+                return 315L;
+            case WET_SPONGE:
+                return 300L;
+            case DIAMOND_BOOTS:
+                return 260L;
             case ANCIENT_DEBRIS:
+            case NETHERITE_SCRAP:
             case BREEZE_ROD:
             case ECHO_SHARD:
-                return 250000L;
-            case DIAMOND_BOOTS:
-                return 260000L;
+            case DAMAGED_ANVIL:
+            case SADDLE:
+                return 250L;
+            case IRON_BLOCK:
+                return 225L;
+            case TNT_MINECART:
+                return 225L;
+            case NAME_TAG:
+            case CRYING_OBSIDIAN:
+                return 200L;
             case DIAMOND_PICKAXE:
             case DIAMOND_AXE:
-                return 195000L;
-
-            // === 50,000 - 150,000 Tier (Shulker Shells, Diamonds, Ench Tables) ===
-            case SHULKER_SHELL:
-                return 150000L;
+                return 195L;
+            case RAW_IRON_BLOCK:
+                return 180L;
+            case HOPPER:
+                return 155L;
+            case GHAST_TEAR:
+            case GILDED_BLACKSTONE:
+                return 150L;
             case ENCHANTING_TABLE:
-                return 145000L;
+                return 145L;
+            case FURNACE_MINECART:
+                return 135L;
             case DIAMOND_SWORD:
             case DIAMOND_HOE:
-                return 130000L;
+                return 130L;
+            case MINECART:
+                return 125L;
+            case GOLDEN_CARROT: // Matched to /shop (125 Erpies)
+                return 125L;
+            case SEA_LANTERN:
+            case ENDER_EYE:
+                return 120L;
+
+            // === 60 - 100 Tier (Diamonds, Cooked Beef, Glowstone, Ores, Wind Charge, Pearl) ===
+            case GLOWSTONE: // Matched to /shop (100 Erpies)
+            case COOKED_BEEF: // Matched to /shop (100 Erpies)
+            case TNT:
+            case HONEY_BLOCK:
             case NAUTILUS_SHELL:
-                return 100000L;
-            case DIAMOND_HORSE_ARMOR:
+            case LAVA_BUCKET:
+            case IRON_TRAPDOOR:
+                return 100L;
+            case COPPER_BLOCK:
+            case LAPIS_BLOCK:
+            case COAL_BLOCK:
+            case SLIME_BLOCK:
+            case NETHER_WART_BLOCK:
+            case BREWING_STAND:
+            case MILK_BUCKET:
+                return 90L;
             case DIAMOND_ORE:
             case DEEPSLATE_DIAMOND_ORE:
-                return 80000L;
+            case DIAMOND_HORSE_ARMOR:
+            case BLAZE_ROD:
+            case HONEYCOMB_BLOCK:
+            case WATER_BUCKET:
+            case RABBIT_FOOT:
+                return 80L;
+            case WIND_CHARGE: // Matched to /shop (75 Erpies)
+            case ENDER_PEARL: // Matched to /shop (75 Erpies)
+            case BUCKET:
+                return 75L;
+            case REDSTONE_BLOCK:
+                return 72L;
             case DIAMOND:
             case DIAMOND_SHOVEL:
-                return 65000L;
-            case BELL:
-            case EMERALD_ORE:
-            case DEEPSLATE_EMERALD_ORE:
-                return 50000L;
-
-            // === 25,000 - 45,000 Tier (Hoppers, Composters, Chests, Sponges, Emeralds) ===
-            case SPONGE:
-                return 45000L;
-            case HOPPER:
-                return 42500L;
-            case COMPOSTER: // Benchmark: 40K
-            case WET_SPONGE:
-                return 40000L;
-            case EMERALD:
-            case ANVIL:
-            case SCULK_SHRIEKER:
-                return 35000L;
+                return 65L;
+            case DARK_PRISMARINE:
+            case CROSSBOW:
             case BOOKSHELF:
             case CHISELED_BOOKSHELF:
-                return 32000L;
-            case GOLDEN_HORSE_ARMOR:
-                return 30000L;
-            case TRAPPED_CHEST:
-                return 29000L;
-            case CHEST:
-            case BARREL:
-                return 28000L;
-            case ENDER_CHEST:
-            case SCULK_CATALYST:
-            case CHIPPED_ANVIL:
-            case CALIBRATED_SCULK_SENSOR:
-                return 25000L;
+                return 60L;
 
-            // === 10,000 - 20,000 Tier (Fence Gates, Logs, Gold Blocks, Saddles, Boats) ===
-            case GOLD_BLOCK:
-                return 19800L;
-            case RESPAWN_ANCHOR:
-            case OAK_BOAT:
-            case SPRUCE_BOAT:
-            case BIRCH_BOAT:
-            case JUNGLE_BOAT:
-            case ACACIA_BOAT:
-            case DARK_OAK_BOAT:
-            case MANGROVE_BOAT:
-            case CHERRY_BOAT:
-            case BAMBOO_RAFT:
-                return 18000L;
+            // === 20 - 50 Tier (Shop Provisions, Ingots, Chests, Boats, Cooked Food) ===
+            case COOKED_PORKCHOP: // Matched to /shop (50 Erpies)
+            case CHORUS_FRUIT: // Matched to /shop (50 Erpies)
+            case EMERALD_ORE:
+            case DEEPSLATE_EMERALD_ORE:
+            case BELL:
+            case IRON_DOOR:
+            case SHEARS:
+            case PHANTOM_MEMBRANE:
+            case RABBIT_STEW:
             case OAK_CHEST_BOAT:
             case SPRUCE_CHEST_BOAT:
             case BIRCH_CHEST_BOAT:
@@ -6630,28 +6663,78 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case MANGROVE_CHEST_BOAT:
             case CHERRY_CHEST_BOAT:
             case BAMBOO_CHEST_RAFT:
-                return 46000L;
-            case SADDLE:
-            case SCULK_SENSOR:
-            case DAMAGED_ANVIL:
+                return 50L;
+            case QUARTZ_BLOCK:
+                return 48L;
+            case POWERED_RAIL:
+                return 45L;
+            case GOLD_INGOT:
+            case BLAZE_POWDER:
+            case PRISMARINE:
+            case COOKED_SALMON:
+            case COOKED_MUTTON:
+            case GOLDEN_HORSE_ARMOR:
+                return 40L;
+            case SHIELD:
+            case RAW_GOLD:
+            case EMERALD:
+            case COOKED_COD:
+            case COOKED_CHICKEN:
+            case COOKED_RABBIT:
+                return 35L;
+            case CHEST:
+            case BARREL:
+            case TRAPPED_CHEST:
+            case PUFFERFISH:
+            case MUSHROOM_STEW:
+            case BONE_BLOCK:
+            case LEAD:
+            case DETECTOR_RAIL:
+            case ACTIVATOR_RAIL:
+                return 30L;
+            case DRIED_KELP_BLOCK:
+                return 27L;
+            case BREAD: // Matched to /shop (25 Erpies)
+            case IRON_INGOT:
+            case GLOWSTONE_DUST:
+            case HONEY_BOTTLE:
+            case PRISMARINE_CRYSTALS:
+            case FIREWORK_ROCKET:
+            case BOW:
+            case SALMON:
+            case MUTTON:
+            case BEETROOT_SOUP:
+            case BAKED_POTATO:
+            case JACK_O_LANTERN:
+            case BRICKS:
+            case FERMENTED_SPIDER_EYE:
             case IRON_HORSE_ARMOR:
-                return 15000L;
+            case SCULK_SHRIEKER:
+            case SCULK_CATALYST:
+            case SCULK_SENSOR:
+            case CALIBRATED_SCULK_SENSOR:
+                return 25L;
+            case RAW_IRON:
+            case HONEYCOMB:
+            case MAGMA_BLOCK:
+            case TROPICAL_FISH:
+            case COD:
+            case CHICKEN:
+            case RABBIT:
+            case CLAY:
+            case SANDSTONE:
+            case OAK_BOAT:
+            case SPRUCE_BOAT:
+            case BIRCH_BOAT:
+            case JUNGLE_BOAT:
+            case ACACIA_BOAT:
+            case DARK_OAK_BOAT:
+            case MANGROVE_BOAT:
+            case CHERRY_BOAT:
+            case BAMBOO_RAFT:
+                return 20L;
 
-            // Benchmark: SPRUCE_FENCE_GATE $15K (and all other fence gates)
-            case SPRUCE_FENCE_GATE:
-            case OAK_FENCE_GATE:
-            case BIRCH_FENCE_GATE:
-            case JUNGLE_FENCE_GATE:
-            case ACACIA_FENCE_GATE:
-            case DARK_OAK_FENCE_GATE:
-            case MANGROVE_FENCE_GATE:
-            case CHERRY_FENCE_GATE:
-            case BAMBOO_FENCE_GATE:
-            case CRIMSON_FENCE_GATE:
-            case WARPED_FENCE_GATE:
-                return 15000L;
-
-            // Wood logs / stems
+            // === 12 - 16 Tier (Wood Logs, Crafting Table, Composter, Leather, Farm Crops) ===
             case OAK_LOG:
             case SPRUCE_LOG:
             case BIRCH_LOG:
@@ -6685,41 +6768,75 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case CRIMSON_HYPHAE:
             case WARPED_HYPHAE:
             case CRAFTING_TABLE:
-                return 14000L;
+                return 16L;
 
-            case NAME_TAG:
-                return 12000L;
+            case COMPOSTER: // Balanced! (was 40k, now 15 Erpies)
+            case PUMPKIN:
+            case CARVED_PUMPKIN:
+            case MELON:
+            case APPLE:
+            case LEATHER:
+            case CANDLE:
+            case GUNPOWDER:
+            case AMETHYST_SHARD:
+            case PRISMARINE_SHARD:
+            case RABBIT_HIDE:
+            case TERRACOTTA:
+                return 15L;
 
-            // Wood trapdoors
-            case OAK_TRAPDOOR:
-            case SPRUCE_TRAPDOOR:
-            case BIRCH_TRAPDOOR:
-            case JUNGLE_TRAPDOOR:
-            case ACACIA_TRAPDOOR:
-            case DARK_OAK_TRAPDOOR:
-            case MANGROVE_TRAPDOOR:
-            case CHERRY_TRAPDOOR:
-            case BAMBOO_TRAPDOOR:
-            case CRIMSON_TRAPDOOR:
-            case WARPED_TRAPDOOR:
-            case IRON_TRAPDOOR:
-                return 10000L;
+            case QUARTZ:
+                return 12L;
 
-            // === 5,000 - 9,900 Tier (Leather, Minecart, Iron Block, Slime Block, Ghast Tear) ===
-            case IRON_BLOCK:
-                return 9900L;
-            case GHAST_TEAR:
-                return 8500L;
-            case TNT_MINECART:
-                return 8000L;
-            case SLIME_BLOCK:
-                return 7650L;
-            case CRYING_OBSIDIAN:
-            case END_CRYSTAL:
-                return 7500L;
-            case LEATHER: // Benchmark: 7K
-                return 7000L;
-            // Wood doors
+            // === 6 - 10 Tier (Fence Gates, Trapdoors, Doors, Minerals, Common Drops) ===
+            case SPRUCE_FENCE_GATE:
+            case OAK_FENCE_GATE:
+            case BIRCH_FENCE_GATE:
+            case JUNGLE_FENCE_GATE:
+            case ACACIA_FENCE_GATE:
+            case DARK_OAK_FENCE_GATE:
+            case MANGROVE_FENCE_GATE:
+            case CHERRY_FENCE_GATE:
+            case BAMBOO_FENCE_GATE:
+            case CRIMSON_FENCE_GATE:
+            case WARPED_FENCE_GATE:
+                return 10L;
+
+            case LAPIS_LAZULI:
+            case COPPER_INGOT:
+            case COAL:
+            case SLIME_BALL:
+            case RAIL:
+            case NETHER_WART:
+            case POTATO:
+            case CARROT:
+            case WHEAT:
+            case SUGAR_CANE:
+            case SUGAR:
+            case PAPER:
+            case ICE:
+            case PURPUR_BLOCK:
+                return 10L;
+
+            // Wool (all colors: 10 Erpies)
+            case WHITE_WOOL:
+            case ORANGE_WOOL:
+            case MAGENTA_WOOL:
+            case LIGHT_BLUE_WOOL:
+            case YELLOW_WOOL:
+            case LIME_WOOL:
+            case PINK_WOOL:
+            case GRAY_WOOL:
+            case LIGHT_GRAY_WOOL:
+            case CYAN_WOOL:
+            case PURPLE_WOOL:
+            case BLUE_WOOL:
+            case BROWN_WOOL:
+            case GREEN_WOOL:
+            case RED_WOOL:
+            case BLACK_WOOL:
+                return 10L;
+
+            // Wood doors (8 Erpies)
             case OAK_DOOR:
             case SPRUCE_DOOR:
             case BIRCH_DOOR:
@@ -6731,17 +6848,83 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case BAMBOO_DOOR:
             case CRIMSON_DOOR:
             case WARPED_DOOR:
-            case IRON_DOOR:
-                return 7000L;
+                return 8L;
 
-            case FURNACE_MINECART:
-                return 6500L;
-            case SHIELD:
-                return 6000L;
-            case MINECART: // Benchmark: 5.5K
-                return 5500L;
+            case REDSTONE:
+            case RAW_COPPER:
+            case GLASS:
+            case CACTUS:
+            case COCOA_BEANS:
+            case BROWN_MUSHROOM:
+            case RED_MUSHROOM:
+            case SPIDER_EYE:
+            case BEETROOT:
+                return 8L;
 
-            // Wood fences & stairs
+            // Wood trapdoors (6 Erpies)
+            case OAK_TRAPDOOR:
+            case SPRUCE_TRAPDOOR:
+            case BIRCH_TRAPDOOR:
+            case JUNGLE_TRAPDOOR:
+            case ACACIA_TRAPDOOR:
+            case DARK_OAK_TRAPDOOR:
+            case MANGROVE_TRAPDOOR:
+            case CHERRY_TRAPDOOR:
+            case BAMBOO_TRAPDOOR:
+            case CRIMSON_TRAPDOOR:
+            case WARPED_TRAPDOOR:
+                return 6L;
+
+            // Carpets & Brick item (6 Erpies)
+            case WHITE_CARPET:
+            case ORANGE_CARPET:
+            case MAGENTA_CARPET:
+            case LIGHT_BLUE_CARPET:
+            case YELLOW_CARPET:
+            case LIME_CARPET:
+            case PINK_CARPET:
+            case GRAY_CARPET:
+            case LIGHT_GRAY_CARPET:
+            case CYAN_CARPET:
+            case PURPLE_CARPET:
+            case BLUE_CARPET:
+            case BROWN_CARPET:
+            case GREEN_CARPET:
+            case RED_CARPET:
+            case BLACK_CARPET:
+            case BRICK:
+                return 6L;
+
+            // === 4 - 5 Tier (Planks, Fences, Stairs, Sand, Clay, Common Blocks) ===
+            case SAND:
+            case RED_SAND:
+            case CLAY_BALL:
+            case SOUL_SAND:
+            case SOUL_SOIL:
+            case MYCELIUM:
+            case END_STONE:
+            case END_STONE_BRICKS:
+            case STRING:
+            case FEATHER:
+            case EGG:
+            case GLOW_BERRIES:
+                return 5L;
+
+            // Wood Planks - BALANCED! (was 3500! Now 4 Erpies each, exactly 1/4 of 16 Erpy Log)
+            case OAK_PLANKS:
+            case SPRUCE_PLANKS:
+            case BIRCH_PLANKS:
+            case JUNGLE_PLANKS:
+            case ACACIA_PLANKS:
+            case DARK_OAK_PLANKS:
+            case MANGROVE_PLANKS:
+            case CHERRY_PLANKS:
+            case BAMBOO_PLANKS:
+            case CRIMSON_PLANKS:
+            case WARPED_PLANKS:
+                return 4L;
+
+            // Wood fences & stairs (4 Erpies)
             case OAK_FENCE:
             case SPRUCE_FENCE:
             case BIRCH_FENCE:
@@ -6765,70 +6948,28 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case BAMBOO_STAIRS:
             case CRIMSON_STAIRS:
             case WARPED_STAIRS:
-                return 5000L;
+                return 4L;
 
-            // === 2,500 - 4,500 Tier (TNT, Totem, Wind Charge, Obsidian, Pearls, Planks) ===
-            case MAGMA_CREAM:
-            case RABBIT_FOOT:
-            case CROSSBOW:
-                return 4500L;
-            case REDSTONE_BLOCK:
-                return 4050L;
-            case BREWING_STAND:
-                return 4000L;
-            case GOLDEN_APPLE:
-            case PHANTOM_MEMBRANE:
-            case ENDER_EYE:
-            case BUCKET:
-            case WATER_BUCKET:
-            case LAVA_BUCKET:
-            case MILK_BUCKET:
-                return 3500L;
+            case GOLD_NUGGET:
+            case FLINT:
+            case BASALT:
+            case POLISHED_BASALT:
+            case BLACKSTONE:
+            case SNOW_BLOCK:
+                return 4L;
 
-            // Wood planks
-            case OAK_PLANKS:
-            case SPRUCE_PLANKS:
-            case BIRCH_PLANKS:
-            case JUNGLE_PLANKS:
-            case ACACIA_PLANKS:
-            case DARK_OAK_PLANKS:
-            case MANGROVE_PLANKS:
-            case CHERRY_PLANKS:
-            case BAMBOO_PLANKS:
-            case CRIMSON_PLANKS:
-            case WARPED_PLANKS:
-                return 3500L;
+            // === 1 - 3 Tier (Slabs, Cobblestone, Stone, Dirt, Sticks, Seeds, Snowball) ===
+            case BONE_MEAL:
+            case BAMBOO:
+            case DRIED_KELP:
+            case SWEET_BERRIES:
+            case COBBLED_DEEPSLATE:
+            case DEEPSLATE:
+            case MOSSY_COBBLESTONE:
+            case SMOOTH_STONE:
+                return 3L;
 
-            case LAPIS_BLOCK:
-                return 3150L;
-
-            // Benchmarks: TNT, TOTEM, WIND_CHARGE = 2,500
-            case TNT:
-            case TOTEM_OF_UNDYING:
-            case WIND_CHARGE:
-            case ENDER_PEARL:
-            case OBSIDIAN:
-            case SEA_LANTERN:
-            case POWERED_RAIL:
-            case LEAD:
-                return 2500L;
-
-            // === 1,000 - 2,400 Tier (Ingots, Blaze, Honey, Fireworks, Slabs) ===
-            case COPPER_BLOCK:
-                return 2250L;
-            case GOLD_INGOT:
-            case HONEY_BLOCK:
-                return 2200L;
-            case DARK_PRISMARINE:
-                return 2000L;
-            case BLAZE_ROD:
-            case HONEYCOMB_BLOCK:
-            case RAW_GOLD:
-                return 1800L;
-            case RAW_GOLD_BLOCK:
-                return 16200L;
-
-            // Wood slabs
+            // Wood slabs (2 Erpies)
             case OAK_SLAB:
             case SPRUCE_SLAB:
             case BIRCH_SLAB:
@@ -6840,334 +6981,145 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             case BAMBOO_SLAB:
             case CRIMSON_SLAB:
             case WARPED_SLAB:
-                return 1750L;
+                return 2L;
 
-            case NETHER_WART_BLOCK:
-                return 1600L;
-            case QUARTZ_BLOCK:
-                return 1520L;
-            case RABBIT_HIDE:
-            case BOW:
-                return 1500L;
-            case COAL_BLOCK:
-                return 1350L;
-            case FIREWORK_ROCKET:
-                return 1250L;
-            case DETECTOR_RAIL:
-            case ACTIVATOR_RAIL:
-                return 1200L;
-            case IRON_INGOT:
-                return 1100L;
-            case PRISMARINE:
-                return 1000L;
-
-            // === 400 - 950 Tier (Raw Iron, Blaze Powder, Slime, Wool, Bone Block, Dusts) ===
-            case RAW_IRON:
-            case BLAZE_POWDER:
-                return 900L;
-            case RAW_IRON_BLOCK:
-                return 8100L;
-            case SLIME_BALL:
-                return 850L;
-
-            // Wool
-            case WHITE_WOOL:
-            case ORANGE_WOOL:
-            case MAGENTA_WOOL:
-            case LIGHT_BLUE_WOOL:
-            case YELLOW_WOOL:
-            case LIME_WOOL:
-            case PINK_WOOL:
-            case GRAY_WOOL:
-            case LIGHT_GRAY_WOOL:
-            case CYAN_WOOL:
-            case PURPLE_WOOL:
-            case BLUE_WOOL:
-            case BROWN_WOOL:
-            case GREEN_WOOL:
-            case RED_WOOL:
-            case BLACK_WOOL:
-                return 800L;
-
-            case BONE_BLOCK: // Benchmark: 625
-                return 625L;
-            case HONEY_BOTTLE:
-            case CANDLE:
-                return 600L;
-            case DRIED_KELP_BLOCK:
-                return 540L;
-            case PUFFERFISH:
-            case RABBIT_STEW:
-            case PRISMARINE_CRYSTALS:
-                return 500L;
-            case GLOWSTONE:
-                return 480L;
-            case REDSTONE:
-            case GUNPOWDER:
-            case GOLDEN_CARROT:
-            case AMETHYST_SHARD:
-            case HONEYCOMB:
-            case JACK_O_LANTERN:
-                return 450L;
-
-            // === 100 - 380 Tier (Bone, Glass, Quartz, Lapis, Sand, Food, Coal, Copper) ===
-            case QUARTZ:
-                return 380L;
-            case LAPIS_LAZULI:
-                return 350L;
-            case FERMENTED_SPIDER_EYE:
-                return 320L;
-            case MUSHROOM_STEW:
-                return 300L;
-            case PRISMARINE_SHARD:
-            case COPPER_INGOT:
-            case RAIL:
-            case BEETROOT_SOUP:
-                return 250L;
-            case GOLD_NUGGET:
-                return 240L;
-            case BONE: // Derived from bone block: 208
-                return 208L;
-            case CARVED_PUMPKIN:
-            case RAW_COPPER:
-            case TROPICAL_FISH:
-                return 200L;
-            case GLASS:
-            case COOKED_BEEF:
-            case NETHER_WART:
-                return 180L;
-            case COOKED_PORKCHOP:
-            case COOKED_RABBIT:
-                return 160L;
-            case BRICKS:
-                return 160L;
-            case TERRACOTTA:
-            case COAL:
-            case CHORUS_FRUIT:
-            case PUMPKIN:
-            case MAGMA_BLOCK:
-                return 150L;
-            case SAND: // Benchmark: 143 (142.86)
-            case RED_SAND:
-                return 143L;
-            case COOKED_MUTTON:
-                return 140L;
-            case MELON:
-                return 135L;
-            case COOKED_CHICKEN:
-            case COOKED_SALMON:
             case IRON_NUGGET:
-            case APPLE:
-            case SUGAR_CANE:
-            case SUGAR:
-            case PAPER:
-            case GLOWSTONE_DUST:
-            case PURPUR_BLOCK:
-                return 120L;
-            case COOKED_COD:
-            case CLAY:
-                return 100L;
-
-            // === 25 - 90 Tier (Basic Drops, Kelp, Crops, Cobbled Deepslate, Bone Meal) ===
-            case BEEF:
-            case COCOA_BEANS:
-                return 90L;
-            case SPIDER_EYE:
-                return 85L;
-            case BROWN_MUSHROOM:
-            case RED_MUSHROOM:
-            case SOUL_SAND:
-            case SOUL_SOIL:
-            case CACTUS:
-            case PORKCHOP:
-            case RABBIT:
-            case SCULK:
-                return 80L;
-            case COBBLED_DEEPSLATE:
-            case DEEPSLATE:
-                return 75L;
-            case MUTTON:
-                return 70L;
-            case BONE_MEAL: // Derived from bone block: 69
-                return 69L;
-            case BAKED_POTATO:
-                return 65L;
-            case CHICKEN:
-            case SALMON:
-            case WHEAT:
-            case DRIED_KELP:
-                return 60L;
-            case COD:
-                return 50L;
-            case CARROT:
-            case POTATO:
-            case STRING:
-                return 45L;
-            case END_STONE:
-            case END_STONE_BRICKS:
-            case BAMBOO:
-            case BEETROOT:
-            case BRICK:
-                return 40L;
-            case KELP:
-            case BLACKSTONE:
-            case GLOW_BERRIES:
-                return 35L;
-            case EGG:
-                return 30L;
-            case FEATHER:
-            case SWEET_BERRIES:
-            case CLAY_BALL:
-            case ICE:
-                return 25L;
-
-            // === 1 - 20 Tier (Stones, Dirt, Sticks, Seeds, Snowball) ===
-            case BASALT:
-            case POLISHED_BASALT:
-                return 20L;
-            case FLINT:
-                return 18L;
-            case STICK:
             case MELON_SLICE:
             case POISONOUS_POTATO:
-            case MYCELIUM:
-                return 15L;
             case ROTTEN_FLESH:
-            case SMOOTH_STONE:
-                return 12L;
             case STONE:
             case STONE_BRICKS:
             case ANDESITE:
             case DIORITE:
             case GRANITE:
             case TUFF:
-                return 8L;
             case GRAVEL:
-            case PODZOL:
-                return 6L;
-            case SNOW_BLOCK:
-            case GRASS_BLOCK:
-                return 5L;
-            case COBBLESTONE:
-            case MOSSY_COBBLESTONE:
             case DIRT_PATH:
-                return 4L;
-            case DIRT:
-            case COARSE_DIRT:
             case ROOTED_DIRT:
             case MUD:
-                return 3L;
+            case GRASS_BLOCK:
+            case PODZOL:
+            case KELP:
+            case COBBLESTONE:
+                return 2L;
+
+            case STICK:
+            case SNOWBALL:
+            case DIRT:
+            case COARSE_DIRT:
             case NETHERRACK:
             case WHEAT_SEEDS:
             case BEETROOT_SEEDS:
             case PUMPKIN_SEEDS:
             case MELON_SEEDS:
-                return 2L;
-            case SNOWBALL:
                 return 1L;
         }
 
         // === Fallback checks by name pattern for unlisted or modded items ===
         String name = material.name();
         if (name.equals("ELYTRA") || name.equals("DRAGON_EGG")) {
-            return 100000000L;
+            return 100000L;
         } else if (name.contains("MACE") || name.contains("HEAVY_CORE")) {
-            return 40000000L;
-        } else if (name.contains("NETHERITE")) {
-            if (name.contains("BLOCK")) return 10800000L;
-            if (name.contains("CHESTPLATE")) return 6500000L;
-            if (name.contains("LEGGINGS")) return 5500000L;
-            if (name.contains("HELMET") || name.contains("PICKAXE") || name.contains("AXE") || name.contains("SWORD")) return 4800000L;
-            if (name.contains("BOOTS")) return 4500000L;
-            if (name.contains("SHOVEL")) return 2500000L;
-            if (name.contains("HOE")) return 2000000L;
-            if (name.contains("INGOT")) return 1200000L;
-            if (name.contains("SCRAP")) return 250000L;
-            return 2500000L;
-        } else if (name.contains("DIAMOND")) {
-            if (name.contains("BLOCK")) return 585000L;
-            if (name.contains("CHESTPLATE")) return 520000L;
-            if (name.contains("LEGGINGS")) return 450000L;
-            if (name.contains("HELMET")) return 325000L;
-            if (name.contains("BOOTS")) return 260000L;
-            if (name.contains("PICKAXE") || name.contains("AXE")) return 195000L;
-            if (name.contains("SWORD") || name.contains("HOE")) return 130000L;
-            if (name.contains("SHOVEL")) return 65000L;
-            if (name.contains("ORE")) return 80000L;
-            return 65000L;
-        } else if (name.contains("EMERALD")) {
-            if (name.contains("BLOCK")) return 315000L;
-            if (name.contains("ORE")) return 50000L;
-            return 35000L;
-        } else if (name.contains("SHULKER")) {
-            if (name.contains("BOX")) return 350000L;
-            return 150000L;
-        } else if (name.contains("GOLD")) {
-            if (name.contains("BLOCK")) return 19800L;
-            if (name.contains("APPLE")) return 3500L;
-            if (name.contains("CARROT")) return 450L;
-            if (name.contains("NUGGET")) return 240L;
-            return 2200L;
-        } else if (name.contains("IRON")) {
-            if (name.contains("BLOCK")) return 9900L;
-            if (name.contains("NUGGET")) return 120L;
-            return 1100L;
-        } else if (name.contains("COPPER")) {
-            if (name.contains("BLOCK")) return 2250L;
-            return 250L;
-        } else if (name.contains("REDSTONE")) {
-            if (name.contains("BLOCK")) return 4050L;
-            return 450L;
-        } else if (name.contains("LAPIS")) {
-            if (name.contains("BLOCK")) return 3150L;
-            return 350L;
-        } else if (name.contains("QUARTZ")) {
-            if (name.contains("BLOCK")) return 1520L;
-            return 380L;
-        } else if (name.contains("COAL")) {
-            if (name.contains("BLOCK")) return 1350L;
-            return 150L;
-        } else if (name.contains("FENCE_GATE")) {
-            return 15000L;
-        } else if (name.contains("COMPOSTER")) {
             return 40000L;
-        } else if (name.contains("MINECART")) {
-            return 5500L;
-        } else if (name.contains("BOAT") || name.contains("RAFT")) {
-            return 18000L;
-        } else if (name.contains("DOOR")) {
-            return 7000L;
-        } else if (name.contains("TRAPDOOR")) {
-            return 10000L;
-        } else if (name.contains("FENCE")) {
-            return 5000L;
-        } else if (name.contains("STAIRS")) {
-            return 5000L;
-        } else if (name.contains("SLAB")) {
-            return 1750L;
-        } else if (name.contains("PLANKS")) {
-            return 3500L;
-        } else if (name.contains("LOG") || name.contains("WOOD") || name.contains("STEM") || name.contains("HYPHAE")) {
-            return 14000L;
-        } else if (name.contains("LEAVES")) {
+        } else if (name.contains("NETHERITE")) {
+            if (name.contains("BLOCK")) return 10800L;
+            if (name.contains("CHESTPLATE")) return 6500L;
+            if (name.contains("LEGGINGS")) return 5500L;
+            if (name.contains("HELMET") || name.contains("PICKAXE") || name.contains("AXE") || name.contains("SWORD")) return 4800L;
+            if (name.contains("BOOTS")) return 4500L;
+            if (name.contains("SHOVEL")) return 2500L;
+            if (name.contains("HOE")) return 2000L;
+            if (name.contains("INGOT")) return 1200L;
+            if (name.contains("SCRAP")) return 250L;
+            return 2500L;
+        } else if (name.contains("DIAMOND")) {
+            if (name.contains("BLOCK")) return 585L;
+            if (name.contains("CHESTPLATE")) return 520L;
+            if (name.contains("LEGGINGS")) return 450L;
+            if (name.contains("HELMET")) return 325L;
+            if (name.contains("BOOTS")) return 260L;
+            if (name.contains("PICKAXE") || name.contains("AXE")) return 195L;
+            if (name.contains("SWORD") || name.contains("HOE")) return 130L;
+            if (name.contains("SHOVEL")) return 65L;
+            if (name.contains("ORE")) return 80L;
+            return 65L;
+        } else if (name.contains("EMERALD")) {
+            if (name.contains("BLOCK")) return 315L;
+            if (name.contains("ORE")) return 50L;
+            return 35L;
+        } else if (name.contains("SHULKER")) {
+            if (name.contains("BOX")) return 800L;
+            return 400L;
+        } else if (name.contains("TOTEM")) {
+            return 1500L;
+        } else if (name.contains("GOLD")) {
+            if (name.contains("BLOCK")) return 360L;
+            if (name.contains("APPLE")) return 500L;
+            if (name.contains("CARROT")) return 125L;
+            if (name.contains("NUGGET")) return 4L;
+            return 40L;
+        } else if (name.contains("IRON")) {
+            if (name.contains("BLOCK")) return 225L;
+            if (name.contains("NUGGET")) return 2L;
+            return 25L;
+        } else if (name.contains("COPPER")) {
+            if (name.contains("BLOCK")) return 90L;
             return 10L;
-        } else if (name.contains("SAPLING")) {
-            return 50L;
-        } else if (name.contains("WOOL") || name.contains("CARPET")) {
-            return 800L;
-        } else if (name.contains("SANDSTONE")) {
-            return 572L;
-        } else if (name.contains("SAND")) {
-            return 143L;
-        } else if (name.contains("DEEPSLATE")) {
-            return 75L;
-        } else if (name.contains("STONE") || name.contains("COBBLE")) {
+        } else if (name.contains("REDSTONE")) {
+            if (name.contains("BLOCK")) return 72L;
             return 8L;
-        } else if (name.contains("DIRT")) {
+        } else if (name.contains("LAPIS")) {
+            if (name.contains("BLOCK")) return 90L;
+            return 10L;
+        } else if (name.contains("QUARTZ")) {
+            if (name.contains("BLOCK")) return 48L;
+            return 12L;
+        } else if (name.contains("COAL")) {
+            if (name.contains("BLOCK")) return 90L;
+            return 10L;
+        } else if (name.contains("FENCE_GATE")) {
+            return 10L;
+        } else if (name.contains("COMPOSTER")) {
+            return 15L;
+        } else if (name.contains("MINECART")) {
+            return 125L;
+        } else if (name.contains("BOAT") || name.contains("RAFT")) {
+            return 20L;
+        } else if (name.contains("DOOR")) {
+            return 8L;
+        } else if (name.contains("TRAPDOOR")) {
+            return 6L;
+        } else if (name.contains("FENCE")) {
+            return 4L;
+        } else if (name.contains("STAIRS")) {
+            return 4L;
+        } else if (name.contains("SLAB")) {
+            return 2L;
+        } else if (name.contains("PLANKS")) {
+            return 4L;
+        } else if (name.contains("LOG") || name.contains("WOOD") || name.contains("STEM") || name.contains("HYPHAE")) {
+            return 16L;
+        } else if (name.contains("LEAVES")) {
+            return 1L;
+        } else if (name.contains("SAPLING")) {
+            return 2L;
+        } else if (name.contains("WOOL")) {
+            return 10L;
+        } else if (name.contains("CARPET")) {
+            return 6L;
+        } else if (name.contains("SANDSTONE")) {
+            return 20L;
+        } else if (name.contains("SAND")) {
+            return 5L;
+        } else if (name.contains("DEEPSLATE")) {
             return 3L;
+        } else if (name.contains("STONE") || name.contains("COBBLE")) {
+            return 2L;
+        } else if (name.contains("DIRT")) {
+            return 1L;
         }
 
-        return 5L;
+        return 1L;
     }
 
     // --- Nametag System ---
