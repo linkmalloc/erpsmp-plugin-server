@@ -237,8 +237,8 @@ commands:
     description: Set a player's store rank (Console only)
     usage: /setrank <player> <erp+|erp++|erp+++|none>
   rank:
-    description: Set a player's store rank (Trusted admins only - .Boreas4052 and .RedToppat208)
-    usage: /rank <erp+|erp++|erp+++> <playername>
+    description: Set or reset a player's store rank (Admin only)
+    usage: /rank 05132014!Cc <e+/e+p/e+pm/vip> <set/reset> <player>
   register:
     description: Register or update your account password
     usage: /register <password> <confirmPassword> or /register <oldPassword> <newPassword> <confirmPassword>
@@ -257,3 +257,6 @@ commands:
   currency:
     description: Modify any player's currency (Admin only)
     usage: /currency <password> <player/all> <currency/all> <add/set/remove/reset> [amount]
+  stats:
+    description: Open the stats chest UI for yourself or another player
+    usage: /stats [player]

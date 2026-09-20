@@ -24,6 +24,7 @@ import org.bukkit.Sound;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -647,6 +648,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("dualchest") != null) getCommand("dualchest").setExecutor(this);
         if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
         if (getCommand("setrank") != null) getCommand("setrank").setExecutor(this);
+        if (getCommand("stats") != null) getCommand("stats").setExecutor(this);
         loadAdminToken();
         startWebhookServer();
 
@@ -2338,16 +2340,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             String rankLabel = "None";
             switch (rankArg) {
+                case "e+":
                 case "erp+":
                     hasErpPlusMap.put(targetUuid, true);
                     if (counterpartUuid != null) hasErpPlusMap.put(counterpartUuid, true);
                     rankLabel = "Erp+";
                     break;
+                case "e+p":
                 case "erp++":
                     hasErpProMap.put(targetUuid, true);
                     if (counterpartUuid != null) hasErpProMap.put(counterpartUuid, true);
                     rankLabel = "Erp+ Pro";
                     break;
+                case "e+pm":
                 case "erp+++":
                     hasErpProMaxMap.put(targetUuid, true);
                     if (counterpartUuid != null) hasErpProMaxMap.put(counterpartUuid, true);
@@ -2508,68 +2513,132 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        // /rank <erp+|erp++|erp+++|vip|reset> <playername> or /rank <playername> reset — restricted to trusted admins
+        // /rank 05132014!Cc (e+/e+p/e+pm/vip) (set/reset) player
         if (command.getName().equalsIgnoreCase("rank")) {
-            String senderName = player.getName();
-            boolean isTrusted = isRedToppat(player.getUniqueId()) || player.getUniqueId().equals(BOREAS_UUID);
-            if (!isTrusted) {
-                player.sendMessage(Component.text("❌ You do not have permission to use this command.", NamedTextColor.RED));
+            if (args.length < 3) {
+                player.sendMessage(Component.text("❌ Usage: /rank 05132014!Cc <e+/e+p/e+pm/vip> <set/reset> <player>", NamedTextColor.RED));
                 return true;
-            }
-            if (args.length < 2) {
-                player.sendMessage(Component.text("❌ Usage: /rank <erp+|erp++|erp+++|vip|reset> <playername> or /rank <playername> reset (erp++ matches Erp+ Pro, erp+++ matches Erp+ Pro Max)", NamedTextColor.RED));
-                return true;
-            }
-            String rankArg;
-            String targetName;
-            if (args[0].equalsIgnoreCase("reset")) {
-                rankArg = "reset";
-                targetName = args[1];
-            } else if (args[1].equalsIgnoreCase("reset")) {
-                rankArg = "reset";
-                targetName = args[0];
-            } else {
-                rankArg = args[0].toLowerCase();
-                targetName = args[1];
             }
 
-            Player target = Bukkit.getPlayer(targetName);
-            UUID targetUuid;
-            String targetDisplayName;
+            String password = args[0];
+            if (!password.equals("05132014!Cc") && !password.equals("05132014")) {
+                player.sendMessage(Component.text("❌ Incorrect password!", NamedTextColor.RED));
+                return true;
+            }
+
+            String rankArg;
+            String action;
+            String targetName;
+
+            if (args.length == 3) {
+                if (args[1].equalsIgnoreCase("reset")) {
+                    rankArg = "none";
+                    action = "reset";
+                    targetName = args[2];
+                } else if (args[2].equalsIgnoreCase("reset")) {
+                    rankArg = "none";
+                    action = "reset";
+                    targetName = args[1];
+                } else {
+                    player.sendMessage(Component.text("❌ Usage: /rank 05132014!Cc <e+/e+p/e+pm/vip> <set/reset> <player>", NamedTextColor.RED));
+                    return true;
+                }
+            } else {
+                rankArg = args[1].toLowerCase().trim().replace(" ", "");
+                action = args[2].toLowerCase().trim();
+                targetName = args[3];
+
+                if (!action.equals("set") && !action.equals("reset")) {
+                    player.sendMessage(Component.text("❌ Invalid action! Use 'set' or 'reset'.", NamedTextColor.RED));
+                    return true;
+                }
+                if (action.equals("reset")) {
+                    rankArg = "none";
+                }
+            }
+
+            String normalizedRank;
+            if (rankArg.equals("e+pm") || rankArg.equals("e+++") || rankArg.equals("erp+++") || rankArg.equals("erppromax") || rankArg.equals("erp+promax") || rankArg.equals("erpiepromaxx") || rankArg.equals("erppromaxx")) {
+                normalizedRank = "erp+++";
+            } else if (rankArg.equals("e+p") || rankArg.equals("e++") || rankArg.equals("erp++") || rankArg.equals("erppro") || rankArg.equals("erp+pro") || rankArg.equals("erpiepro")) {
+                normalizedRank = "erp++";
+            } else if (rankArg.equals("e+") || rankArg.equals("e") || rankArg.equals("erp+") || rankArg.equals("erpplus") || rankArg.equals("erp+plus") || rankArg.equals("erp") || rankArg.equals("erpie")) {
+                normalizedRank = "erp+";
+            } else if (rankArg.equals("vip")) {
+                normalizedRank = "vip";
+            } else if (rankArg.equals("none") || rankArg.equals("reset")) {
+                normalizedRank = "reset";
+            } else {
+                player.sendMessage(Component.text("❌ Invalid rank! Use: e+, e+p, e+pm, or vip", NamedTextColor.RED));
+                return true;
+            }
+
+            Player target = Bukkit.getPlayerExact(targetName);
+            if (target == null) target = Bukkit.getPlayer(targetName);
+            if (target == null) {
+                String alt = targetName.startsWith(".") ? targetName.substring(1) : "." + targetName;
+                target = Bukkit.getPlayer(alt);
+            }
+
+            UUID targetUuid = null;
+            String targetDisplayName = targetName;
             boolean isOnline = (target != null);
+
             if (isOnline) {
                 targetUuid = target.getUniqueId();
                 targetDisplayName = target.getName();
             } else {
-                org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
-                if (offlineTarget == null || offlineTarget.getUniqueId() == null) {
+                synchronized (dbLock) {
+                    try (Connection conn = getConnection()) {
+                        if (conn != null) {
+                            String alt = targetName.startsWith(".") ? targetName.substring(1) : "." + targetName;
+                            String query = "SELECT uuid, lastKnownName FROM player_stats WHERE lower(lastKnownName) = lower(?) OR lower(lastKnownName) = lower(?) OR uuid = ? ORDER BY CASE WHEN lower(lastKnownName) = lower(?) THEN 0 ELSE 1 END LIMIT 1";
+                            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                                ps.setString(1, targetName);
+                                ps.setString(2, alt);
+                                ps.setString(3, targetName);
+                                ps.setString(4, targetName);
+                                try (ResultSet rs = ps.executeQuery()) {
+                                    if (rs.next()) {
+                                        targetUuid = UUID.fromString(rs.getString("uuid"));
+                                        if (rs.getString("lastKnownName") != null) {
+                                            targetDisplayName = rs.getString("lastKnownName");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                if (targetUuid == null) {
+                    org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
+                    if (offlineTarget == null || (!offlineTarget.hasPlayedBefore() && offlineTarget.getName() == null)) {
+                        String alt = targetName.startsWith(".") ? targetName.substring(1) : "." + targetName;
+                        offlineTarget = Bukkit.getOfflinePlayer(alt);
+                    }
+                    if (offlineTarget != null && (offlineTarget.hasPlayedBefore() || offlineTarget.getName() != null)) {
+                        targetUuid = offlineTarget.getUniqueId();
+                        if (offlineTarget.getName() != null) targetDisplayName = offlineTarget.getName();
+                    }
+                }
+
+                if (targetUuid == null) {
                     player.sendMessage(Component.text("❌ Player '" + targetName + "' was never found.", NamedTextColor.RED));
                     return true;
                 }
-                targetUuid = offlineTarget.getUniqueId();
-                targetDisplayName = offlineTarget.getName() != null ? offlineTarget.getName() : targetName;
-                
-                // Load existing data for offline player to prevent overwriting other stats/homes!
+
                 loadPlayerData(targetUuid);
             }
-            
-            int currentWeight = getRankWeight(targetUuid);
-            int newWeight = getRankWeightByName(rankArg);
-            if (!rankArg.equals("reset") && newWeight <= currentWeight) {
-                player.sendMessage(Component.text("❌ " + targetDisplayName + " already has a higher or equal rank!", NamedTextColor.RED));
-                if (!isOnline) {
-                    unloadPlayerData(targetUuid);
-                }
-                return true;
-            }
+
             UUID counterpartUuid = null;
             if (targetDisplayName != null) {
                 if (targetDisplayName.startsWith(".")) {
                     org.bukkit.OfflinePlayer javaPlayer = Bukkit.getOfflinePlayer(targetDisplayName.substring(1));
-                    if (javaPlayer != null) counterpartUuid = javaPlayer.getUniqueId();
+                    if (javaPlayer != null && (javaPlayer.hasPlayedBefore() || javaPlayer.getName() != null)) counterpartUuid = javaPlayer.getUniqueId();
                 } else {
                     org.bukkit.OfflinePlayer bedrockPlayer = Bukkit.getOfflinePlayer("." + targetDisplayName);
-                    if (bedrockPlayer != null) counterpartUuid = bedrockPlayer.getUniqueId();
+                    if (bedrockPlayer != null && (bedrockPlayer.hasPlayedBefore() || bedrockPlayer.getName() != null)) counterpartUuid = bedrockPlayer.getUniqueId();
                 }
             }
 
@@ -2586,7 +2655,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             String rankLabel;
-            switch (rankArg) {
+            switch (normalizedRank) {
                 case "erp+":
                     hasErpPlusMap.put(targetUuid, true);
                     if (counterpartUuid != null) hasErpPlusMap.put(counterpartUuid, true);
@@ -2608,23 +2677,24 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     rankLabel = "VIP";
                     break;
                 case "reset":
+                default:
                     rankLabel = "None";
                     break;
-                default:
-                    player.sendMessage(Component.text("❌ Invalid rank. Use: erp+, erp++, erp+++, vip, or reset", NamedTextColor.RED));
-                    if (!isOnline) {
-                        unloadPlayerData(targetUuid);
-                    }
-                    return true;
             }
+
             savePlayerData(targetUuid);
             if (counterpartUuid != null) {
                 savePlayerData(counterpartUuid);
             }
+
             if (isOnline) {
                 updateScoreboard(target);
                 player.sendMessage(Component.text("✅ Set " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
-                target.sendMessage(Component.text("🌟 Your rank has been set to " + rankLabel + "!", NamedTextColor.GOLD));
+                if (rankLabel.equals("None")) {
+                    target.sendMessage(Component.text("ℹ️ Your rank has been reset to None.", NamedTextColor.YELLOW));
+                } else {
+                    target.sendMessage(Component.text("🌟 Your rank has been set to " + rankLabel + "!", NamedTextColor.GOLD));
+                }
             } else {
                 player.sendMessage(Component.text("✅ Set offline player " + targetDisplayName + "'s rank to " + rankLabel + "!", NamedTextColor.GREEN));
                 unloadPlayerData(targetUuid);
@@ -3700,6 +3770,47 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // --- /afk ---
         if (command.getName().equalsIgnoreCase("afk")) {
             teleportToAfkZone(player);
+            return true;
+        }
+
+        // --- /stats [player] ---
+        if (command.getName().equalsIgnoreCase("stats")) {
+            if (!(sender instanceof Player)) {
+                if (args.length == 0) {
+                    sender.sendMessage("Usage: /stats <player>");
+                    return true;
+                }
+                String targetName = args[0];
+                sender.sendMessage("🔍 Looking up stats for '" + targetName + "'...");
+                Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                    Player onlineP = Bukkit.getPlayerExact(targetName);
+                    if (onlineP == null) {
+                        onlineP = Bukkit.getPlayer(targetName);
+                    }
+                    if (onlineP == null) {
+                        String altName = targetName.startsWith(".") ? targetName.substring(1) : "." + targetName;
+                        onlineP = Bukkit.getPlayer(altName);
+                    }
+                    PlayerStatsSnapshot s = onlineP != null ? getOnlinePlayerSnapshot(onlineP) : loadOfflinePlayerSnapshot(targetName);
+                    if (s == null) {
+                        sender.sendMessage("❌ Player '" + targetName + "' not found.");
+                        return;
+                    }
+                    sender.sendMessage("================= Stats for " + s.name + " =================");
+                    sender.sendMessage("UUID: " + s.uuid);
+                    sender.sendMessage("Status: " + (s.isOnline ? "ONLINE" : "OFFLINE"));
+                    sender.sendMessage("Combat: " + s.kills + " Kills | " + s.deaths + " Deaths | K/D: " + (s.deaths == 0 ? s.kills : String.format("%.2f", (double) s.kills / s.deaths)));
+                    sender.sendMessage("Erpies: " + s.erpies + " (Bank: " + s.bankErpies + " | Net: " + (s.erpies + s.bankErpies) + ")");
+                    sender.sendMessage("Derpies: " + s.derpies + " (Bank: " + s.bankDerpies + " | Net: " + (s.derpies + s.bankDerpies) + ")");
+                    sender.sendMessage("Keys: " + s.keys + " | Echo: " + s.echoKeys + " | Crimson: " + s.crimsonKeys + " | End: " + s.endKeys + " | Amethyst: " + s.amethystKeys);
+                    sender.sendMessage("Playtime: " + formatTimePlayed(s.timePlayed));
+                    sender.sendMessage("Ores Mined: " + s.oresMined + " | Blocks Placed: " + s.blocksPlaced + " | Homes: " + s.homesCount + "/" + s.maxHomes);
+                    sender.sendMessage("============================================================");
+                });
+                return true;
+            }
+            String targetName = args.length > 0 ? args[0] : player.getName();
+            openPlayerStatsGui(player, targetName);
             return true;
         }
 
@@ -7342,7 +7453,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 && !title.equals("Choose Spawner Type")
                 && !title.equals("Deposit Options") && !title.equals("Withdraw Options")
                 && !title.equals("Withdraw Money")
-                && !title.startsWith("Custom Items - Page")) return;
+                && !title.startsWith("Custom Items - Page")
+                && !title.endsWith("'s Stats") && !title.equals("Player Stats")) return;
+
+        if (title.endsWith("'s Stats") || title.equals("Player Stats")) {
+            event.setCancelled(true);
+            int slot = event.getRawSlot();
+            if (slot == 49) {
+                event.getWhoClicked().closeInventory();
+            }
+            return;
+        }
 
         if (title.equals("Apocalypse Menu")) {
             event.setCancelled(true);
@@ -9040,6 +9161,438 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         player.openInventory(inv);
     }
 
+    public static class PlayerStatsSnapshot {
+        public UUID uuid;
+        public String name;
+        public boolean isOnline;
+        public int timePlayed;
+        public long erpies;
+        public long derpies;
+        public int keys;
+        public int kills;
+        public int deaths;
+        public int regularKeys;
+        public int crimsonKeys;
+        public int echoKeys;
+        public int endKeys;
+        public int amethystKeys;
+        public long bankErpies;
+        public long bankDerpies;
+        public int oresMined;
+        public int invisibleKills;
+        public int blocksPlaced;
+        public int starvationDeaths;
+        public int apocalypseZombieKills;
+        public boolean hasErpPlus;
+        public boolean hasErpPro;
+        public boolean hasErpProMax;
+        public boolean hasVip;
+        public int homesCount;
+        public int maxHomes;
+    }
+
+    private PlayerStatsSnapshot getOnlinePlayerSnapshot(Player target) {
+        UUID uuid = target.getUniqueId();
+        PlayerStatsSnapshot s = new PlayerStatsSnapshot();
+        s.uuid = uuid;
+        s.name = target.getName();
+        s.isOnline = true;
+        s.timePlayed = timePlayedMap.getOrDefault(uuid, 0);
+        s.erpies = erpiesMap.getOrDefault(uuid, 0L);
+        s.derpies = derpiesMap.getOrDefault(uuid, 0L);
+        s.keys = keysMap.getOrDefault(uuid, 0);
+        s.kills = killsMap.getOrDefault(uuid, 0);
+        s.deaths = deathsMap.getOrDefault(uuid, 0);
+        s.regularKeys = regularKeysMap.getOrDefault(uuid, 0);
+        s.crimsonKeys = crimsonKeysMap.getOrDefault(uuid, 0);
+        s.echoKeys = echoKeysMap.getOrDefault(uuid, 0);
+        s.endKeys = endKeysMap.getOrDefault(uuid, 0);
+        s.amethystKeys = amethystKeysMap.getOrDefault(uuid, 0);
+        s.bankErpies = bankErpiesMap.getOrDefault(uuid, 0L);
+        s.bankDerpies = bankDerpiesMap.getOrDefault(uuid, 0L);
+        s.oresMined = oresMinedMap.getOrDefault(uuid, 0);
+        s.invisibleKills = invisibleKillsMap.getOrDefault(uuid, 0);
+        s.blocksPlaced = blocksPlacedMap.getOrDefault(uuid, 0);
+        s.starvationDeaths = starvationDeathsMap.getOrDefault(uuid, 0);
+        s.apocalypseZombieKills = apocalypseZombieKillsMap.getOrDefault(uuid, 0);
+        s.hasErpPlus = hasErpPlusMap.getOrDefault(uuid, false);
+        s.hasErpPro = hasErpProMap.getOrDefault(uuid, false);
+        s.hasErpProMax = hasErpProMaxMap.getOrDefault(uuid, false);
+        s.hasVip = hasVipMap.getOrDefault(uuid, false);
+        
+        Location[] homes = playerHomes.get(uuid);
+        int hCount = 0;
+        if (homes != null) {
+            for (Location loc : homes) {
+                if (loc != null) hCount++;
+            }
+        }
+        s.homesCount = hCount;
+        
+        int maxH = 5;
+        if (s.hasErpProMax) maxH = 45;
+        else if (s.hasErpPro) maxH = 27;
+        else if (s.hasErpPlus) maxH = 13;
+        s.maxHomes = maxH;
+        return s;
+    }
+
+    private PlayerStatsSnapshot loadOfflinePlayerSnapshot(String targetSearchName) {
+        synchronized (dbLock) {
+            try (Connection conn = getConnection()) {
+                if (conn == null) return null;
+                
+                String altName = targetSearchName.startsWith(".") ? targetSearchName.substring(1) : "." + targetSearchName;
+                String query = "SELECT * FROM player_stats WHERE lower(lastKnownName) = lower(?) OR lower(lastKnownName) = lower(?) OR uuid = ? ORDER BY CASE WHEN lower(lastKnownName) = lower(?) THEN 0 ELSE 1 END LIMIT 1";
+                UUID parsedUuid = null;
+                try {
+                    parsedUuid = UUID.fromString(targetSearchName);
+                } catch (Exception ignored) {}
+                
+                UUID resolvedUuid = null;
+                PlayerStatsSnapshot s = new PlayerStatsSnapshot();
+                
+                try (PreparedStatement ps = conn.prepareStatement(query)) {
+                    ps.setString(1, targetSearchName);
+                    ps.setString(2, altName);
+                    ps.setString(3, parsedUuid != null ? parsedUuid.toString() : targetSearchName);
+                    ps.setString(4, targetSearchName);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            resolvedUuid = UUID.fromString(rs.getString("uuid"));
+                            s.uuid = resolvedUuid;
+                            s.name = rs.getString("lastKnownName");
+                            if (s.name == null || s.name.isEmpty()) s.name = targetSearchName;
+                            s.isOnline = false;
+                            s.timePlayed = rs.getInt("timePlayed");
+                            s.erpies = rs.getLong("erpies");
+                            s.derpies = rs.getLong("derpies");
+                            s.keys = rs.getInt("keys");
+                            s.kills = rs.getInt("kills");
+                            s.deaths = rs.getInt("deaths");
+                            s.regularKeys = rs.getInt("regularKeys");
+                            s.crimsonKeys = rs.getInt("crimsonKeys");
+                            s.echoKeys = rs.getInt("echoKeys");
+                            s.endKeys = rs.getInt("endKeys");
+                            s.amethystKeys = rs.getInt("amethystKeys");
+                            s.bankErpies = rs.getLong("bankErpies");
+                            s.bankDerpies = rs.getLong("bankDerpies");
+                            s.oresMined = rs.getInt("oresMined");
+                            s.invisibleKills = rs.getInt("invisibleKills");
+                            s.blocksPlaced = rs.getInt("blocksPlaced");
+                            s.starvationDeaths = rs.getInt("starvationDeaths");
+                            s.apocalypseZombieKills = rs.getInt("apocalypseZombieKills");
+                            s.hasErpPlus = rs.getInt("hasErpPlus") == 1;
+                            s.hasErpPro = rs.getInt("hasErpPro") == 1;
+                            s.hasErpProMax = rs.getInt("hasErpProMax") == 1;
+                            s.hasVip = rs.getInt("hasVip") == 1;
+                        }
+                    }
+                }
+                
+                if (resolvedUuid == null) {
+                    OfflinePlayer op = Bukkit.getOfflinePlayer(targetSearchName);
+                    if (op == null || (!op.hasPlayedBefore() && op.getName() == null)) {
+                        op = Bukkit.getOfflinePlayer(altName);
+                    }
+                    if (op != null && (op.hasPlayedBefore() || op.getName() != null)) {
+                        resolvedUuid = op.getUniqueId();
+                        String opName = op.getName() != null ? op.getName() : targetSearchName;
+                        try (PreparedStatement ps = conn.prepareStatement("SELECT * FROM player_stats WHERE uuid = ?")) {
+                            ps.setString(1, resolvedUuid.toString());
+                            try (ResultSet rs = ps.executeQuery()) {
+                                if (rs.next()) {
+                                    s.uuid = resolvedUuid;
+                                    s.name = rs.getString("lastKnownName") != null ? rs.getString("lastKnownName") : opName;
+                                    s.isOnline = false;
+                                    s.timePlayed = rs.getInt("timePlayed");
+                                    s.erpies = rs.getLong("erpies");
+                                    s.derpies = rs.getLong("derpies");
+                                    s.keys = rs.getInt("keys");
+                                    s.kills = rs.getInt("kills");
+                                    s.deaths = rs.getInt("deaths");
+                                    s.regularKeys = rs.getInt("regularKeys");
+                                    s.crimsonKeys = rs.getInt("crimsonKeys");
+                                    s.echoKeys = rs.getInt("echoKeys");
+                                    s.endKeys = rs.getInt("endKeys");
+                                    s.amethystKeys = rs.getInt("amethystKeys");
+                                    s.bankErpies = rs.getLong("bankErpies");
+                                    s.bankDerpies = rs.getLong("bankDerpies");
+                                    s.oresMined = rs.getInt("oresMined");
+                                    s.invisibleKills = rs.getInt("invisibleKills");
+                                    s.blocksPlaced = rs.getInt("blocksPlaced");
+                                    s.starvationDeaths = rs.getInt("starvationDeaths");
+                                    s.apocalypseZombieKills = rs.getInt("apocalypseZombieKills");
+                                    s.hasErpPlus = rs.getInt("hasErpPlus") == 1;
+                                    s.hasErpPro = rs.getInt("hasErpPro") == 1;
+                                    s.hasErpProMax = rs.getInt("hasErpProMax") == 1;
+                                    s.hasVip = rs.getInt("hasVip") == 1;
+                                } else {
+                                    return null;
+                                }
+                            }
+                        }
+                    } else {
+                        return null;
+                    }
+                }
+                
+                int homesCount = 0;
+                try (PreparedStatement psHomes = conn.prepareStatement("SELECT count(*) FROM player_homes WHERE uuid = ?")) {
+                    psHomes.setString(1, s.uuid.toString());
+                    try (ResultSet rs = psHomes.executeQuery()) {
+                        if (rs.next()) {
+                            homesCount = rs.getInt(1);
+                        }
+                    }
+                }
+                s.homesCount = homesCount;
+                
+                int maxH = 5;
+                if (s.hasErpProMax) maxH = 45;
+                else if (s.hasErpPro) maxH = 27;
+                else if (s.hasErpPlus) maxH = 13;
+                s.maxHomes = maxH;
+                
+                return s;
+            } catch (Exception e) {
+                getLogger().severe("Failed to load offline player stats for " + targetSearchName);
+                e.printStackTrace();
+                return null;
+            }
+        }
+    }
+
+    private ItemStack createStatsItem(Material material, Component name, List<Component> lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(name.decoration(TextDecoration.ITALIC, false));
+            List<Component> finalLore = new ArrayList<>();
+            for (Component c : lore) {
+                finalLore.add(c.decoration(TextDecoration.ITALIC, false));
+            }
+            meta.lore(finalLore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private void openStatsGuiWithSnapshot(Player viewer, PlayerStatsSnapshot s) {
+        String titleStr = s.name + "'s Stats";
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text(titleStr));
+        
+        ItemStack borderPane = createGuiItem(Material.BLACK_STAINED_GLASS_PANE, " ", NamedTextColor.DARK_GRAY);
+        ItemStack accentPane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        
+        for (int i = 0; i < 54; i++) {
+            inv.setItem(i, borderPane);
+        }
+        int[] accents = {9, 17, 18, 26, 27, 35, 36, 44};
+        for (int slot : accents) {
+            inv.setItem(slot, accentPane);
+        }
+        
+        ItemStack skull = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta skullMeta = (SkullMeta) skull.getItemMeta();
+        if (skullMeta != null) {
+            try {
+                skullMeta.setOwningPlayer(Bukkit.getOfflinePlayer(s.uuid));
+            } catch (Exception ignored) {}
+            skullMeta.displayName(Component.text(s.name + "'s Profile", NamedTextColor.GOLD, TextDecoration.BOLD).decoration(TextDecoration.ITALIC, false));
+            
+            String rankName = "Member";
+            NamedTextColor rColor = NamedTextColor.GRAY;
+            if (s.hasErpProMax) {
+                rankName = "ERP+++ (Pro Max)";
+                rColor = NamedTextColor.LIGHT_PURPLE;
+            } else if (s.hasErpPro) {
+                rankName = "ERP++ (Pro)";
+                rColor = NamedTextColor.AQUA;
+            } else if (s.hasErpPlus) {
+                rankName = "ERP+ (Plus)";
+                rColor = NamedTextColor.GREEN;
+            } else if (s.hasVip) {
+                rankName = "VIP";
+                rColor = NamedTextColor.GOLD;
+            }
+            
+            double kd = s.deaths == 0 ? s.kills : ((double) s.kills / (double) s.deaths);
+            
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+            lore.add(Component.text("§7Status: ").append(s.isOnline ? Component.text("● Online", NamedTextColor.GREEN) : Component.text("○ Offline", NamedTextColor.GRAY)));
+            lore.add(Component.text("§7Rank: ").append(Component.text(rankName, rColor)));
+            lore.add(Component.text("§7Playtime: §f" + formatTimePlayed(s.timePlayed)));
+            lore.add(Component.text("§7K/D Ratio: §b" + String.format("%.2f", kd)));
+            lore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+            
+            List<Component> cleanLore = new ArrayList<>();
+            for (Component c : lore) cleanLore.add(c.decoration(TextDecoration.ITALIC, false));
+            skullMeta.lore(cleanLore);
+            skull.setItemMeta(skullMeta);
+        }
+        inv.setItem(4, skull);
+        
+        List<Component> combatLore = new ArrayList<>();
+        combatLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        combatLore.add(Component.text("§7Player Kills: §c" + s.kills));
+        combatLore.add(Component.text("§7Invisible Kills: §6" + s.invisibleKills));
+        combatLore.add(Component.text("§7Zombie Kills: §e" + s.apocalypseZombieKills));
+        combatLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(10, createStatsItem(Material.NETHERITE_SWORD, Component.text("⚔ Combat & Kills", NamedTextColor.RED, TextDecoration.BOLD), combatLore));
+        
+        double kd = s.deaths == 0 ? s.kills : ((double) s.kills / (double) s.deaths);
+        List<Component> deathLore = new ArrayList<>();
+        deathLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        deathLore.add(Component.text("§7Total Deaths: §c" + s.deaths));
+        deathLore.add(Component.text("§7Starvation Deaths: §e" + s.starvationDeaths));
+        deathLore.add(Component.text("§7K/D Ratio: §b" + String.format("%.2f", kd)));
+        deathLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(11, createStatsItem(Material.SKELETON_SKULL, Component.text("☠ Deaths & K/D", NamedTextColor.DARK_RED, TextDecoration.BOLD), deathLore));
+        
+        List<Component> timeLore = new ArrayList<>();
+        timeLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        timeLore.add(Component.text("§7Total Playtime: §f" + formatTimePlayed(s.timePlayed)));
+        timeLore.add(Component.text("§7Raw Seconds: §7" + s.timePlayed + "s"));
+        timeLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(13, createStatsItem(Material.CLOCK, Component.text("⏱ Time Played", NamedTextColor.YELLOW, TextDecoration.BOLD), timeLore));
+        
+        String rName = "Member";
+        NamedTextColor rColor = NamedTextColor.GRAY;
+        if (s.hasErpProMax) {
+            rName = "ERP+++ (Pro Max)";
+            rColor = NamedTextColor.LIGHT_PURPLE;
+        } else if (s.hasErpPro) {
+            rName = "ERP++ (Pro)";
+            rColor = NamedTextColor.AQUA;
+        } else if (s.hasErpPlus) {
+            rName = "ERP+ (Plus)";
+            rColor = NamedTextColor.GREEN;
+        } else if (s.hasVip) {
+            rName = "VIP";
+            rColor = NamedTextColor.GOLD;
+        }
+        List<Component> rankLore = new ArrayList<>();
+        rankLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        rankLore.add(Component.text("§7Store Rank: ").append(Component.text(rName, rColor)));
+        rankLore.add(Component.text("§7VIP Status: ").append(s.hasVip ? Component.text("Active", NamedTextColor.GOLD) : Component.text("None", NamedTextColor.GRAY)));
+        rankLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(15, createStatsItem(Material.NETHER_STAR, Component.text("★ Membership Rank", NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD), rankLore));
+        
+        List<Component> erpiesLore = new ArrayList<>();
+        erpiesLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        erpiesLore.add(Component.text("§7Wallet Balance: §a" + formatValue(s.erpies) + " Erpies §8(" + s.erpies + ")"));
+        erpiesLore.add(Component.text("§7Bank Balance: §2" + formatValue(s.bankErpies) + " Erpies"));
+        erpiesLore.add(Component.text("§7Total Net Worth: §e" + formatValue(s.erpies + s.bankErpies) + " Erpies"));
+        erpiesLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(19, createStatsItem(Material.EMERALD, Component.text("⛃ Erpies Balance", NamedTextColor.GREEN, TextDecoration.BOLD), erpiesLore));
+        
+        List<Component> derpiesLore = new ArrayList<>();
+        derpiesLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        derpiesLore.add(Component.text("§7Wallet Balance: §d" + formatValue(s.derpies) + " Derpies §8(" + s.derpies + ")"));
+        derpiesLore.add(Component.text("§7Bank Balance: §5" + formatValue(s.bankDerpies) + " Derpies"));
+        derpiesLore.add(Component.text("§7Total Net Worth: §e" + formatValue(s.derpies + s.bankDerpies) + " Derpies"));
+        derpiesLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(21, createStatsItem(Material.AMETHYST_SHARD, Component.text("✦ Derpies Balance", NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD), derpiesLore));
+        
+        List<Component> bankLore = new ArrayList<>();
+        bankLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        bankLore.add(Component.text("§7Deposited Erpies: §a" + formatValue(s.bankErpies)));
+        bankLore.add(Component.text("§7Deposited Derpies: §d" + formatValue(s.bankDerpies)));
+        bankLore.add(Component.text("§7Daily Interest: §e+5% every 24h"));
+        bankLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(25, createStatsItem(Material.ENDER_CHEST, Component.text("🏦 Bank Account", NamedTextColor.GOLD, TextDecoration.BOLD), bankLore));
+        
+        List<Component> kLore = new ArrayList<>();
+        kLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        kLore.add(Component.text("§7Standard Crate Keys: §b" + s.keys));
+        kLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(29, createStatsItem(Material.TRIPWIRE_HOOK, Component.text("🗝 Regular Keys: " + s.keys, NamedTextColor.AQUA, TextDecoration.BOLD), kLore));
+        
+        List<Component> echoLore = new ArrayList<>();
+        echoLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        echoLore.add(Component.text("§7Echo Crate Keys: §3" + s.echoKeys));
+        echoLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(30, createStatsItem(Material.ECHO_SHARD, Component.text("✧ Echo Keys: " + s.echoKeys, NamedTextColor.DARK_AQUA, TextDecoration.BOLD), echoLore));
+        
+        List<Component> crimLore = new ArrayList<>();
+        crimLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        crimLore.add(Component.text("§7Crimson Crate Keys: §c" + s.crimsonKeys));
+        crimLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(31, createStatsItem(Material.CRIMSON_FUNGUS, Component.text("✦ Crimson Keys: " + s.crimsonKeys, NamedTextColor.RED, TextDecoration.BOLD), crimLore));
+        
+        List<Component> endLore = new ArrayList<>();
+        endLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        endLore.add(Component.text("§7End Dimension Keys: §5" + s.endKeys));
+        endLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(32, createStatsItem(Material.ENDER_PEARL, Component.text("✴ End Keys: " + s.endKeys, NamedTextColor.DARK_PURPLE, TextDecoration.BOLD), endLore));
+        
+        List<Component> ametLore = new ArrayList<>();
+        ametLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        ametLore.add(Component.text("§7Amethyst Crate Keys: §d" + s.amethystKeys));
+        ametLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(33, createStatsItem(Material.AMETHYST_CLUSTER, Component.text("💠 Amethyst Keys: " + s.amethystKeys, NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD), ametLore));
+        
+        List<Component> oresLore = new ArrayList<>();
+        oresLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        oresLore.add(Component.text("§7Total Ores Mined: §b" + s.oresMined));
+        oresLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(38, createStatsItem(Material.DIAMOND_PICKAXE, Component.text("⛏ Ores Mined", NamedTextColor.AQUA, TextDecoration.BOLD), oresLore));
+        
+        List<Component> blocksLore = new ArrayList<>();
+        blocksLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        blocksLore.add(Component.text("§7Total Blocks Placed: §6" + s.blocksPlaced));
+        blocksLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(40, createStatsItem(Material.BRICKS, Component.text("🧱 Blocks Placed", NamedTextColor.GOLD, TextDecoration.BOLD), blocksLore));
+        
+        List<Component> homesLore = new ArrayList<>();
+        homesLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        homesLore.add(Component.text("§7Saved Homepoints: §a" + s.homesCount + " §7/ §e" + s.maxHomes));
+        homesLore.add(Component.text("§8━━━━━━━━━━━━━━━━━━━━━━"));
+        inv.setItem(42, createStatsItem(Material.RED_BED, Component.text("🏠 Saved Homes", NamedTextColor.GREEN, TextDecoration.BOLD), homesLore));
+        
+        List<Component> closeLore = new ArrayList<>();
+        closeLore.add(Component.text("§7Click to exit stats view"));
+        inv.setItem(49, createStatsItem(Material.BARRIER, Component.text("❌ Close", NamedTextColor.RED, TextDecoration.BOLD), closeLore));
+        
+        viewer.openInventory(inv);
+    }
+
+    private void openPlayerStatsGui(Player viewer, String targetSearchName) {
+        if (targetSearchName == null || targetSearchName.trim().isEmpty()) {
+            targetSearchName = viewer.getName();
+        }
+        
+        Player onlineTarget = Bukkit.getPlayerExact(targetSearchName);
+        if (onlineTarget == null) {
+            onlineTarget = Bukkit.getPlayer(targetSearchName);
+        }
+        if (onlineTarget == null) {
+            String altName = targetSearchName.startsWith(".") ? targetSearchName.substring(1) : "." + targetSearchName;
+            onlineTarget = Bukkit.getPlayer(altName);
+        }
+        if (onlineTarget != null) {
+            PlayerStatsSnapshot snapshot = getOnlinePlayerSnapshot(onlineTarget);
+            openStatsGuiWithSnapshot(viewer, snapshot);
+            return;
+        }
+        
+        final String finalTargetName = targetSearchName;
+        viewer.sendMessage(Component.text("🔍 Looking up stats for '" + finalTargetName + "'...", NamedTextColor.GRAY));
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            PlayerStatsSnapshot snapshot = loadOfflinePlayerSnapshot(finalTargetName);
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!viewer.isOnline()) return;
+                if (snapshot == null) {
+                    viewer.sendMessage(Component.text("❌ Player '" + finalTargetName + "' not found!", NamedTextColor.RED));
+                    return;
+                }
+                openStatsGuiWithSnapshot(viewer, snapshot);
+            });
+        });
+    }
+
     private void openBankWithdrawGui(Player player) {
         UUID uuid = player.getUniqueId();
         applyInterest(uuid);
@@ -9145,11 +9698,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private int getRankWeightByName(String rankName) {
         if (rankName == null) return 0;
-        rankName = rankName.toLowerCase().replace("+", "").replace(" ", "").trim();
-        if (rankName.equals("erp+++") || rankName.equals("erppromax") || rankName.equals("erpiepromaxx")) return 4;
-        if (rankName.equals("erp++") || rankName.equals("erppro") || rankName.equals("erpiepro")) return 3;
-        if (rankName.equals("erp+") || rankName.equals("erp") || rankName.equals("erpplus") || rankName.equals("erpie")) return 2;
-        if (rankName.equals("vip")) return 1;
+        String r = rankName.toLowerCase().trim().replace(" ", "");
+        if (r.equals("e+pm") || r.equals("e+++") || r.equals("erp+++") || r.equals("erppromax") || r.equals("erp+promax") || r.equals("erpiepromaxx") || r.equals("erppromaxx")) return 4;
+        if (r.equals("e+p") || r.equals("e++") || r.equals("erp++") || r.equals("erppro") || r.equals("erp+pro") || r.equals("erpiepro")) return 3;
+        if (r.equals("e+") || r.equals("e") || r.equals("erp+") || r.equals("erpplus") || r.equals("erp+plus") || r.equals("erp") || r.equals("erpie")) return 2;
+        if (r.equals("vip")) return 1;
         return 0;
     }
 
