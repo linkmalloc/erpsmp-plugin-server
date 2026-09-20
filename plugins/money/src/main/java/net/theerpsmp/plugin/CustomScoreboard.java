@@ -157,6 +157,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, String> pendingOrderItemName = new HashMap<>(); // stores item name between order steps
     private final HashMap<UUID, Integer> pendingOrderQuantity = new HashMap<>(); // stores chosen quantity (max 1M)
     private final HashMap<UUID, String> pendingOrderSearchQuery = new HashMap<>(); // stores active item search filter
+    private final HashMap<UUID, String> orderBoardSearchQuery = new HashMap<>(); // stores active order board filter
     private final HashMap<UUID, Integer> pendingOrderPage = new HashMap<>(); // stores active Choose Item page
     private boolean breakingCustom = false;
 
@@ -428,7 +429,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     private final Random random = new Random();
 
-    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH, HOME_SEARCH, HOME_RENAME, WITHDRAW_ERPIES_ONLY, WITHDRAW_DERPIES_ONLY, DEPOSIT_MONEY_ONLY, ORDER_QUANTITY, ORDER_SEARCH }
+    public enum SignAction { SEARCH, LIST_PRICE, SET_CRATE_PRICE, ORDER_ITEM, ORDER_PRICE, TEAM_SEARCH, BANK_DEPOSIT, BANK_WITHDRAW, SET_COMMAND_CHEST, DUEL_PLAYER_SEARCH, HOME_SEARCH, HOME_RENAME, WITHDRAW_ERPIES_ONLY, WITHDRAW_DERPIES_ONLY, DEPOSIT_MONEY_ONLY, ORDER_QUANTITY, ORDER_SEARCH, ORDER_BOARD_SEARCH }
 
     public static class PendingSignInput {
         public final Location loc;
@@ -491,7 +492,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         public final long price;
 
         public OrderRequest(UUID buyer, String buyerName, String itemName, int quantity, long price) {
-            this.id = UUID.randomUUID();
+            this(UUID.randomUUID(), buyer, buyerName, itemName, quantity, price);
+        }
+
+        public OrderRequest(UUID id, UUID buyer, String buyerName, String itemName, int quantity, long price) {
+            this.id = id != null ? id : UUID.randomUUID();
             this.buyer = buyer;
             this.buyerName = buyerName;
             this.itemName = itemName;
@@ -506,6 +511,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         saveDefaultConfig();
         initDatabase();
         migrateYamlToDatabase();
+        loadOrdersFromDatabase();
         getServer().getPluginManager().registerEvents(this, this);
 
         // Load data for all currently online players (e.g. after reload or plugin update)
@@ -1026,6 +1032,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         saveTeams();
         saveCommandChests();
         saveGenerators();
+        saveAllOrdersSync();
 
         // Clean up all spawned floating nametags
         for (List<org.bukkit.entity.TextDisplay> displays : playerTagDisplays.values()) {
@@ -1154,6 +1161,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                          "name TEXT, " +
                          "PRIMARY KEY (uuid, slot)" +
                          ");");
+                    stmt.execute("CREATE TABLE IF NOT EXISTS player_orders (" +
+                                 "id TEXT PRIMARY KEY, " +
+                                 "buyer TEXT, " +
+                                 "buyerName TEXT, " +
+                                 "itemName TEXT, " +
+                                 "quantity INTEGER, " +
+                                 "price INTEGER" +
+                                 ");");
+                    stmt.execute("CREATE TABLE IF NOT EXISTS player_deliveries (" +
+                                 "id TEXT PRIMARY KEY, " +
+                                 "uuid TEXT, " +
+                                 "itemName TEXT, " +
+                                 "quantity INTEGER" +
+                                 ");");
             
                     getLogger().info("[Database] SQLite database initialized successfully.");
                 }
@@ -1162,6 +1183,198 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 e.printStackTrace();
             }
         }
+    }
+
+    private void loadOrdersFromDatabase() {
+        synchronized (dbLock) {
+            orders.clear();
+            try (Connection conn = getConnection()) {
+                if (conn == null) return;
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT id, buyer, buyerName, itemName, quantity, price FROM player_orders")) {
+                    while (rs.next()) {
+                        try {
+                            UUID id = UUID.fromString(rs.getString("id"));
+                            UUID buyer = UUID.fromString(rs.getString("buyer"));
+                            String buyerName = rs.getString("buyerName");
+                            String itemName = rs.getString("itemName");
+                            int quantity = rs.getInt("quantity");
+                            long price = rs.getLong("price");
+                            orders.add(new OrderRequest(id, buyer, buyerName, itemName, quantity, price));
+                        } catch (Exception ex) {
+                            getLogger().warning("[Orders] Error reading order from DB: " + ex.getMessage());
+                        }
+                    }
+                    getLogger().info("[Orders] Loaded " + orders.size() + " active order(s) from database.");
+                }
+            } catch (Exception e) {
+                getLogger().severe("[Orders] Failed to load orders from database: " + e.getMessage());
+            }
+        }
+    }
+
+    private void saveOrderToDatabase(OrderRequest order) {
+        if (order == null) return;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    String sql = "REPLACE INTO player_orders (id, buyer, buyerName, itemName, quantity, price) VALUES (?, ?, ?, ?, ?, ?)";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, order.id.toString());
+                        ps.setString(2, order.buyer.toString());
+                        ps.setString(3, order.buyerName);
+                        ps.setString(4, order.itemName);
+                        ps.setInt(5, order.quantity);
+                        ps.setLong(6, order.price);
+                        ps.executeUpdate();
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Orders] Failed to save order to database: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void updateOrderInDatabase(OrderRequest order) {
+        if (order == null) return;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    String sql = "UPDATE player_orders SET quantity = ?, price = ? WHERE id = ?";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setInt(1, order.quantity);
+                        ps.setLong(2, order.price);
+                        ps.setString(3, order.id.toString());
+                        ps.executeUpdate();
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Orders] Failed to update order in database: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void deleteOrderFromDatabase(UUID orderId) {
+        if (orderId == null) return;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    String sql = "DELETE FROM player_orders WHERE id = ?";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, orderId.toString());
+                        ps.executeUpdate();
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Orders] Failed to delete order from database: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void saveAllOrdersSync() {
+        synchronized (dbLock) {
+            try (Connection conn = getConnection()) {
+                if (conn == null) return;
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("DELETE FROM player_orders;");
+                }
+                String sql = "INSERT INTO player_orders (id, buyer, buyerName, itemName, quantity, price) VALUES (?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    for (OrderRequest order : orders) {
+                        ps.setString(1, order.id.toString());
+                        ps.setString(2, order.buyer.toString());
+                        ps.setString(3, order.buyerName);
+                        ps.setString(4, order.itemName);
+                        ps.setInt(5, order.quantity);
+                        ps.setLong(6, order.price);
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            } catch (Exception e) {
+                getLogger().severe("[Orders] Failed to sync orders on disable: " + e.getMessage());
+            }
+        }
+    }
+
+    private void saveOfflineDelivery(UUID uuid, String itemName, int quantity) {
+        if (uuid == null || itemName == null || quantity <= 0) return;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    String sql = "INSERT INTO player_deliveries (id, uuid, itemName, quantity) VALUES (?, ?, ?, ?)";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, UUID.randomUUID().toString());
+                        ps.setString(2, uuid.toString());
+                        ps.setString(3, itemName);
+                        ps.setInt(4, quantity);
+                        ps.executeUpdate();
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Orders] Failed to save offline delivery: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void deliverOfflineItems(Player player) {
+        if (player == null) return;
+        UUID uuid = player.getUniqueId();
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    List<String[]> deliveries = new ArrayList<>();
+                    List<String> idsToDelete = new ArrayList<>();
+                    String sql = "SELECT id, itemName, quantity FROM player_deliveries WHERE uuid = ?";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, uuid.toString());
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                idsToDelete.add(rs.getString("id"));
+                                deliveries.add(new String[]{rs.getString("itemName"), String.valueOf(rs.getInt("quantity"))});
+                            }
+                        }
+                    }
+                    if (!deliveries.isEmpty()) {
+                        String delSql = "DELETE FROM player_deliveries WHERE id = ?";
+                        try (PreparedStatement ps = conn.prepareStatement(delSql)) {
+                            for (String id : idsToDelete) {
+                                ps.setString(1, id);
+                                ps.addBatch();
+                            }
+                            ps.executeBatch();
+                        }
+                        Bukkit.getScheduler().runTask(this, () -> {
+                            if (!player.isOnline()) return;
+                            for (String[] entry : deliveries) {
+                                Material mat = Material.matchMaterial(entry[0]);
+                                if (mat == null) mat = Material.PAPER;
+                                int qty = Integer.parseInt(entry[1]);
+                                int remaining = qty;
+                                int maxStack = mat.getMaxStackSize();
+                                while (remaining > 0) {
+                                    int stackQty = Math.min(remaining, maxStack);
+                                    HashMap<Integer, ItemStack> overflow = player.getInventory().addItem(new ItemStack(mat, stackQty));
+                                    for (ItemStack drop : overflow.values()) {
+                                        player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                                    }
+                                    remaining -= stackQty;
+                                }
+                                player.sendMessage(Component.text("📦 §a[Orders] You received §e" + String.format("%,d", qty) + "x " + formatItemDisplayName(mat) + " §afrom your fulfilled buy order while you were away!", NamedTextColor.GREEN));
+                            }
+                            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
+                        });
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Orders] Failed to load offline deliveries: " + e.getMessage());
+                }
+            }
+        });
     }
 
     private void migrateYamlToDatabase() {
@@ -1834,6 +2047,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         loadPlayerData(player);
         updateScoreboard(player);
         updatePlayerFloatingTags(player);
+        deliverOfflineItems(player);
         if (!player.hasPlayedBefore()) {
             giveStarterGear(player);
             player.teleport(getRandomSpawnPoint());
@@ -3182,6 +3396,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (command.getName().equalsIgnoreCase("orders")) {
+            if (args.length > 0 && (args[0].equalsIgnoreCase("my") || args[0].equalsIgnoreCase("mine"))) {
+                openMyOrders(player);
+                return true;
+            }
             String query = args.length > 0 ? String.join(" ", args) : null;
             openOrdersGui(player, query);
             return true;
@@ -8766,11 +8984,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (title.equals("Order Board")) {
             int rawSlot = event.getRawSlot();
             if (rawSlot == 45) {
+                orderBoardSearchQuery.remove(uuid);
                 openOrdersGui(player, null);
                 return;
             }
             if (rawSlot == 46) {
-                openSignInput(player, SignAction.SEARCH, null, "search here");
+                openSignInput(player, SignAction.ORDER_BOARD_SEARCH, null, "search orders");
                 return;
             }
             if (rawSlot == 47) {
@@ -8783,21 +9002,36 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return;
             }
             if (rawSlot < 45) {
-                // Fulfill an order
                 int current = 0;
                 OrderRequest target = null;
+                String query = orderBoardSearchQuery.get(uuid);
                 for (OrderRequest order : orders) {
-                    if (!order.buyer.equals(uuid)) { // can't fulfill your own
-                        if (current == rawSlot) {
-                            target = order;
-                            break;
-                        }
-                        current++;
+                    Material mat = Material.matchMaterial(order.itemName);
+                    if (mat == null) mat = Material.PAPER;
+                    if (query != null && !order.itemName.toLowerCase().contains(query.toLowerCase()) && !formatItemDisplayName(mat).toLowerCase().contains(query.toLowerCase())) continue;
+
+                    if (current == rawSlot) {
+                        target = order;
+                        break;
                     }
+                    current++;
                 }
                 if (target == null) return;
 
-                // Check if player has the item
+                // Handle clicking own order -> Cancel & Refund!
+                if (target.buyer.equals(uuid)) {
+                    orders.remove(target);
+                    deleteOrderFromDatabase(target.id);
+                    erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + target.price);
+                    savePlayerData(uuid);
+                    updateScoreboard(player);
+                    player.sendMessage(Component.text("❌ Order cancelled. " + String.format("%,d", target.price) + " Erpies refunded!", NamedTextColor.YELLOW));
+                    player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ANVIL_USE, 0.7f, 1.2f);
+                    openOrdersGui(player, query);
+                    return;
+                }
+
+                // Check if player has the item to fulfill
                 Material mat = Material.matchMaterial(target.itemName);
                 if (mat == null) return;
                 int needed = target.quantity;
@@ -8806,15 +9040,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     if (it != null && it.getType() == mat) inInv += it.getAmount();
                 }
                 if (inInv <= 0) {
-                    player.sendMessage(Component.text("❌ You don't have any " + formatItemDisplayName(mat) + " in your inventory to fulfill this order!", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ You do not have any " + formatItemDisplayName(mat) + " in your inventory to fulfill this order!", NamedTextColor.RED));
+                    player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
                     return;
                 }
 
-                // Support partial fulfillment for large quantities up to 1,000,000
                 int toDeliver = Math.min(inInv, needed);
-                long pay = (toDeliver == needed) ? target.price : Math.max(1, (long) (((double) target.price * toDeliver) / target.quantity));
+                long pay = (long) ((double) target.price * ((double) toDeliver / (double) needed));
+                if (pay <= 0 && target.price > 0) pay = 1;
 
-                // Remove items from fulfiller's inventory
+                // Take items from fulfiller
                 int toRemove = toDeliver;
                 for (ItemStack it : player.getInventory().getContents()) {
                     if (it != null && it.getType() == mat && toRemove > 0) {
@@ -8826,10 +9061,12 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                 // Pay fulfiller
                 erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + pay);
+                savePlayerData(uuid);
+                updateScoreboard(player);
 
                 // Give items in safe stacks (<= maxStackSize) to buyer
                 Player buyerPlayer = Bukkit.getPlayer(target.buyer);
-                if (buyerPlayer != null) {
+                if (buyerPlayer != null && buyerPlayer.isOnline()) {
                     int remainingToGive = toDeliver;
                     int maxStack = mat.getMaxStackSize();
                     while (remainingToGive > 0) {
@@ -8839,22 +9076,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         remainingToGive -= batch;
                     }
                     buyerPlayer.sendMessage(Component.text("📦 Your order for " + formatItemDisplayName(mat) + " received " + String.format("%,d", toDeliver) + "x items from " + player.getName() + "!", NamedTextColor.GREEN));
+                } else {
+                    saveOfflineDelivery(target.buyer, target.itemName, toDeliver);
                 }
 
                 if (toDeliver >= needed) {
                     orders.remove(target);
+                    deleteOrderFromDatabase(target.id);
                     player.sendMessage(Component.text("✅ Order fully fulfilled! You delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + String.format("%,d", pay) + " Erpies.", NamedTextColor.GREEN));
                 } else {
                     int remainingQty = needed - toDeliver;
                     long remainingPrice = Math.max(1, target.price - pay);
                     int index = orders.indexOf(target);
+                    OrderRequest updated = new OrderRequest(target.id, target.buyer, target.buyerName, target.itemName, remainingQty, remainingPrice);
                     if (index >= 0) {
-                        orders.set(index, new OrderRequest(target.buyer, target.buyerName, target.itemName, remainingQty, remainingPrice));
+                        orders.set(index, updated);
                     }
+                    updateOrderInDatabase(updated);
                     player.sendMessage(Component.text("✅ Partial order fulfilled! Delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + String.format("%,d", pay) + " Erpies. (" + String.format("%,d", remainingQty) + " remaining)", NamedTextColor.GREEN));
                 }
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
-                openOrdersGui(player, null);
+                openOrdersGui(player, query);
             }
             return;
         }
@@ -9015,9 +9257,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
                 if (toCancel != null) {
                     orders.remove(toCancel);
+                    deleteOrderFromDatabase(toCancel.id);
                     // Refund erpies
                     erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + toCancel.price);
-                    player.sendMessage(Component.text("❌ Order cancelled. " + toCancel.price + " Erpies refunded.", NamedTextColor.YELLOW));
+                    savePlayerData(uuid);
+                    updateScoreboard(player);
+                    player.sendMessage(Component.text("❌ Order cancelled. " + String.format("%,d", toCancel.price) + " Erpies refunded.", NamedTextColor.YELLOW));
+                    player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ANVIL_USE, 0.7f, 1.2f);
                     openMyOrders(player);
                 }
             }
@@ -9731,26 +9977,36 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private void openOrdersGui(Player player, String query) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Order Board"));
         int slot = 0;
+        UUID uuid = player.getUniqueId();
+        orderBoardSearchQuery.put(uuid, query);
         for (OrderRequest order : orders) {
-            if (order.buyer.equals(player.getUniqueId())) continue; // skip own orders
             Material mat = Material.matchMaterial(order.itemName);
             if (mat == null) mat = Material.PAPER;
             if (query != null && !order.itemName.toLowerCase().contains(query.toLowerCase()) && !formatItemDisplayName(mat).toLowerCase().contains(query.toLowerCase())) continue;
 
+            boolean isOwn = order.buyer.equals(uuid);
             ItemStack display = new ItemStack(mat);
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
-                meta.displayName(Component.text(formatItemDisplayName(mat), NamedTextColor.YELLOW));
-                meta.lore(List.of(
-                    Component.text("Buyer: " + order.buyerName, NamedTextColor.GRAY),
-                    Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE),
-                    Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD),
-                    Component.text("Click to fulfill (needs item in inv)", NamedTextColor.GREEN)
-                ));
+                meta.displayName(Component.text(formatItemDisplayName(mat), isOwn ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+                List<Component> lore = new ArrayList<>();
+                lore.add(Component.text("Buyer: " + (isOwn ? "You (" + order.buyerName + ")" : order.buyerName), isOwn ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+                lore.add(Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE));
+                lore.add(Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD));
+                if (isOwn) {
+                    lore.add(Component.text("§a✦ YOUR POSTED ORDER ✦"));
+                    lore.add(Component.text("§cClick to cancel & refund your Erpies"));
+                } else {
+                    lore.add(Component.text("§aClick to fulfill (needs item in inv)"));
+                }
+                meta.lore(lore);
                 display.setItemMeta(meta);
             }
             inv.setItem(slot++, display);
             if (slot >= 45) break;
+        }
+        if (slot == 0) {
+            inv.setItem(22, createGuiItem(Material.BARRIER, "No Orders Found", NamedTextColor.GRAY, (query != null ? "No orders match '" + query + "'." : "No orders have been posted yet."), "Click 'Post Order' below to request an item!"));
         }
         inv.setItem(45, createGuiItem(Material.DIAMOND, "Refresh", NamedTextColor.AQUA, "Click to refresh"));
         inv.setItem(46, createGuiItem(Material.OAK_SIGN, "Search", NamedTextColor.YELLOW, "Search orders by item name"));
@@ -9770,16 +10026,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             ItemStack display = new ItemStack(mat);
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
-                meta.displayName(Component.text(formatItemDisplayName(mat), NamedTextColor.YELLOW));
+                meta.displayName(Component.text(formatItemDisplayName(mat), NamedTextColor.GREEN));
                 meta.lore(List.of(
                     Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE),
                     Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD),
-                    Component.text("Click to cancel (refunds Erpies)", NamedTextColor.RED)
+                    Component.text("§cClick to cancel & refund your Erpies", NamedTextColor.RED)
                 ));
                 display.setItemMeta(meta);
             }
             inv.setItem(slot++, display);
             if (slot >= 45) break;
+        }
+        if (slot == 0) {
+            inv.setItem(22, createGuiItem(Material.BARRIER, "No Active Orders", NamedTextColor.GRAY, "You don't have any active buy orders.", "Click 'Back to Order Board' and then 'Post Order'!"));
         }
         inv.setItem(49, createGuiItem(Material.BARRIER, "Back to Order Board", NamedTextColor.RED, "Return to main page"));
         player.openInventory(inv);
@@ -10221,9 +10480,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // Deduct Erpies upfront
         erpiesMap.put(uuid, bal - price);
+        savePlayerData(uuid);
+        updateScoreboard(player);
 
         // Add order
-        orders.add(new OrderRequest(uuid, player.getName(), itemName, quantity, price));
+        OrderRequest newOrder = new OrderRequest(uuid, player.getName(), itemName, quantity, price);
+        orders.add(newOrder);
+        saveOrderToDatabase(newOrder);
 
         // Cleanup pending state
         pendingOrderItemName.remove(uuid);
@@ -10767,6 +11030,17 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     final String query = input;
                     player.sendMessage(Component.text("🔍 Searching for: " + query, NamedTextColor.GREEN));
                     Bukkit.getScheduler().runTask(this, () -> openAuctionGui(player, query));
+                }
+            } else if (pending.action == SignAction.ORDER_BOARD_SEARCH) {
+                if (input.isEmpty()) {
+                    player.sendMessage(Component.text("❌ Search cancelled.", NamedTextColor.RED));
+                    orderBoardSearchQuery.remove(uuid);
+                    Bukkit.getScheduler().runTask(this, () -> openOrdersGui(player, null));
+                } else {
+                    final String query = input.trim();
+                    orderBoardSearchQuery.put(uuid, query);
+                    player.sendMessage(Component.text("🔍 Searching orders for: " + query, NamedTextColor.GREEN));
+                    Bukkit.getScheduler().runTask(this, () -> openOrdersGui(player, query));
                 }
             } else if (pending.action == SignAction.ORDER_ITEM) {
                 if (input.isEmpty()) {
