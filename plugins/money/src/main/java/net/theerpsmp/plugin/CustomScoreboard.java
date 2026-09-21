@@ -10561,6 +10561,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
             if (isLeaderboard) {
                 String typeLower = joinedText.toLowerCase().trim();
+                if (typeLower.equals("money") || typeLower.equals("balance")) {
+                    typeLower = "erpies";
+                    joinedText = "erpies";
+                }
                 if (!typeLower.equals("kills") && !typeLower.equals("erpies") && !typeLower.equals("derpies") && !typeLower.equals("time")) {
                     player.sendMessage(Component.text("❌ Invalid leaderboard type! Use: kills, erpies, derpies, or time.", NamedTextColor.RED));
                     return;
@@ -15244,7 +15248,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (statType.equalsIgnoreCase("kills")) {
             title = "🏆 KILLS LEADERBOARD 🏆";
             columnName = "kills";
-        } else if (statType.equalsIgnoreCase("erpies")) {
+        } else if (statType.equalsIgnoreCase("erpies") || statType.equalsIgnoreCase("money") || statType.equalsIgnoreCase("balance")) {
             title = "🪙 ERPIES LEADERBOARD 🪙";
             columnName = "erpies";
         } else if (statType.equalsIgnoreCase("derpies")) {
@@ -15289,7 +15293,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             long val = 0;
             if (statType.equalsIgnoreCase("kills")) {
                 val = killsMap.getOrDefault(uuid, 0);
-            } else if (statType.equalsIgnoreCase("erpies")) {
+            } else if (statType.equalsIgnoreCase("erpies") || statType.equalsIgnoreCase("money") || statType.equalsIgnoreCase("balance")) {
                 val = erpiesMap.getOrDefault(uuid, 0L);
             } else if (statType.equalsIgnoreCase("derpies")) {
                 val = derpiesMap.getOrDefault(uuid, 0L);
@@ -15339,9 +15343,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private int leaderboardUpdateTicks = 0;
     private void updateLeaderboardFloatingTexts() {
         leaderboardUpdateTicks++;
-        if (leaderboardUpdateTicks % 10 != 0) { // Every 10 seconds (ticks run every 1 second)
+
+        // Keep player floating nametags refreshed every 10 seconds
+        if (leaderboardUpdateTicks % 10 == 0) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                updatePlayerFloatingTags(p);
+            }
+        }
+
+        // Only update leaderboard floating text displays every 10 minutes (600 seconds)
+        if (leaderboardUpdateTicks % 600 != 0) {
             return;
         }
+
         for (World world : Bukkit.getWorlds()) {
             for (org.bukkit.entity.TextDisplay display : world.getEntitiesByClass(org.bukkit.entity.TextDisplay.class)) {
                 // Ensure no existing display is visible through walls
@@ -15354,9 +15368,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                 }
             }
-        }
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            updatePlayerFloatingTags(p);
         }
     }
 
