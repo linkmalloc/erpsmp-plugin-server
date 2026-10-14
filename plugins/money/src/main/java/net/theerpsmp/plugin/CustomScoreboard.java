@@ -406,17 +406,42 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Location> activeCratePurchase = new HashMap<>();
     private final HashMap<UUID, ItemStack[]> pendingCrateItemsArray = new HashMap<>();
     private final HashMap<UUID, Location> activeMobGeneratorSetup = new HashMap<>();
+    private final HashMap<UUID, Location> openGenerator = new HashMap<>();
 
     // Custom Generators
     public static class GeneratorData {
         public final Location loc;
-        public final String type;
+        public String type;
         public final Inventory inventory;
+        public long storedErpies;
+        public long lastHourlyMoney;
 
         public GeneratorData(Location loc, String type, Inventory inventory) {
+            this(loc, type, inventory, 0L, System.currentTimeMillis());
+        }
+
+        public GeneratorData(Location loc, String type, Inventory inventory, long storedErpies, long lastHourlyMoney) {
             this.loc = loc;
             this.type = type;
             this.inventory = inventory;
+            this.storedErpies = storedErpies;
+            this.lastHourlyMoney = lastHourlyMoney > 0 ? lastHourlyMoney : System.currentTimeMillis();
+        }
+
+        public boolean isSpawner() {
+            return type.equals("mob_generator") || type.endsWith("_spawner") ||
+                    (type.endsWith("_generator") && !type.equals("ore_generator") && !type.equals("food_generator") && !type.equals("tools_generator"));
+        }
+
+        public void updateHourlyMoney() {
+            if (!isSpawner()) return;
+            long now = System.currentTimeMillis();
+            long elapsed = now - lastHourlyMoney;
+            if (elapsed >= 3600000L) {
+                long hours = elapsed / 3600000L;
+                storedErpies += hours * 2000L;
+                lastHourlyMoney += hours * 3600000L;
+            }
         }
     }
     private final HashMap<Location, GeneratorData> generators = new HashMap<>();
@@ -823,18 +848,24 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // Generator minute production task
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             for (GeneratorData gen : generators.values()) {
-                Inventory inv = gen.inventory;
                 ItemStack toAdd = null;
                 if (gen.type.equals("food_generator")) {
                     toAdd = new ItemStack(Material.COOKED_BEEF);
                 } else if (gen.type.equals("ore_generator")) {
                     toAdd = new ItemStack(Material.DIAMOND);
-                } else if (gen.type.equals("tools_generator")) {
-                    toAdd = new ItemStack(getRandomToolOrArmorMaterial());
                 }
 
                 if (toAdd != null) {
-                    inv.addItem(toAdd);
+                    addItemToGenerator(gen, toAdd);
+                }
+
+                // Check hourly erpies for spawners (2,000 erpies every hour)
+                if (gen.isSpawner()) {
+                    long prev = gen.storedErpies;
+                    gen.updateHourlyMoney();
+                    if (gen.storedErpies != prev) {
+                        updateGeneratorBottomRow(gen);
+                    }
                 }
             }
         }, 1200L, 1200L);
@@ -857,6 +888,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         toAdd = new ItemStack(Material.GUNPOWDER);
                     } else if (gen.type.equals("skeleton_generator")) {
                         toAdd = new ItemStack(Material.BONE);
+                    } else if (gen.type.equals("spider_generator")) {
+                        toAdd = new ItemStack(Material.STRING);
+                    } else if (gen.type.equals("zombie_generator")) {
+                        toAdd = new ItemStack(Material.ROTTEN_FLESH);
                     } else if (gen.type.equals("witch_generator")) {
                         toAdd = new ItemStack(Material.POTION);
                         org.bukkit.inventory.meta.PotionMeta pm = (org.bukkit.inventory.meta.PotionMeta) toAdd.getItemMeta();
@@ -878,7 +913,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
 
                     if (toAdd != null) {
-                        gen.inventory.addItem(toAdd);
+                        addItemToGenerator(gen, toAdd);
                     }
                 }
             }
@@ -894,8 +929,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         Inventory hopperInv = hopper.getInventory();
                         Inventory genInv = gen.inventory;
 
-                        // Find first item in generator inventory
-                        for (int i = 0; i < genInv.getSize(); i++) {
+                        // Find first item in generator inventory (only slots 0..44)
+                        int maxSlot = Math.min(45, genInv.getSize());
+                        for (int i = 0; i < maxSlot; i++) {
                             ItemStack item = genInv.getItem(i);
                             if (item != null && item.getType() != Material.AIR) {
                                 ItemStack toMove = item.clone();
@@ -2277,6 +2313,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         hiddenEntitiesMap.remove(uuid);
+        openGenerator.remove(uuid);
         combatTagTicks.remove(uuid);
         duelQueue.remove(uuid);
         org.bukkit.scheduler.BukkitTask warpTask = pendingWarpTeleports.remove(uuid);
@@ -3954,12 +3991,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "divine_flame" -> item = createDivineFlame();
                 case "food_generator" -> item = createFoodGeneratorItem();
                 case "ore_generator" -> item = createOreGeneratorItem();
-                case "tools_generator" -> item = createToolsGeneratorItem();
                 case "mob_generator" -> item = createMobGeneratorItem();
+                case "spider_generator", "spider_spawner" -> item = createSpawnerOrGeneratorItem("spider_generator");
+                case "zombie_generator", "zombie_spawner" -> item = createSpawnerOrGeneratorItem("zombie_generator");
+                case "skeleton_generator", "skeleton_spawner" -> item = createSpawnerOrGeneratorItem("skeleton_generator");
+                case "creeper_generator", "creeper_spawner" -> item = createSpawnerOrGeneratorItem("creeper_generator");
+                case "witch_generator", "witch_spawner" -> item = createSpawnerOrGeneratorItem("witch_generator");
+                case "iron_golem_generator", "iron_golem_spawner" -> item = createSpawnerOrGeneratorItem("iron_golem_generator");
+                case "snow_golem_generator", "snow_golem_spawner" -> item = createSpawnerOrGeneratorItem("snow_golem_generator");
                 case "echo_frame" -> item = createEchoFrameItem();
                 case "echo_starter" -> item = createEchoStarterItem();
                 default -> {
-                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, goaty_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, tools_generator, mob_generator, echo_frame, echo_starter", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Unknown item type! Use: pickaxe, shovel, axe, bow, stick, crate, sword, pickaxe_lerp, mace, echo_sword, ender_sword, zeus_sword, goaty_sword, gateway, echo_crate, crimson_crate, key_crate, end_crate, amethyst_crate, orbital_strike, wand, lunge_spear, echo_key, crimson_key, end_key, amethyst_key, npc_egg, floating_text, leaderboard_text, command_chest, divine_flame, food_generator, ore_generator, mob_generator, spider_spawner, zombie_spawner, echo_frame, echo_starter", NamedTextColor.RED));
                     return true;
                 }
             }
@@ -5998,26 +6041,33 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (event.isCancelled()) return;
         Location loc = block.getLocation();
 
+        if (block.getType() == Material.SPAWNER && !generators.containsKey(loc)) {
+            convertToCustomSpawner(block);
+        }
+
         if (generators.containsKey(loc)) {
             event.setCancelled(true);
             GeneratorData data = generators.get(loc);
 
-            ItemStack genItem = null;
-            if (data.type.equals("food_generator")) {
-                genItem = createFoodGeneratorItem();
-            } else if (data.type.equals("ore_generator")) {
-                genItem = createOreGeneratorItem();
-            } else if (data.type.equals("tools_generator")) {
-                genItem = createToolsGeneratorItem();
-            } else if (data.type.equals("mob_generator") || data.type.endsWith("_generator")) {
-                genItem = createMobGeneratorItem();
+            // Auto-collect any pending money to player breaking it
+            data.updateHourlyMoney();
+            if (data.storedErpies > 0) {
+                UUID uuid = player.getUniqueId();
+                erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + data.storedErpies);
+                updateScoreboard(player);
+                player.sendMessage(Component.text("💰 Auto-collected " + data.storedErpies + " Erpies!", NamedTextColor.GREEN));
+                data.storedErpies = 0;
             }
 
+            ItemStack genItem = createSpawnerOrGeneratorItem(data.type);
             if (genItem != null) {
                 loc.getWorld().dropItemNaturally(loc, genItem);
             }
 
-            for (ItemStack itemStack : data.inventory.getContents()) {
+            // Only drop stored contents (slots 0..44), not the bottom row GUI buttons
+            int maxSlot = Math.min(45, data.inventory.getSize());
+            for (int i = 0; i < maxSlot; i++) {
+                ItemStack itemStack = data.inventory.getItem(i);
                 if (itemStack != null && itemStack.getType() != Material.AIR) {
                     loc.getWorld().dropItemNaturally(loc, itemStack);
                 }
@@ -6027,6 +6077,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             saveGenerators();
 
             block.setType(Material.AIR);
+            player.sendMessage(Component.text("💥 " + getGeneratorDisplayName(data.type) + " broken and collected as an item!", NamedTextColor.GREEN));
             return;
         }
 
@@ -6248,17 +6299,40 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     Bukkit.getScheduler().runTask(this, () -> {
                         openSignInput(event.getPlayer(), SignAction.SET_COMMAND_CHEST, null, "Enter Command");
                     });
-                } else if (customItem.equals("food_generator") || customItem.equals("ore_generator") || customItem.equals("tools_generator")) {
+                } else if (customItem.equals("food_generator") || customItem.equals("ore_generator")) {
                     Location loc = event.getBlock().getLocation();
                     String title = capitalize(customItem.replace("_", " "));
-                    Inventory genInv = Bukkit.createInventory(null, 27, Component.text(title));
-                    generators.put(loc, new GeneratorData(loc, customItem, genInv));
+                    Inventory genInv = createGeneratorInventory(title);
+                    GeneratorData genData = new GeneratorData(loc, customItem, genInv);
+                    updateGeneratorBottomRow(genData);
+                    generators.put(loc, genData);
                     saveGenerators();
                 } else if (customItem.equals("mob_generator")) {
                     Location loc = event.getBlock().getLocation();
-                    Inventory genInv = Bukkit.createInventory(null, 27, Component.text("Mob Generator"));
-                    generators.put(loc, new GeneratorData(loc, "mob_generator", genInv));
+                    Inventory genInv = createGeneratorInventory("Mob Generator");
+                    GeneratorData genData = new GeneratorData(loc, "mob_generator", genInv);
+                    updateGeneratorBottomRow(genData);
+                    generators.put(loc, genData);
                     saveGenerators();
+                } else if (customItem.endsWith("_generator") || customItem.endsWith("_spawner")) {
+                    Location loc = event.getBlock().getLocation();
+                    String genType = customItem.endsWith("_spawner") ? customItem.replace("_spawner", "_generator") : customItem;
+                    String cleanName = getGeneratorDisplayName(genType);
+                    Inventory genInv = createGeneratorInventory(cleanName);
+                    GeneratorData genData = new GeneratorData(loc, genType, genInv);
+                    updateGeneratorBottomRow(genData);
+                    generators.put(loc, genData);
+                    saveGenerators();
+
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        if (loc.getBlock().getType() == Material.SPAWNER && loc.getBlock().getState() instanceof org.bukkit.block.CreatureSpawner cs) {
+                            org.bukkit.entity.EntityType et = getEntityTypeForGenerator(genType);
+                            if (et != null) {
+                                cs.setSpawnedType(et);
+                                cs.update(true);
+                            }
+                        }
+                    });
                 }
             }
         }
@@ -7599,8 +7673,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         shop.setItem(19, createGuiItem(Material.SPAWNER, "Food Generator", NamedTextColor.GOLD, "Cost: 2000 Derpies", "Generates steak every minute when placed.", "Right-click placed block to open inventory."));
         shop.setItem(20, createGuiItem(Material.SPAWNER, "Ore Generator", NamedTextColor.AQUA, "Cost: 2000 Derpies", "Generates diamonds every minute when placed.", "Right-click placed block to open inventory."));
-        shop.setItem(21, createGuiItem(Material.SPAWNER, "Tools Generator", NamedTextColor.LIGHT_PURPLE, "Cost: 2000 Derpies", "Generates tools & armor (except netherite) every minute when placed.", "Right-click placed block to open inventory."));
-        shop.setItem(22, createGuiItem(Material.SPAWNER, "Mob Generator", NamedTextColor.RED, "Cost: 2000 Derpies", "A custom spawner generator.", "Right-click placed block to open inventory."));
+        shop.setItem(21, createGuiItem(Material.SPAWNER, "Mob Generator", NamedTextColor.RED, "Cost: 2000 Derpies", "A custom spawner generator.", "Spawns mob drops & 2,000 Erpies/hour.", "Right-click placed block to open inventory."));
         shop.setItem(26, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
 
         player.openInventory(shop);
@@ -8027,48 +8100,57 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             org.bukkit.entity.EntityType entityType = null;
             String cleanName = "";
 
-            if (slot == 0) {
-                generatorType = "iron_golem_generator";
-                entityType = org.bukkit.entity.EntityType.IRON_GOLEM;
-                cleanName = "Iron Golem";
+            if (slot == 1) {
+                generatorType = "zombie_generator";
+                entityType = org.bukkit.entity.EntityType.ZOMBIE;
+                cleanName = "Zombie";
             } else if (slot == 2) {
-                generatorType = "snow_golem_generator";
-                entityType = org.bukkit.entity.EntityType.SNOW_GOLEM;
-                cleanName = "Snow Golem";
+                generatorType = "skeleton_generator";
+                entityType = org.bukkit.entity.EntityType.SKELETON;
+                cleanName = "Skeleton";
+            } else if (slot == 3) {
+                generatorType = "spider_generator";
+                entityType = org.bukkit.entity.EntityType.SPIDER;
+                cleanName = "Spider";
             } else if (slot == 4) {
                 generatorType = "creeper_generator";
                 entityType = org.bukkit.entity.EntityType.CREEPER;
                 cleanName = "Creeper";
-            } else if (slot == 6) {
-                generatorType = "skeleton_generator";
-                entityType = org.bukkit.entity.EntityType.SKELETON;
-                cleanName = "Skeleton";
-            } else if (slot == 8) {
+            } else if (slot == 5) {
                 generatorType = "witch_generator";
                 entityType = org.bukkit.entity.EntityType.WITCH;
                 cleanName = "Witch";
+            } else if (slot == 6) {
+                generatorType = "iron_golem_generator";
+                entityType = org.bukkit.entity.EntityType.IRON_GOLEM;
+                cleanName = "Iron Golem";
+            } else if (slot == 7) {
+                generatorType = "snow_golem_generator";
+                entityType = org.bukkit.entity.EntityType.SNOW_GOLEM;
+                cleanName = "Snow Golem";
             }
 
             if (generatorType != null) {
                 // Clear the clicked item from the selection GUI
                 event.setCurrentItem(null);
 
-                Inventory genInv = Bukkit.createInventory(null, 27, Component.text(cleanName + " Generator"));
-                generators.put(loc, new GeneratorData(loc, generatorType, genInv));
+                Inventory genInv = createGeneratorInventory(cleanName + " Spawner");
+                GeneratorData genData = new GeneratorData(loc, generatorType, genInv);
+                updateGeneratorBottomRow(genData);
+                generators.put(loc, genData);
                 saveGenerators();
 
                 if (loc.getBlock().getType() == Material.SPAWNER) {
                     org.bukkit.block.BlockState state = loc.getBlock().getState();
-                    if (state instanceof org.bukkit.block.CreatureSpawner) {
-                        org.bukkit.block.CreatureSpawner spawner = (org.bukkit.block.CreatureSpawner) state;
+                    if (state instanceof org.bukkit.block.CreatureSpawner spawner) {
                         spawner.setSpawnedType(entityType);
                         spawner.update(true);
                     }
                 }
 
                 player.closeInventory();
-                player.sendMessage(Component.text("✅ Spawner converted to " + cleanName + " Generator!", NamedTextColor.GREEN));
-                player.sendMessage(Component.text("Right-click the spawner to open the " + cleanName + " Generator inventory.", NamedTextColor.GRAY));
+                player.sendMessage(Component.text("✅ Spawner configured as " + cleanName + " Spawner!", NamedTextColor.GREEN));
+                player.sendMessage(Component.text("Right-click the spawner to open its double chest inventory.", NamedTextColor.GRAY));
             }
             return;
         }
@@ -8817,11 +8899,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     player.getWorld().dropItemNaturally(player.getLocation(), left);
                 }
             } else if (rawSlot == 21) {
-                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createToolsGeneratorItem());
-                for (ItemStack left : remaining.values()) {
-                    player.getWorld().dropItemNaturally(player.getLocation(), left);
-                }
-            } else if (rawSlot == 22) {
                 HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(createMobGeneratorItem());
                 for (ItemStack left : remaining.values()) {
                     player.getWorld().dropItemNaturally(player.getLocation(), left);
@@ -9861,11 +9938,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private void openMobGeneratorTypeSelectionGui(Player player, Location loc) {
         activeMobGeneratorSetup.put(player.getUniqueId(), loc);
         Inventory inv = Bukkit.createInventory(null, 9, Component.text("Choose Spawner Type"));
-        inv.setItem(0, createGuiItem(Material.IRON_BLOCK, "Iron Golem", NamedTextColor.GRAY, "Click to select Iron Golem"));
-        inv.setItem(2, createGuiItem(Material.CARVED_PUMPKIN, "Snow Golem", NamedTextColor.WHITE, "Click to select Snow Golem"));
-        inv.setItem(4, createGuiItem(Material.GUNPOWDER, "Creeper", NamedTextColor.GREEN, "Click to select Creeper"));
-        inv.setItem(6, createGuiItem(Material.BONE, "Skeleton", NamedTextColor.YELLOW, "Click to select Skeleton"));
-        inv.setItem(8, createGuiItem(Material.POTION, "Witch", NamedTextColor.LIGHT_PURPLE, "Click to select Witch"));
+        ItemStack border = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        inv.setItem(0, border);
+        inv.setItem(1, createGuiItem(Material.ROTTEN_FLESH, "Zombie", NamedTextColor.DARK_GREEN, "Spawns rotten flesh", "Generates 2,000 Erpies/hr", "Click to select Zombie"));
+        inv.setItem(2, createGuiItem(Material.BONE, "Skeleton", NamedTextColor.WHITE, "Spawns bones", "Generates 2,000 Erpies/hr", "Click to select Skeleton"));
+        inv.setItem(3, createGuiItem(Material.STRING, "Spider", NamedTextColor.RED, "Spawns string", "Generates 2,000 Erpies/hr", "Click to select Spider"));
+        inv.setItem(4, createGuiItem(Material.GUNPOWDER, "Creeper", NamedTextColor.GREEN, "Spawns gunpowder", "Generates 2,000 Erpies/hr", "Click to select Creeper"));
+        inv.setItem(5, createGuiItem(Material.POTION, "Witch", NamedTextColor.LIGHT_PURPLE, "Spawns potions", "Generates 2,000 Erpies/hr", "Click to select Witch"));
+        inv.setItem(6, createGuiItem(Material.IRON_BLOCK, "Iron Golem", NamedTextColor.GRAY, "Spawns iron ingots", "Generates 2,000 Erpies/hr", "Click to select Iron Golem"));
+        inv.setItem(7, createGuiItem(Material.CARVED_PUMPKIN, "Snow Golem", NamedTextColor.AQUA, "Spawns snowballs", "Generates 2,000 Erpies/hr", "Click to select Snow Golem"));
+        inv.setItem(8, border);
         player.openInventory(inv);
     }
 
@@ -9876,9 +9958,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             meta.displayName(Component.text("Mob Generator", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
             meta.lore(List.of(
                 Component.text("A custom spawner generator.", NamedTextColor.YELLOW),
+                Component.text("Generates mob drops & 2,000 Erpies/hour.", NamedTextColor.AQUA),
                 Component.text("1. Place on the ground.", NamedTextColor.GRAY),
                 Component.text("2. Right-click to configure spawner type.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
             ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "mob_generator");
             item.setItemMeta(meta);
@@ -11391,11 +11474,23 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         box.getInventory().addItem(new ItemStack(Material.NETHERITE_INGOT, 64));
         box.update();
 
-        generators.put(left, new GeneratorData(left, "ore_generator", Bukkit.createInventory(null, 27, Component.text("Ore Generator"))));
-        generators.put(right, new GeneratorData(right, "tools_generator", Bukkit.createInventory(null, 27, Component.text("Tools Generator"))));
+        Inventory leftInv = createGeneratorInventory("Ore Generator");
+        GeneratorData leftData = new GeneratorData(left, "ore_generator", leftInv);
+        updateGeneratorBottomRow(leftData);
+        generators.put(left, leftData);
+
+        Inventory rightInv = createGeneratorInventory("Zombie Spawner");
+        GeneratorData rightData = new GeneratorData(right, "zombie_generator", rightInv);
+        updateGeneratorBottomRow(rightData);
+        generators.put(right, rightData);
+        if (right.getBlock().getState() instanceof org.bukkit.block.CreatureSpawner cs) {
+            cs.setSpawnedType(org.bukkit.entity.EntityType.ZOMBIE);
+            cs.update(true);
+        }
+
         saveGenerators();
 
-        player.sendMessage(Component.text("📦 Spawned an Ore Generator, a Shulker Box with 64 Netherite, and a Tools Generator!", NamedTextColor.GREEN));
+        player.sendMessage(Component.text("📦 Spawned an Ore Generator, a Shulker Box with 64 Netherite, and a Zombie Spawner!", NamedTextColor.GREEN));
     }
 
     // --- Admin Room (OP) ---
@@ -12072,8 +12167,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         items.add(createDivineFlame());
         items.add(createFoodGeneratorItem());
         items.add(createOreGeneratorItem());
-        items.add(createToolsGeneratorItem());
         items.add(createMobGeneratorItem());
+        items.add(createSpawnerOrGeneratorItem("zombie_generator"));
+        items.add(createSpawnerOrGeneratorItem("skeleton_generator"));
+        items.add(createSpawnerOrGeneratorItem("spider_generator"));
+        items.add(createSpawnerOrGeneratorItem("creeper_generator"));
+        items.add(createSpawnerOrGeneratorItem("witch_generator"));
+        items.add(createSpawnerOrGeneratorItem("iron_golem_generator"));
+        items.add(createSpawnerOrGeneratorItem("snow_golem_generator"));
         return items;
     }
 
@@ -12576,7 +12677,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         // Custom server blocks (Ender Chest, Generators)
         if (type == Material.ENDER_CHEST) return true;
-        if (type == Material.SPAWNER && generators.containsKey(block.getLocation())) return true;
+        if (type == Material.SPAWNER) return true;
 
         // Standard containers
         if (block.getState() instanceof org.bukkit.block.Container) return true;
@@ -13104,6 +13205,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
             if (block != null && block.getType() == Material.SPAWNER) {
                 Location loc = block.getLocation();
+                if (!generators.containsKey(loc)) {
+                    convertToCustomSpawner(block);
+                }
                 if (generators.containsKey(loc)) {
                     event.setCancelled(true);
                     Player player = event.getPlayer();
@@ -13112,6 +13216,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         if (data.type.equals("mob_generator")) {
                             openMobGeneratorTypeSelectionGui(player, loc);
                         } else {
+                            data.updateHourlyMoney();
+                            updateGeneratorBottomRow(data);
+                            openGenerator.put(player.getUniqueId(), loc);
                             player.openInventory(data.inventory);
                             player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CHEST_OPEN, 0.5f, 1.0f);
                         }
@@ -16376,8 +16483,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             meta.lore(List.of(
                 Component.text("Generates steak every minute.", NamedTextColor.YELLOW),
                 Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Left-click placed block to open inventory.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+                Component.text("2. Right-click placed block to open inventory.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
             ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "food_generator");
             item.setItemMeta(meta);
@@ -16393,8 +16500,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             meta.lore(List.of(
                 Component.text("Generates diamonds every minute.", NamedTextColor.YELLOW),
                 Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Left-click placed block to open inventory.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+                Component.text("2. Right-click placed block to open inventory.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
             ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "ore_generator");
             item.setItemMeta(meta);
@@ -16402,38 +16509,385 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         return item;
     }
 
-    private ItemStack createToolsGeneratorItem() {
+    private ItemStack createSpawnerOrGeneratorItem(String type) {
+        if (type == null) return createMobGeneratorItem();
+        return switch (type) {
+            case "food_generator" -> createFoodGeneratorItem();
+            case "ore_generator" -> createOreGeneratorItem();
+            case "zombie_generator", "zombie_spawner" -> createSpawnerItem("zombie_generator", "Zombie Spawner", NamedTextColor.DARK_GREEN, Material.ROTTEN_FLESH);
+            case "spider_generator", "spider_spawner" -> createSpawnerItem("spider_generator", "Spider Spawner", NamedTextColor.RED, Material.STRING);
+            case "skeleton_generator", "skeleton_spawner" -> createSpawnerItem("skeleton_generator", "Skeleton Spawner", NamedTextColor.WHITE, Material.BONE);
+            case "creeper_generator", "creeper_spawner" -> createSpawnerItem("creeper_generator", "Creeper Spawner", NamedTextColor.GREEN, Material.GUNPOWDER);
+            case "witch_generator", "witch_spawner" -> createSpawnerItem("witch_generator", "Witch Spawner", NamedTextColor.LIGHT_PURPLE, Material.POTION);
+            case "iron_golem_generator", "iron_golem_spawner" -> createSpawnerItem("iron_golem_generator", "Iron Golem Spawner", NamedTextColor.GRAY, Material.IRON_INGOT);
+            case "snow_golem_generator", "snow_golem_spawner" -> createSpawnerItem("snow_golem_generator", "Snow Golem Spawner", NamedTextColor.AQUA, Material.SNOWBALL);
+            default -> createMobGeneratorItem();
+        };
+    }
+
+    private ItemStack createSpawnerItem(String type, String displayName, NamedTextColor color, Material dropMaterial) {
         ItemStack item = new ItemStack(Material.SPAWNER);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("Tools Generator", NamedTextColor.LIGHT_PURPLE, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            meta.displayName(Component.text(displayName, color, net.kyori.adventure.text.format.TextDecoration.BOLD));
             meta.lore(List.of(
-                Component.text("Generates tools & armor (except netherite) every minute.", NamedTextColor.YELLOW),
+                Component.text("A custom mob spawner.", NamedTextColor.YELLOW),
+                Component.text("Spawns " + dropMaterial.name().toLowerCase().replace("_", " ") + " every 5s.", NamedTextColor.GOLD),
+                Component.text("Generates 2,000 Erpies every hour.", NamedTextColor.AQUA),
                 Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Left-click placed block to open inventory.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click block to break.", NamedTextColor.GRAY)
+                Component.text("2. Right-click to open double chest storage.", NamedTextColor.GRAY),
+                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
             ));
-            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "tools_generator");
+            meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, type);
             item.setItemMeta(meta);
         }
         return item;
     }
 
-    private Material getRandomToolOrArmorMaterial() {
-        Material[] materials = {
-            Material.DIAMOND_SWORD, Material.DIAMOND_PICKAXE, Material.DIAMOND_AXE, Material.DIAMOND_SHOVEL, Material.DIAMOND_HOE,
-            Material.DIAMOND_HELMET, Material.DIAMOND_CHESTPLATE, Material.DIAMOND_LEGGINGS, Material.DIAMOND_BOOTS,
-            Material.IRON_SWORD, Material.IRON_PICKAXE, Material.IRON_AXE, Material.IRON_SHOVEL, Material.IRON_HOE,
-            Material.IRON_HELMET, Material.IRON_CHESTPLATE, Material.IRON_LEGGINGS, Material.IRON_BOOTS,
-            Material.GOLDEN_SWORD, Material.GOLDEN_PICKAXE, Material.GOLDEN_AXE, Material.GOLDEN_SHOVEL, Material.GOLDEN_HOE,
-            Material.GOLDEN_HELMET, Material.GOLDEN_CHESTPLATE, Material.GOLDEN_LEGGINGS, Material.GOLDEN_BOOTS,
-            Material.CHAINMAIL_HELMET, Material.CHAINMAIL_CHESTPLATE, Material.CHAINMAIL_LEGGINGS, Material.CHAINMAIL_BOOTS,
-            Material.LEATHER_HELMET, Material.LEATHER_CHESTPLATE, Material.LEATHER_LEGGINGS, Material.LEATHER_BOOTS,
-            Material.STONE_SWORD, Material.STONE_PICKAXE, Material.STONE_AXE, Material.STONE_SHOVEL, Material.STONE_HOE,
-            Material.WOODEN_SWORD, Material.WOODEN_PICKAXE, Material.WOODEN_AXE, Material.WOODEN_SHOVEL, Material.WOODEN_HOE,
-            Material.BOW, Material.CROSSBOW, Material.SHIELD, Material.TRIDENT, Material.SHEARS, Material.FLINT_AND_STEEL
+    private org.bukkit.entity.EntityType getEntityTypeForGenerator(String type) {
+        if (type == null) return org.bukkit.entity.EntityType.ZOMBIE;
+        return switch (type) {
+            case "zombie_generator" -> org.bukkit.entity.EntityType.ZOMBIE;
+            case "skeleton_generator" -> org.bukkit.entity.EntityType.SKELETON;
+            case "spider_generator" -> org.bukkit.entity.EntityType.SPIDER;
+            case "creeper_generator" -> org.bukkit.entity.EntityType.CREEPER;
+            case "witch_generator" -> org.bukkit.entity.EntityType.WITCH;
+            case "iron_golem_generator" -> org.bukkit.entity.EntityType.IRON_GOLEM;
+            case "snow_golem_generator" -> org.bukkit.entity.EntityType.SNOW_GOLEM;
+            default -> org.bukkit.entity.EntityType.ZOMBIE;
         };
-        return materials[random.nextInt(materials.length)];
+    }
+
+    private String getGeneratorDisplayName(String type) {
+        if (type == null) return "Mob Spawner";
+        return switch (type) {
+            case "food_generator" -> "Food Generator";
+            case "ore_generator" -> "Ore Generator";
+            case "zombie_generator" -> "Zombie Spawner";
+            case "skeleton_generator" -> "Skeleton Spawner";
+            case "spider_generator" -> "Spider Spawner";
+            case "creeper_generator" -> "Creeper Spawner";
+            case "witch_generator" -> "Witch Spawner";
+            case "iron_golem_generator" -> "Iron Golem Spawner";
+            case "snow_golem_generator" -> "Snow Golem Spawner";
+            default -> capitalize(type.replace("_", " "));
+        };
+    }
+
+    private Inventory createGeneratorInventory(String title) {
+        Inventory inv = Bukkit.createInventory(null, 54, Component.text(title));
+        ItemStack borderPane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        for (int i = 45; i < 54; i++) {
+            inv.setItem(i, borderPane);
+        }
+        return inv;
+    }
+
+    private void updateGeneratorBottomRow(GeneratorData gen) {
+        if (gen.inventory.getSize() < 54) return;
+        gen.updateHourlyMoney();
+
+        ItemStack borderPane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.GRAY);
+        gen.inventory.setItem(45, borderPane);
+        gen.inventory.setItem(47, borderPane);
+        gen.inventory.setItem(48, borderPane);
+        gen.inventory.setItem(50, borderPane);
+        gen.inventory.setItem(51, borderPane);
+        gen.inventory.setItem(53, borderPane);
+
+        // 1. Drop All Items button (Slot 46)
+        ItemStack dropAll = new ItemStack(Material.HOPPER);
+        ItemMeta dropMeta = dropAll.getItemMeta();
+        if (dropMeta != null) {
+            dropMeta.displayName(Component.text("Drop All Items", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            dropMeta.lore(List.of(
+                Component.text("Click to drop all stored items", NamedTextColor.YELLOW),
+                Component.text("onto the ground around this block.", NamedTextColor.GRAY)
+            ));
+            dropAll.setItemMeta(dropMeta);
+        }
+        gen.inventory.setItem(46, dropAll);
+
+        // 2. Collect Money button (Slot 49)
+        ItemStack moneyBtn = new ItemStack(Material.GOLD_BLOCK);
+        ItemMeta moneyMeta = moneyBtn.getItemMeta();
+        if (moneyMeta != null) {
+            moneyMeta.displayName(Component.text("Collect Money", NamedTextColor.GREEN, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            List<Component> moneyLore = new ArrayList<>();
+            moneyLore.add(Component.text("Stored: " + gen.storedErpies + " Erpies", NamedTextColor.YELLOW));
+            if (gen.isSpawner()) {
+                moneyLore.add(Component.text("Production: 2,000 Erpies / hour", NamedTextColor.GOLD));
+                long remainingMillis = Math.max(0L, 3600000L - (System.currentTimeMillis() - gen.lastHourlyMoney));
+                long remMin = (remainingMillis / 1000L) / 60L;
+                long remSec = (remainingMillis / 1000L) % 60L;
+                moneyLore.add(Component.text("Next payout in: " + remMin + "m " + remSec + "s", NamedTextColor.DARK_GRAY));
+            }
+            if (gen.storedErpies > 0) {
+                moneyLore.add(Component.text("Click to collect to your balance!", NamedTextColor.GREEN));
+            } else {
+                moneyLore.add(Component.text("No money available to collect right now.", NamedTextColor.GRAY));
+            }
+            moneyMeta.lore(moneyLore);
+            moneyBtn.setItemMeta(moneyMeta);
+        }
+        gen.inventory.setItem(49, moneyBtn);
+
+        // 3. Destroy Spawner / Generator button (Slot 52)
+        String label = gen.isSpawner() ? "Spawner" : "Generator";
+        ItemStack destroyBtn = new ItemStack(Material.BARRIER);
+        ItemMeta destroyMeta = destroyBtn.getItemMeta();
+        if (destroyMeta != null) {
+            destroyMeta.displayName(Component.text("Destroy " + label, NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
+            destroyMeta.lore(List.of(
+                Component.text("Breaks the " + label.toLowerCase() + " and turns it into an item.", NamedTextColor.RED),
+                Component.text("All stored items will be dropped on the ground.", NamedTextColor.GRAY),
+                Component.text("Click to destroy!", NamedTextColor.YELLOW)
+            ));
+            destroyBtn.setItemMeta(destroyMeta);
+        }
+        gen.inventory.setItem(52, destroyBtn);
+    }
+
+    private ItemStack addItemToGenerator(GeneratorData gen, ItemStack toAdd) {
+        if (toAdd == null || toAdd.getType() == Material.AIR) return null;
+        Inventory inv = gen.inventory;
+        int maxSlot = Math.min(45, inv.getSize());
+
+        for (int i = 0; i < maxSlot; i++) {
+            ItemStack current = inv.getItem(i);
+            if (current != null && current.isSimilar(toAdd)) {
+                int space = current.getMaxStackSize() - current.getAmount();
+                if (space > 0) {
+                    int toMove = Math.min(space, toAdd.getAmount());
+                    current.setAmount(current.getAmount() + toMove);
+                    toAdd.setAmount(toAdd.getAmount() - toMove);
+                    if (toAdd.getAmount() <= 0) return null;
+                }
+            }
+        }
+
+        for (int i = 0; i < maxSlot; i++) {
+            ItemStack current = inv.getItem(i);
+            if (current == null || current.getType() == Material.AIR) {
+                inv.setItem(i, toAdd.clone());
+                return null;
+            }
+        }
+        return toAdd;
+    }
+
+    private void handleDropAllItems(Player player, GeneratorData gen) {
+        boolean droppedAny = false;
+        Location dropLoc = gen.loc.clone().add(0.5, 0.5, 0.5);
+        World world = gen.loc.getWorld();
+        int maxSlot = Math.min(45, gen.inventory.getSize());
+        for (int i = 0; i < maxSlot; i++) {
+            ItemStack item = gen.inventory.getItem(i);
+            if (item != null && item.getType() != Material.AIR) {
+                world.dropItemNaturally(dropLoc, item);
+                gen.inventory.setItem(i, null);
+                droppedAny = true;
+            }
+        }
+        if (droppedAny) {
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ITEM_PICKUP, 1.0f, 0.8f);
+            player.sendMessage(Component.text("📦 Dropped all items onto the ground!", NamedTextColor.YELLOW));
+            saveGenerators();
+        } else {
+            player.sendMessage(Component.text("ℹ️ Generator is already empty!", NamedTextColor.GRAY));
+        }
+    }
+
+    private void handleCollectMoney(Player player, GeneratorData gen) {
+        gen.updateHourlyMoney();
+        if (gen.storedErpies > 0) {
+            long amount = gen.storedErpies;
+            gen.storedErpies = 0;
+            UUID uuid = player.getUniqueId();
+            erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + amount);
+            updateScoreboard(player);
+            saveGenerators();
+            updateGeneratorBottomRow(gen);
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
+            player.sendMessage(Component.text("💰 Collected " + amount + " Erpies!", NamedTextColor.GREEN));
+        } else {
+            updateGeneratorBottomRow(gen);
+            long remainingMillis = Math.max(0L, 3600000L - (System.currentTimeMillis() - gen.lastHourlyMoney));
+            long remainingMinutes = (remainingMillis / 1000L) / 60L;
+            long remainingSeconds = (remainingMillis / 1000L) % 60L;
+            if (gen.isSpawner()) {
+                player.sendMessage(Component.text("❌ No Erpies to collect right now! Next 2,000 Erpies in " + remainingMinutes + "m " + remainingSeconds + "s.", NamedTextColor.RED));
+            } else {
+                player.sendMessage(Component.text("❌ No money stored in this generator.", NamedTextColor.RED));
+            }
+        }
+    }
+
+    private void handleDestroyGenerator(Player player, GeneratorData gen) {
+        player.closeInventory();
+
+        // Auto-collect any remaining money
+        gen.updateHourlyMoney();
+        if (gen.storedErpies > 0) {
+            UUID uuid = player.getUniqueId();
+            erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + gen.storedErpies);
+            updateScoreboard(player);
+            player.sendMessage(Component.text("💰 Auto-collected " + gen.storedErpies + " Erpies!", NamedTextColor.GREEN));
+            gen.storedErpies = 0;
+        }
+
+        // Drop stored items (slots 0..44)
+        Location dropLoc = gen.loc.clone().add(0.5, 0.5, 0.5);
+        World world = gen.loc.getWorld();
+        int maxSlot = Math.min(45, gen.inventory.getSize());
+        for (int i = 0; i < maxSlot; i++) {
+            ItemStack item = gen.inventory.getItem(i);
+            if (item != null && item.getType() != Material.AIR) {
+                world.dropItemNaturally(dropLoc, item);
+                gen.inventory.setItem(i, null);
+            }
+        }
+
+        // Drop the spawner / generator item
+        ItemStack genItem = createSpawnerOrGeneratorItem(gen.type);
+        if (genItem != null) {
+            world.dropItemNaturally(dropLoc, genItem);
+        }
+
+        // Break block & cleanup
+        gen.loc.getBlock().setType(Material.AIR);
+        generators.remove(gen.loc);
+        saveGenerators();
+
+        world.playSound(dropLoc, org.bukkit.Sound.BLOCK_ANVIL_BREAK, 1.0f, 1.0f);
+        player.sendMessage(Component.text("💥 " + getGeneratorDisplayName(gen.type) + " broken and turned into an item!", NamedTextColor.RED));
+    }
+
+    private GeneratorData convertToCustomSpawner(Block block) {
+        Location loc = block.getLocation();
+        if (generators.containsKey(loc)) return generators.get(loc);
+
+        String type = "mob_generator";
+        String cleanTitle = "Mob Spawner";
+        org.bukkit.entity.EntityType entityType = org.bukkit.entity.EntityType.ZOMBIE;
+
+        if (block.getState() instanceof org.bukkit.block.CreatureSpawner cs) {
+            org.bukkit.entity.EntityType spawned = cs.getSpawnedType();
+            if (spawned != null) {
+                switch (spawned) {
+                    case SPIDER, CAVE_SPIDER -> {
+                        type = "spider_generator";
+                        cleanTitle = "Spider Spawner";
+                        entityType = org.bukkit.entity.EntityType.SPIDER;
+                    }
+                    case ZOMBIE, HUSK, DROWNED, ZOMBIE_VILLAGER -> {
+                        type = "zombie_generator";
+                        cleanTitle = "Zombie Spawner";
+                        entityType = org.bukkit.entity.EntityType.ZOMBIE;
+                    }
+                    case SKELETON, STRAY, BOGGED, WITHER_SKELETON -> {
+                        type = "skeleton_generator";
+                        cleanTitle = "Skeleton Spawner";
+                        entityType = org.bukkit.entity.EntityType.SKELETON;
+                    }
+                    case CREEPER -> {
+                        type = "creeper_generator";
+                        cleanTitle = "Creeper Spawner";
+                        entityType = org.bukkit.entity.EntityType.CREEPER;
+                    }
+                    case WITCH -> {
+                        type = "witch_generator";
+                        cleanTitle = "Witch Spawner";
+                        entityType = org.bukkit.entity.EntityType.WITCH;
+                    }
+                    case IRON_GOLEM -> {
+                        type = "iron_golem_generator";
+                        cleanTitle = "Iron Golem Spawner";
+                        entityType = org.bukkit.entity.EntityType.IRON_GOLEM;
+                    }
+                    case SNOW_GOLEM -> {
+                        type = "snow_golem_generator";
+                        cleanTitle = "Snow Golem Spawner";
+                        entityType = org.bukkit.entity.EntityType.SNOW_GOLEM;
+                    }
+                    default -> {
+                        type = "zombie_generator";
+                        cleanTitle = "Zombie Spawner";
+                        entityType = org.bukkit.entity.EntityType.ZOMBIE;
+                    }
+                }
+                cs.setSpawnedType(entityType);
+                cs.update(true);
+            }
+        }
+
+        Inventory inv = createGeneratorInventory(cleanTitle);
+        GeneratorData data = new GeneratorData(loc, type, inv);
+        updateGeneratorBottomRow(data);
+        generators.put(loc, data);
+        saveGenerators();
+        return data;
+    }
+
+    @EventHandler
+    public void onGeneratorClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        UUID uuid = player.getUniqueId();
+        Location genLoc = openGenerator.get(uuid);
+        if (genLoc == null) return;
+        GeneratorData gen = generators.get(genLoc);
+        if (gen == null || !event.getInventory().equals(gen.inventory)) {
+            openGenerator.remove(uuid);
+            return;
+        }
+
+        int rawSlot = event.getRawSlot();
+        int invSize = gen.inventory.getSize();
+
+        // If clicking inside the generator inventory (slots 0..53)
+        if (rawSlot >= 0 && rawSlot < invSize) {
+            // Protect bottom row action buttons and borders
+            if (rawSlot >= 45 && rawSlot <= 53) {
+                event.setCancelled(true);
+                if (rawSlot == 46) {
+                    handleDropAllItems(player, gen);
+                } else if (rawSlot == 49) {
+                    handleCollectMoney(player, gen);
+                } else if (rawSlot == 52) {
+                    handleDestroyGenerator(player, gen);
+                }
+            }
+        } else if (event.isShiftClick()) {
+            // Shift-clicking from player inventory into generator
+            // Make sure items only fill slots 0..44 and never overwrite button slots
+            event.setCancelled(true);
+            ItemStack clickedItem = event.getCurrentItem();
+            if (clickedItem != null && clickedItem.getType() != Material.AIR) {
+                ItemStack remaining = addItemToGenerator(gen, clickedItem.clone());
+                if (remaining == null || remaining.getAmount() == 0) {
+                    event.setCurrentItem(null);
+                } else {
+                    event.setCurrentItem(remaining);
+                }
+                saveGenerators();
+            }
+        }
+    }
+
+    @EventHandler
+    public void onGeneratorDrag(org.bukkit.event.inventory.InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        Location genLoc = openGenerator.get(player.getUniqueId());
+        if (genLoc == null) return;
+        GeneratorData gen = generators.get(genLoc);
+        if (gen == null || !event.getInventory().equals(gen.inventory)) return;
+
+        for (int rawSlot : event.getRawSlots()) {
+            if (rawSlot >= 45 && rawSlot <= 53) {
+                event.setCancelled(true);
+                return;
+            }
+        }
     }
 
     private void saveGenerators() {
@@ -16448,9 +16902,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             tempConfig.set(path + ".y", loc.getY());
             tempConfig.set(path + ".z", loc.getZ());
             tempConfig.set(path + ".type", data.type);
-            
+            tempConfig.set(path + ".storedErpies", data.storedErpies);
+            tempConfig.set(path + ".lastHourlyMoney", data.lastHourlyMoney);
+
             List<ItemStack> itemList = new ArrayList<>();
-            for (ItemStack item : data.inventory.getContents()) {
+            int maxItems = Math.min(45, data.inventory.getSize());
+            for (int i = 0; i < maxItems; i++) {
+                ItemStack item = data.inventory.getItem(i);
                 itemList.add(item != null ? item.clone() : new ItemStack(Material.AIR));
             }
             tempConfig.set(path + ".items", itemList);
@@ -16458,7 +16916,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         java.io.File generatorsFile = new java.io.File(getDataFolder(), "generators.yml");
         String yamlString = tempConfig.saveToString();
-        
+
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 java.nio.file.Files.writeString(generatorsFile.toPath(), yamlString);
@@ -16472,14 +16930,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         generators.clear();
         java.io.File generatorsFile = new java.io.File(getDataFolder(), "generators.yml");
         org.bukkit.configuration.file.YamlConfiguration genConfig;
-        
+
         if (generatorsFile.exists()) {
             genConfig = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(generatorsFile);
         } else {
             // Fallback to legacy config.yml if generators.yml doesn't exist yet
             genConfig = (org.bukkit.configuration.file.YamlConfiguration) getConfig();
         }
-        
+
         if (!genConfig.contains("generators")) return;
         org.bukkit.configuration.ConfigurationSection sec = genConfig.getConfigurationSection("generators");
         if (sec == null) return;
@@ -16493,36 +16951,50 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (w == null) continue;
             Location loc = new Location(w, x, y, z);
             String type = genConfig.getString(path + ".type");
-            
+
             String title = capitalize(type.replace("_", " "));
-            Inventory inventory = Bukkit.createInventory(null, 27, Component.text(title));
+            if (type.endsWith("_generator") && !type.equals("ore_generator") && !type.equals("food_generator")) {
+                title = title.replace("Generator", "Spawner");
+            }
+            Inventory inventory = createGeneratorInventory(title);
             if (genConfig.contains(path + ".items")) {
                 List<?> list = genConfig.getList(path + ".items");
                 if (list != null) {
-                    for (int i = 0; i < Math.min(27, list.size()); i++) {
+                    for (int i = 0; i < Math.min(45, list.size()); i++) {
                         if (list.get(i) instanceof ItemStack) {
                             inventory.setItem(i, (ItemStack) list.get(i));
                         }
                     }
                 }
             }
-            generators.put(loc, new GeneratorData(loc, type, inventory));
+            long storedErpies = genConfig.getLong(path + ".storedErpies", 0L);
+            long lastHourlyMoney = genConfig.getLong(path + ".lastHourlyMoney", System.currentTimeMillis());
+            GeneratorData data = new GeneratorData(loc, type, inventory, storedErpies, lastHourlyMoney);
+            updateGeneratorBottomRow(data);
+            generators.put(loc, data);
         }
     }
 
     @EventHandler
     public void onGeneratorInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof Player player) {
+            openGenerator.remove(player.getUniqueId());
+        }
         String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
-        if (title.equals("Food Generator") || title.equals("Ore Generator") || title.equals("Tools Generator") || title.endsWith("Generator")) {
+        if (title.equals("Food Generator") || title.equals("Ore Generator") || title.endsWith("Generator") || title.endsWith("Spawner")) {
             saveGenerators();
         }
     }
 
     @EventHandler
     public void onSpawnerSpawn(org.bukkit.event.entity.SpawnerSpawnEvent event) {
-        if (generators.containsKey(event.getSpawner().getLocation())) {
-            event.setCancelled(true);
+        org.bukkit.block.CreatureSpawner spawner = event.getSpawner();
+        Block block = spawner.getBlock();
+        Location loc = block.getLocation();
+        if (!generators.containsKey(loc)) {
+            convertToCustomSpawner(block);
         }
+        event.setCancelled(true);
     }
 
     private void openCartGui(Player player) {
