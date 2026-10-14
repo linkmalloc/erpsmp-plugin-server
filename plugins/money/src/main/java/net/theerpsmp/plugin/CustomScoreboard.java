@@ -8965,7 +8965,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     
                     Player sellerPlayer = Bukkit.getPlayer(clickedListing.seller);
                     if (sellerPlayer != null) {
-                        sellerPlayer.sendMessage(Component.text("💰 Your listed item was sold! Received: " + clickedListing.price + " Erpies", NamedTextColor.GREEN));
+                        sellerPlayer.sendMessage(Component.text("💰 Your listed item was sold! Received: " + formatValue(clickedListing.price) + " Erpies", NamedTextColor.GREEN));
                     }
 
                     openAuctionGui(player, null);
@@ -9054,7 +9054,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + target.price);
                     savePlayerData(uuid);
                     updateScoreboard(player);
-                    player.sendMessage(Component.text("❌ Order cancelled. " + String.format("%,d", target.price) + " Erpies refunded!", NamedTextColor.YELLOW));
+                    player.sendMessage(Component.text("❌ Order cancelled. " + formatValue(target.price) + " Erpies refunded!", NamedTextColor.YELLOW));
                     player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ANVIL_USE, 0.7f, 1.2f);
                     openOrdersGui(player, query);
                     return;
@@ -9112,7 +9112,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (toDeliver >= needed) {
                     orders.remove(target);
                     deleteOrderFromDatabase(target.id);
-                    player.sendMessage(Component.text("✅ Order fully fulfilled! You delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + String.format("%,d", pay) + " Erpies.", NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("✅ Order fully fulfilled! You delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + formatValue(pay) + " Erpies.", NamedTextColor.GREEN));
                 } else {
                     int remainingQty = needed - toDeliver;
                     long remainingPrice = Math.max(1, target.price - pay);
@@ -9122,7 +9122,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         orders.set(index, updated);
                     }
                     updateOrderInDatabase(updated);
-                    player.sendMessage(Component.text("✅ Partial order fulfilled! Delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + String.format("%,d", pay) + " Erpies. (" + String.format("%,d", remainingQty) + " remaining)", NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("✅ Partial order fulfilled! Delivered " + String.format("%,d", toDeliver) + "x " + formatItemDisplayName(mat) + " and received " + formatValue(pay) + " Erpies. (" + String.format("%,d", remainingQty) + " remaining)", NamedTextColor.GREEN));
                 }
                 player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
                 openOrdersGui(player, query);
@@ -9291,7 +9291,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + toCancel.price);
                     savePlayerData(uuid);
                     updateScoreboard(player);
-                    player.sendMessage(Component.text("❌ Order cancelled. " + String.format("%,d", toCancel.price) + " Erpies refunded.", NamedTextColor.YELLOW));
+                    player.sendMessage(Component.text("❌ Order cancelled. " + formatValue(toCancel.price) + " Erpies refunded.", NamedTextColor.YELLOW));
                     player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ANVIL_USE, 0.7f, 1.2f);
                     openMyOrders(player);
                 }
@@ -10027,7 +10027,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 List<Component> lore = new ArrayList<>();
                 lore.add(Component.text("Buyer: " + (isOwn ? "You (" + order.buyerName + ")" : order.buyerName), isOwn ? NamedTextColor.GREEN : NamedTextColor.GRAY));
                 lore.add(Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE));
-                lore.add(Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD));
+                lore.add(Component.text("Paying: " + formatValue(order.price) + " Erpies", NamedTextColor.GOLD));
                 if (isOwn) {
                     lore.add(Component.text("§a✦ YOUR POSTED ORDER ✦"));
                     lore.add(Component.text("§cClick to cancel & refund your Erpies"));
@@ -10064,7 +10064,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 meta.displayName(Component.text(formatItemDisplayName(mat), NamedTextColor.GREEN));
                 meta.lore(List.of(
                     Component.text("Wants: " + String.format("%,d", order.quantity) + "x " + formatItemDisplayName(mat), NamedTextColor.WHITE),
-                    Component.text("Paying: " + String.format("%,d", order.price) + " Erpies", NamedTextColor.GOLD),
+                    Component.text("Paying: " + formatValue(order.price) + " Erpies", NamedTextColor.GOLD),
                     Component.text("§cClick to cancel & refund your Erpies", NamedTextColor.RED)
                 ));
                 display.setItemMeta(meta);
@@ -10464,9 +10464,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     .append(Component.text(worth, NamedTextColor.WHITE)),
                 Component.text("Total Est. Worth: ", NamedTextColor.GRAY)
                     .append(Component.text("$ ", NamedTextColor.GREEN))
-                    .append(Component.text(String.format("%,d", estWorth), NamedTextColor.WHITE)),
+                    .append(Component.text(formatValue(estWorth), NamedTextColor.WHITE)),
                 Component.text("Your Balance: ", NamedTextColor.GRAY)
-                    .append(Component.text(String.format("%,d", playerBal) + " Erpies", NamedTextColor.GOLD)),
+                    .append(Component.text(formatValue(playerBal) + " Erpies", NamedTextColor.GOLD)),
                 Component.text("Select total price to offer sellers:", NamedTextColor.YELLOW)
             ));
             itemDisplay.setItemMeta(meta);
@@ -10474,13 +10474,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(4, itemDisplay);
 
         // Presets
-        inv.setItem(11, createGuiItem(Material.EMERALD, "Est. Worth (" + String.format("%,d", estWorth) + " Erpies)", NamedTextColor.GREEN, "Pay market estimated price: " + String.format("%,d", estWorth) + " Erpies"));
+        inv.setItem(11, createGuiItem(Material.EMERALD, "Est. Worth (" + formatValue(estWorth) + " Erpies)", NamedTextColor.GREEN, "Pay market estimated price: " + formatValue(estWorth) + " Erpies"));
         inv.setItem(12, createGuiItem(Material.GOLD_NUGGET, "100 Erpies", NamedTextColor.YELLOW, "Offer total: 100 Erpies"));
-        inv.setItem(13, createGuiItem(Material.GOLD_INGOT, "1,000 Erpies (1k)", NamedTextColor.GOLD, "Offer total: 1,000 Erpies"));
-        inv.setItem(14, createGuiItem(Material.DIAMOND, "10,000 Erpies (10k)", NamedTextColor.AQUA, "Offer total: 10,000 Erpies"));
-        inv.setItem(15, createGuiItem(Material.NETHERITE_INGOT, "100,000 Erpies (100k)", NamedTextColor.LIGHT_PURPLE, "Offer total: 100,000 Erpies"));
-        inv.setItem(20, createGuiItem(Material.NETHERITE_BLOCK, "500,000 Erpies (500k)", NamedTextColor.DARK_PURPLE, "Offer total: 500,000 Erpies"));
-        inv.setItem(21, createGuiItem(Material.BEACON, "1,000,000 Erpies (1M)", NamedTextColor.GOLD, "Offer total: 1,000,000 Erpies"));
+        inv.setItem(13, createGuiItem(Material.GOLD_INGOT, "1k Erpies", NamedTextColor.GOLD, "Offer total: 1k Erpies"));
+        inv.setItem(14, createGuiItem(Material.DIAMOND, "10k Erpies", NamedTextColor.AQUA, "Offer total: 10k Erpies"));
+        inv.setItem(15, createGuiItem(Material.NETHERITE_INGOT, "100k Erpies", NamedTextColor.LIGHT_PURPLE, "Offer total: 100k Erpies"));
+        inv.setItem(20, createGuiItem(Material.NETHERITE_BLOCK, "500k Erpies", NamedTextColor.DARK_PURPLE, "Offer total: 500k Erpies"));
+        inv.setItem(21, createGuiItem(Material.BEACON, "1M Erpies", NamedTextColor.GOLD, "Offer total: 1M Erpies"));
 
         inv.setItem(23, createGuiItem(Material.NAME_TAG, "Custom Price", NamedTextColor.YELLOW, "Click to type custom price", "Examples: 500, 10k, 1m"));
 
@@ -10509,7 +10509,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
         if (bal < price) {
-            player.sendMessage(Component.text("❌ You don't have enough Erpies! Need: " + String.format("%,d", price) + ", Have: " + String.format("%,d", bal), NamedTextColor.RED));
+            player.sendMessage(Component.text("❌ You don't have enough Erpies! Need: " + formatValue(price) + ", Have: " + formatValue(bal), NamedTextColor.RED));
             return;
         }
 
@@ -10532,7 +10532,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         player.sendMessage(Component.text("§a======================================="));
         player.sendMessage(Component.text("§a✅ Buy order successfully posted!"));
         player.sendMessage(Component.text("§fItem: §e" + String.format("%,d", quantity) + "x " + display));
-        player.sendMessage(Component.text("§fTotal Paid: §6" + String.format("%,d", price) + " Erpies §7(held in escrow)"));
+        player.sendMessage(Component.text("§fTotal Paid: §6" + formatValue(price) + " Erpies §7(held in escrow)"));
         player.sendMessage(Component.text("§7Your order is now live on the Order Board!"));
         player.sendMessage(Component.text("§a======================================="));
 
@@ -10553,7 +10553,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (meta != null) {
                 List<Component> lore = meta.lore();
                 if (lore == null) lore = new ArrayList<>();
-                lore.add(Component.text("Price: " + listing.price + " Erpies", NamedTextColor.GOLD));
+                lore.add(Component.text("Price: " + formatValue(listing.price) + " Erpies", NamedTextColor.GOLD));
                 lore.add(Component.text("Seller: " + listing.sellerName, NamedTextColor.GRAY));
                 lore.add(Component.text("Click to buy", NamedTextColor.GREEN));
                 meta.lore(lore);
@@ -10582,7 +10582,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (meta != null) {
                     List<Component> lore = meta.lore();
                     if (lore == null) lore = new ArrayList<>();
-                    lore.add(Component.text("Price: " + listing.price + " Erpies", NamedTextColor.YELLOW));
+                    lore.add(Component.text("Price: " + formatValue(listing.price) + " Erpies", NamedTextColor.YELLOW));
                     lore.add(Component.text("Click to cancel listing", NamedTextColor.RED));
                     meta.lore(lore);
                     item.setItemMeta(meta);
@@ -11149,7 +11149,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             player.getInventory().addItem(pending.item);
                         } else {
                             listings.add(new AuctionListing(uuid, player.getName(), pending.item, price));
-                            player.sendMessage(Component.text("✅ Item successfully listed for " + price + " Erpies!", NamedTextColor.GREEN));
+                            player.sendMessage(Component.text("✅ Item successfully listed for " + formatValue(price) + " Erpies!", NamedTextColor.GREEN));
                             Bukkit.getScheduler().runTask(this, () -> openAuctionGui(player, null));
                         }
                     } catch (NumberFormatException e) {
@@ -11725,17 +11725,25 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     private String formatValue(long value) {
+        if (value == Long.MIN_VALUE) return "-9.2E";
+        if (value < 0) {
+            return "-" + formatValue(-value);
+        }
         if (value >= 1_000_000_000_000L) {
-            return (value % 1_000_000_000_000L == 0) ? (value / 1_000_000_000_000L) + "T" : String.format("%.1fT", value / 1_000_000_000_000.0);
+            String s = String.format(java.util.Locale.US, "%.1fT", value / 1_000_000_000_000.0);
+            return s.endsWith(".0T") ? s.replace(".0T", "T") : s;
         }
         if (value >= 1_000_000_000L) {
-            return (value % 1_000_000_000L == 0) ? (value / 1_000_000_000L) + "B" : String.format("%.1fB", value / 1_000_000_000.0);
+            String s = String.format(java.util.Locale.US, "%.1fB", value / 1_000_000_000.0);
+            return s.endsWith(".0B") ? s.replace(".0B", "B") : s;
         }
         if (value >= 1_000_000L) {
-            return (value % 1_000_000L == 0) ? (value / 1_000_000L) + "M" : String.format("%.1fM", value / 1_000_000.0);
+            String s = String.format(java.util.Locale.US, "%.1fM", value / 1_000_000.0);
+            return s.endsWith(".0M") ? s.replace(".0M", "M") : s;
         }
         if (value >= 1000L) {
-            return (value % 1000L == 0) ? (value / 1000L) + "k" : String.format("%.1fk", value / 1000.0);
+            String s = String.format(java.util.Locale.US, "%.1fk", value / 1000.0);
+            return s.endsWith(".0k") ? s.replace(".0k", "k") : s;
         }
         return String.valueOf(value);
     }
