@@ -2764,16 +2764,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        // /rank 05132014!Cc (e+/e+p/e+pm/vip) (set/reset) player
+        // /rank (e+/e+p/e+pm/vip) (set/reset) player [OP only]
         if (command.getName().equalsIgnoreCase("rank")) {
-            if (args.length < 3) {
-                player.sendMessage(Component.text("❌ Usage: /rank 05132014!Cc <e+/e+p/e+pm/vip> <set/reset> <player>", NamedTextColor.RED));
+            if (!player.isOp() && !isRedToppat(player.getUniqueId()) && !player.getUniqueId().equals(BOREAS_UUID)) {
+                player.sendMessage(Component.text("❌ You must be an operator to use this command!", NamedTextColor.RED));
                 return true;
             }
 
-            String password = args[0];
-            if (!password.equals("05132014!Cc") && !password.equals("05132014")) {
-                player.sendMessage(Component.text("❌ Incorrect password!", NamedTextColor.RED));
+            String[] effectiveArgs = args;
+            if (args.length > 0 && (args[0].equals("05132014!Cc") || args[0].equals("05132014"))) {
+                effectiveArgs = java.util.Arrays.copyOfRange(args, 1, args.length);
+            }
+
+            if (effectiveArgs.length < 2) {
+                player.sendMessage(Component.text("❌ Usage: /rank <e+/e+p/e+pm/vip> <set/reset> <player> (or /rank reset <player>)", NamedTextColor.RED));
                 return true;
             }
 
@@ -2781,23 +2785,23 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             String action;
             String targetName;
 
-            if (args.length == 3) {
-                if (args[1].equalsIgnoreCase("reset")) {
+            if (effectiveArgs.length == 2) {
+                if (effectiveArgs[0].equalsIgnoreCase("reset")) {
                     rankArg = "none";
                     action = "reset";
-                    targetName = args[2];
-                } else if (args[2].equalsIgnoreCase("reset")) {
+                    targetName = effectiveArgs[1];
+                } else if (effectiveArgs[1].equalsIgnoreCase("reset")) {
                     rankArg = "none";
                     action = "reset";
-                    targetName = args[1];
+                    targetName = effectiveArgs[0];
                 } else {
-                    player.sendMessage(Component.text("❌ Usage: /rank 05132014!Cc <e+/e+p/e+pm/vip> <set/reset> <player>", NamedTextColor.RED));
+                    player.sendMessage(Component.text("❌ Usage: /rank <e+/e+p/e+pm/vip> <set/reset> <player> (or /rank reset <player>)", NamedTextColor.RED));
                     return true;
                 }
             } else {
-                rankArg = args[1].toLowerCase().trim().replace(" ", "");
-                action = args[2].toLowerCase().trim();
-                targetName = args[3];
+                rankArg = effectiveArgs[0].toLowerCase().trim().replace(" ", "");
+                action = effectiveArgs[1].toLowerCase().trim();
+                targetName = effectiveArgs[2];
 
                 if (!action.equals("set") && !action.equals("reset")) {
                     player.sendMessage(Component.text("❌ Invalid action! Use 'set' or 'reset'.", NamedTextColor.RED));
@@ -8090,10 +8094,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
-        if (title.equals("Choose Spawner Type")) {
+        if (title.equals("Choose Spawner Type") || PlainTextComponentSerializer.plainText().serialize(event.getView().title()).equals("Choose Spawner Type")) {
             event.setCancelled(true);
             int slot = event.getRawSlot();
-            Location loc = activeMobGeneratorSetup.remove(uuid);
+            Location loc = activeMobGeneratorSetup.get(uuid);
             if (loc == null) return;
 
             String generatorType = null;
@@ -8131,6 +8135,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             if (generatorType != null) {
+                activeMobGeneratorSetup.remove(uuid);
                 // Clear the clicked item from the selection GUI
                 event.setCurrentItem(null);
 
@@ -8150,7 +8155,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                 player.closeInventory();
                 player.sendMessage(Component.text("✅ Spawner configured as " + cleanName + " Spawner!", NamedTextColor.GREEN));
-                player.sendMessage(Component.text("Right-click the spawner to open its double chest inventory.", NamedTextColor.GRAY));
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    if (player.isOnline()) {
+                        openGenerator.put(player.getUniqueId(), loc);
+                        player.openInventory(genInv);
+                        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CHEST_OPEN, 0.5f, 1.0f);
+                    }
+                }, 2L);
             }
             return;
         }
@@ -9956,13 +9967,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Mob Generator", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("A custom spawner generator.", NamedTextColor.YELLOW),
-                Component.text("Generates mob drops & 2,000 Erpies/hour.", NamedTextColor.AQUA),
-                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Right-click to configure spawner type.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "mob_generator");
             item.setItemMeta(meta);
         }
@@ -11793,11 +11797,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = pick.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Pickaxe", NamedTextColor.AQUA));
-            meta.lore(List.of(
-                Component.text("Mined blocks burst with sonic echoes.", NamedTextColor.GRAY),
-                Component.text("Mines a 3x3 hole forward,", NamedTextColor.GRAY),
-                Component.text("or a 1x3 hole downwards.", NamedTextColor.GRAY)
-            ));
             meta.addEnchant(Enchantment.EFFICIENCY, 5, true);
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.MENDING, 1, true);
@@ -11812,10 +11811,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = shovel.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Shovel", NamedTextColor.AQUA));
-            meta.lore(List.of(
-                Component.text("Mines a 3x3 hole forward/downward.", NamedTextColor.GRAY),
-                Component.text("Creates a 3x3 path when making grass paths.", NamedTextColor.GRAY)
-            ));
             meta.addEnchant(Enchantment.EFFICIENCY, 3, true);
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.MENDING, 1, true);
@@ -11830,9 +11825,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = axe.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Axe", NamedTextColor.AQUA));
-            meta.lore(List.of(
-                Component.text("Cuts down entire trees with a single chop.", NamedTextColor.GRAY)
-            ));
             meta.addEnchant(Enchantment.EFFICIENCY, 5, true);
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.MENDING, 1, true);
@@ -11847,9 +11839,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = bow.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Bow", NamedTextColor.AQUA));
-            meta.lore(List.of(
-                Component.text("Arrows trail sonic explosions and blind targets.", NamedTextColor.GRAY)
-            ));
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.MENDING, 1, true);
             meta.addEnchant(Enchantment.INFINITY, 1, true);
@@ -11864,9 +11853,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = stick.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Knockback Stick", NamedTextColor.RED));
-            meta.lore(List.of(
-                Component.text("Sends targets into orbit.", NamedTextColor.GRAY)
-            ));
             meta.addEnchant(Enchantment.KNOCKBACK, 100, true);
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "knockback_stick");
             stick.setItemMeta(meta);
@@ -11879,10 +11865,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = rod.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Orbital Strike", NamedTextColor.RED));
-            meta.lore(List.of(
-                Component.text("Launches a massive TNT strike where you look.", NamedTextColor.DARK_RED),
-                Component.text("Cooldown: 2 mins", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "orbital_strike");
             rod.setItemMeta(meta);
         }
@@ -11894,10 +11876,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = trident.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Lunge Spear", NamedTextColor.GOLD));
-            meta.lore(List.of(
-                Component.text("Right-click to lunge forward.", NamedTextColor.YELLOW),
-                Component.text("Cooldown: 5s. Switches reset cooldown.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "lunge_spear");
             trident.setItemMeta(meta);
         }
@@ -11909,12 +11887,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = axe.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Wand", NamedTextColor.GOLD));
-            meta.lore(List.of(
-                Component.text("World editing selection wand.", NamedTextColor.YELLOW),
-                Component.text("Left-click: Set Point 1", NamedTextColor.GRAY),
-                Component.text("Right-click: Set Point 2", NamedTextColor.GRAY),
-                Component.text("Run /copy to copy selected region.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "wand");
             axe.setItemMeta(meta);
         }
@@ -11926,12 +11898,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = egg.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("NPC Spawn Egg", NamedTextColor.LIGHT_PURPLE, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Spawn a customizable NPC.", NamedTextColor.YELLOW),
-                Component.text("1. Rename this egg in an anvil to a player's name.", NamedTextColor.GRAY),
-                Component.text("2. Right-click a block to spawn the NPC.", NamedTextColor.GRAY),
-                Component.text("3. Shift+Right-click the NPC to pick it up.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "npc_egg");
             egg.setItemMeta(meta);
         }
@@ -11943,13 +11909,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sign.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Floating Text", NamedTextColor.LIGHT_PURPLE, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Place to create floating text.", NamedTextColor.YELLOW),
-                Component.text("1. Place on the ground or a wall.", NamedTextColor.GRAY),
-                Component.text("2. Type text in the Oak Sign editor.", NamedTextColor.GRAY),
-                Component.text("3. Choose a color in the GUI.", NamedTextColor.GRAY),
-                Component.text("4. Shift+Left-click the block to remove.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "floating_text");
             sign.setItemMeta(meta);
         }
@@ -11961,13 +11920,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sign.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Leaderboard Text", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Place to create a leaderboard floating text.", NamedTextColor.YELLOW),
-                Component.text("1. Place on the ground or a wall.", NamedTextColor.GRAY),
-                Component.text("2. Type 'kills', 'erpies', or 'derpies' in the sign.", NamedTextColor.GRAY),
-                Component.text("3. Choose a color in the GUI.", NamedTextColor.GRAY),
-                Component.text("4. Shift+Left-click the block to remove.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "leaderboard_text");
             sign.setItemMeta(meta);
         }
@@ -11979,12 +11931,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Command Chest", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Place to bind a command chest UI.", NamedTextColor.YELLOW),
-                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Type a command (e.g. /rtp) in the Sign UI.", NamedTextColor.GRAY),
-                Component.text("3. Right-click to open that command's UI.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "command_chest");
             chest.setItemMeta(meta);
         }
@@ -12031,12 +11977,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = powder.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Divine Flame", NamedTextColor.RED, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Concentrated essence of celestial fire.", NamedTextColor.YELLOW),
-                Component.text("1. Left-click an entity to set them on fire.", NamedTextColor.GRAY),
-                Component.text("2. Crouch + hold Right-click for 3s to charge a fireball.", NamedTextColor.GRAY),
-                Component.text("3. Unleashes a massive flame tornado on impact.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "divine_flame");
             powder.setItemMeta(meta);
         }
@@ -12650,11 +12590,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Shop Crate", NamedTextColor.GOLD));
-            meta.lore(List.of(
-                Component.text("Place to start a custom shop.", NamedTextColor.GRAY),
-                Component.text("Can only be configured in Creative.", NamedTextColor.GRAY),
-                Component.text("Cannot be obtained in Survival.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "shop_crate");
             chest.setItemMeta(meta);
         }
@@ -13077,9 +13012,27 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
+    private void cleanCustomItemLore(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return;
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null && meta.getPersistentDataContainer().has(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING)) {
+            if (meta.hasLore()) {
+                meta.lore(null);
+                item.setItemMeta(meta);
+            }
+        }
+    }
+
+    @EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+    public void onCustomItemInventoryClick(InventoryClickEvent event) {
+        cleanCustomItemLore(event.getCurrentItem());
+        cleanCustomItemLore(event.getCursor());
+    }
+
     @EventHandler
     public void onItemHeldChange(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
+        cleanCustomItemLore(player.getInventory().getItem(event.getNewSlot()));
         UUID uuid = player.getUniqueId();
         if (lastLungeTime.containsKey(uuid)) {
             long diff = System.currentTimeMillis() - lastLungeTime.get(uuid);
@@ -13092,6 +13045,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
+        cleanCustomItemLore(event.getItem());
         if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             ItemStack item = event.getItem();
             if (item != null && item.hasItemMeta()) {
@@ -13212,6 +13166,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return;
             }
             if (block != null && block.getType() == Material.SPAWNER) {
+                if (event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND) {
+                    event.setCancelled(true);
+                    return;
+                }
                 Location loc = block.getLocation();
                 if (!generators.containsKey(loc)) {
                     convertToCustomSpawner(block);
@@ -13761,7 +13719,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sword.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Sword o' Derp", NamedTextColor.GOLD));
-            meta.lore(List.of(Component.text("You Just Got Derped", NamedTextColor.DARK_PURPLE)));
             if (meta instanceof org.bukkit.inventory.meta.Damageable dmg) {
                 dmg.setDamage(Material.WOODEN_SWORD.getMaxDurability() - 1);
             }
@@ -13779,7 +13736,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = pick.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Pickaxe o' Lerp", NamedTextColor.AQUA));
-            meta.lore(List.of(Component.text("Mines the entire vein of ores.", NamedTextColor.GRAY)));
             meta.addEnchant(Enchantment.EFFICIENCY, 10000, true);
             meta.addEnchant(Enchantment.FORTUNE, 1000, true);
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "pickaxe_lerp");
@@ -13793,7 +13749,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = mace.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Mace o' Merp", NamedTextColor.LIGHT_PURPLE));
-            meta.lore(List.of(Component.text("Merp! Feel the wind burst.", NamedTextColor.GRAY)));
             meta.addEnchant(Enchantment.WIND_BURST, 3, true);
             meta.addEnchant(Enchantment.DENSITY, 1000000, true);
             meta.addEnchant(Enchantment.BREACH, 100000000, true);
@@ -13842,7 +13797,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sword.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Sword", NamedTextColor.AQUA));
-            meta.lore(List.of(Component.text("Strikes targets with blinding sonic echoes.", NamedTextColor.GRAY)));
             meta.addEnchant(Enchantment.MENDING, 1, true);
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.FIRE_ASPECT, 2, true);
@@ -13858,9 +13812,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sword.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Ender Sword", NamedTextColor.LIGHT_PURPLE).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
-            meta.lore(List.of(
-                Component.text("Right-click to throw a teleporting ender pearl.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "ender_sword");
             sword.setItemMeta(meta);
         }
@@ -13872,9 +13823,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sword.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Zeus Sword", NamedTextColor.GOLD).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
-            meta.lore(List.of(
-                Component.text("Right-click to strike lightning where you look.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "zeus_sword");
             sword.setItemMeta(meta);
         }
@@ -13886,13 +13834,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = sword.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("The Goaty Sword", NamedTextColor.GOLD).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
-            meta.lore(List.of(
-                Component.text("Right-click or strike to unleash the Goaty Ability.", NamedTextColor.YELLOW),
-                Component.text("Deals 1-10 hearts of random damage.", NamedTextColor.GRAY),
-                Component.text("Totems can still save players from death.", NamedTextColor.GRAY),
-                Component.text("Does not damage or break armor.", NamedTextColor.GRAY),
-                Component.text("Cooldown: 10s", NamedTextColor.DARK_GRAY)
-            ));
             meta.addEnchant(Enchantment.SHARPNESS, 5, true);
             meta.addEnchant(Enchantment.UNBREAKING, 3, true);
             meta.addEnchant(Enchantment.MENDING, 1, true);
@@ -14030,7 +13971,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("End Gateway Portal", NamedTextColor.LIGHT_PURPLE));
-            meta.lore(List.of(Component.text("Spawns an End Gateway portal when placed.", NamedTextColor.GRAY)));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "end_gateway");
             item.setItemMeta(meta);
         }
@@ -14042,10 +13982,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Frame", NamedTextColor.DARK_PURPLE).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
-            meta.lore(List.of(
-                Component.text("Build a vertical rectangular frame of any size,", NamedTextColor.GRAY),
-                Component.text("then right-click it with an Echo Starter to activate.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_frame");
             item.setItemMeta(meta);
         }
@@ -14057,9 +13993,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Starter", NamedTextColor.AQUA).decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true));
-            meta.lore(List.of(
-                Component.text("Right-click on an Echo Frame to activate the Echo Portal.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_starter");
             item.setItemMeta(meta);
         }
@@ -14569,10 +14502,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Crate", NamedTextColor.AQUA));
-            meta.lore(List.of(
-                Component.text("Place to start an Echo keys shop.", NamedTextColor.GRAY),
-                Component.text("Shows your Echo keys balance above.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_crate");
             chest.setItemMeta(meta);
         }
@@ -14584,10 +14513,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Crimson Crate", NamedTextColor.RED));
-            meta.lore(List.of(
-                Component.text("Place to start a Crimson keys shop.", NamedTextColor.GRAY),
-                Component.text("Shows your Crimson keys balance above.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "crimson_crate");
             chest.setItemMeta(meta);
         }
@@ -14599,10 +14524,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Key Crate", NamedTextColor.BLUE));
-            meta.lore(List.of(
-                Component.text("Place to start a Keys shop.", NamedTextColor.GRAY),
-                Component.text("Shows your Keys balance above.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "key_crate");
             chest.setItemMeta(meta);
         }
@@ -14614,10 +14535,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("End Crate", NamedTextColor.LIGHT_PURPLE));
-            meta.lore(List.of(
-                Component.text("Place to start an End keys shop.", NamedTextColor.GRAY),
-                Component.text("Shows your End keys balance above.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "end_crate");
             chest.setItemMeta(meta);
         }
@@ -14629,10 +14546,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = chest.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Amethyst Crate", NamedTextColor.DARK_PURPLE));
-            meta.lore(List.of(
-                Component.text("Place to start an Amethyst keys shop.", NamedTextColor.GRAY),
-                Component.text("Shows your Amethyst keys balance above.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "amethyst_crate");
             chest.setItemMeta(meta);
         }
@@ -14644,10 +14557,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = key.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Echo Key", NamedTextColor.AQUA));
-            meta.lore(List.of(
-                Component.text("A key imbued with echo energy.", NamedTextColor.GRAY),
-                Component.text("Used to open Echo Crates.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "echo_key");
             key.setItemMeta(meta);
         }
@@ -14659,10 +14568,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = key.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Crimson Key", NamedTextColor.RED));
-            meta.lore(List.of(
-                Component.text("A key forged in crimson flame.", NamedTextColor.GRAY),
-                Component.text("Used to open Crimson Crates.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "crimson_key");
             key.setItemMeta(meta);
         }
@@ -14674,9 +14579,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = key.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("End Key", NamedTextColor.LIGHT_PURPLE));
-            meta.lore(List.of(
-                Component.text("A key vibrating with ender energy.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "end_key");
             key.setItemMeta(meta);
         }
@@ -14688,9 +14590,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = key.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Amethyst Key", NamedTextColor.DARK_PURPLE));
-            meta.lore(List.of(
-                Component.text("A shiny key forged from amethyst crystal.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "amethyst_key");
             key.setItemMeta(meta);
         }
@@ -16488,12 +16387,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Food Generator", NamedTextColor.GOLD, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Generates steak every minute.", NamedTextColor.YELLOW),
-                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Right-click placed block to open inventory.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "food_generator");
             item.setItemMeta(meta);
         }
@@ -16505,12 +16398,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Ore Generator", NamedTextColor.AQUA, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("Generates diamonds every minute.", NamedTextColor.YELLOW),
-                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Right-click placed block to open inventory.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, "ore_generator");
             item.setItemMeta(meta);
         }
@@ -16538,14 +16425,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text(displayName, color, net.kyori.adventure.text.format.TextDecoration.BOLD));
-            meta.lore(List.of(
-                Component.text("A custom mob spawner.", NamedTextColor.YELLOW),
-                Component.text("Spawns " + dropMaterial.name().toLowerCase().replace("_", " ") + " every 5s.", NamedTextColor.GOLD),
-                Component.text("Generates 2,000 Erpies every hour.", NamedTextColor.AQUA),
-                Component.text("1. Place on the ground.", NamedTextColor.GRAY),
-                Component.text("2. Right-click to open double chest storage.", NamedTextColor.GRAY),
-                Component.text("3. Sneak + left-click or use button to break.", NamedTextColor.GRAY)
-            ));
             meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING, type);
             item.setItemMeta(meta);
         }
@@ -16775,58 +16654,72 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Location loc = block.getLocation();
         if (generators.containsKey(loc)) return generators.get(loc);
 
-        String type = "mob_generator";
-        String cleanTitle = "Mob Spawner";
+        String type = "zombie_generator";
+        String cleanTitle = "Zombie Spawner";
         org.bukkit.entity.EntityType entityType = org.bukkit.entity.EntityType.ZOMBIE;
 
         if (block.getState() instanceof org.bukkit.block.CreatureSpawner cs) {
             org.bukkit.entity.EntityType spawned = cs.getSpawnedType();
-            if (spawned != null) {
-                switch (spawned) {
-                    case SPIDER, CAVE_SPIDER -> {
-                        type = "spider_generator";
-                        cleanTitle = "Spider Spawner";
-                        entityType = org.bukkit.entity.EntityType.SPIDER;
+            if (spawned == null) {
+                try {
+                    for (org.bukkit.block.spawner.SpawnerEntry entry : cs.getPotentialSpawns()) {
+                        if (entry.getSnapshot() != null && entry.getSnapshot().getEntityType() != null) {
+                            spawned = entry.getSnapshot().getEntityType();
+                            break;
+                        }
                     }
-                    case ZOMBIE, HUSK, DROWNED, ZOMBIE_VILLAGER -> {
-                        type = "zombie_generator";
-                        cleanTitle = "Zombie Spawner";
-                        entityType = org.bukkit.entity.EntityType.ZOMBIE;
-                    }
-                    case SKELETON, STRAY, BOGGED, WITHER_SKELETON -> {
-                        type = "skeleton_generator";
-                        cleanTitle = "Skeleton Spawner";
-                        entityType = org.bukkit.entity.EntityType.SKELETON;
-                    }
-                    case CREEPER -> {
-                        type = "creeper_generator";
-                        cleanTitle = "Creeper Spawner";
-                        entityType = org.bukkit.entity.EntityType.CREEPER;
-                    }
-                    case WITCH -> {
-                        type = "witch_generator";
-                        cleanTitle = "Witch Spawner";
-                        entityType = org.bukkit.entity.EntityType.WITCH;
-                    }
-                    case IRON_GOLEM -> {
-                        type = "iron_golem_generator";
-                        cleanTitle = "Iron Golem Spawner";
-                        entityType = org.bukkit.entity.EntityType.IRON_GOLEM;
-                    }
-                    case SNOW_GOLEM -> {
-                        type = "snow_golem_generator";
-                        cleanTitle = "Snow Golem Spawner";
-                        entityType = org.bukkit.entity.EntityType.SNOW_GOLEM;
-                    }
-                    default -> {
-                        type = "zombie_generator";
-                        cleanTitle = "Zombie Spawner";
-                        entityType = org.bukkit.entity.EntityType.ZOMBIE;
-                    }
+                } catch (Throwable ignored) {}
+            }
+            if (spawned == null) {
+                spawned = org.bukkit.entity.EntityType.ZOMBIE;
+            }
+
+            switch (spawned) {
+                case SPIDER, CAVE_SPIDER -> {
+                    type = "spider_generator";
+                    cleanTitle = "Spider Spawner";
+                    entityType = org.bukkit.entity.EntityType.SPIDER;
                 }
+                case ZOMBIE, HUSK, DROWNED, ZOMBIE_VILLAGER -> {
+                    type = "zombie_generator";
+                    cleanTitle = "Zombie Spawner";
+                    entityType = org.bukkit.entity.EntityType.ZOMBIE;
+                }
+                case SKELETON, STRAY, BOGGED, WITHER_SKELETON -> {
+                    type = "skeleton_generator";
+                    cleanTitle = "Skeleton Spawner";
+                    entityType = org.bukkit.entity.EntityType.SKELETON;
+                }
+                case CREEPER -> {
+                    type = "creeper_generator";
+                    cleanTitle = "Creeper Spawner";
+                    entityType = org.bukkit.entity.EntityType.CREEPER;
+                }
+                case WITCH, BLAZE -> {
+                    type = "witch_generator";
+                    cleanTitle = "Witch Spawner";
+                    entityType = org.bukkit.entity.EntityType.WITCH;
+                }
+                case IRON_GOLEM -> {
+                    type = "iron_golem_generator";
+                    cleanTitle = "Iron Golem Spawner";
+                    entityType = org.bukkit.entity.EntityType.IRON_GOLEM;
+                }
+                case SNOW_GOLEM -> {
+                    type = "snow_golem_generator";
+                    cleanTitle = "Snow Golem Spawner";
+                    entityType = org.bukkit.entity.EntityType.SNOW_GOLEM;
+                }
+                default -> {
+                    type = "zombie_generator";
+                    cleanTitle = "Zombie Spawner";
+                    entityType = org.bukkit.entity.EntityType.ZOMBIE;
+                }
+            }
+            try {
                 cs.setSpawnedType(entityType);
                 cs.update(true);
-            }
+            } catch (Throwable ignored) {}
         }
 
         Inventory inv = createGeneratorInventory(cleanTitle);
@@ -16842,26 +16735,43 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (!(event.getWhoClicked() instanceof Player player)) return;
         UUID uuid = player.getUniqueId();
         Location genLoc = openGenerator.get(uuid);
+        Inventory topInv = event.getView().getTopInventory();
+
+        if (genLoc == null) {
+            // Robust fallback: search generators by matching the top inventory
+            for (java.util.Map.Entry<Location, GeneratorData> entry : generators.entrySet()) {
+                if (entry.getValue().inventory != null && entry.getValue().inventory.equals(topInv)) {
+                    genLoc = entry.getKey();
+                    openGenerator.put(uuid, genLoc);
+                    break;
+                }
+            }
+        }
         if (genLoc == null) return;
         GeneratorData gen = generators.get(genLoc);
-        if (gen == null || !event.getInventory().equals(gen.inventory)) {
+        if (gen == null || (!topInv.equals(gen.inventory) && !event.getInventory().equals(gen.inventory))) {
             openGenerator.remove(uuid);
             return;
         }
 
         int rawSlot = event.getRawSlot();
         int invSize = gen.inventory.getSize();
+        ItemStack clickedItem = event.getCurrentItem();
 
         // If clicking inside the generator inventory (slots 0..53)
         if (rawSlot >= 0 && rawSlot < invSize) {
             // Protect bottom row action buttons and borders
             if (rawSlot >= 45 && rawSlot <= 53) {
                 event.setCancelled(true);
-                if (rawSlot == 46) {
+                boolean isDropAll = (rawSlot == 46) || (clickedItem != null && clickedItem.getType() == Material.HOPPER);
+                boolean isCollect = (rawSlot == 49) || (clickedItem != null && clickedItem.getType() == Material.GOLD_BLOCK);
+                boolean isDestroy = (rawSlot == 52) || (clickedItem != null && clickedItem.getType() == Material.BARRIER);
+
+                if (isDropAll) {
                     handleDropAllItems(player, gen);
-                } else if (rawSlot == 49) {
+                } else if (isCollect) {
                     handleCollectMoney(player, gen);
-                } else if (rawSlot == 52) {
+                } else if (isDestroy) {
                     handleDestroyGenerator(player, gen);
                 }
             }
@@ -16869,7 +16779,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             // Shift-clicking from player inventory into generator
             // Make sure items only fill slots 0..44 and never overwrite button slots
             event.setCancelled(true);
-            ItemStack clickedItem = event.getCurrentItem();
             if (clickedItem != null && clickedItem.getType() != Material.AIR) {
                 ItemStack remaining = addItemToGenerator(gen, clickedItem.clone());
                 if (remaining == null || remaining.getAmount() == 0) {
@@ -16986,7 +16895,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onGeneratorInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
-            openGenerator.remove(player.getUniqueId());
+            Location genLoc = openGenerator.get(player.getUniqueId());
+            if (genLoc != null) {
+                GeneratorData gen = generators.get(genLoc);
+                if (gen == null || gen.inventory.equals(event.getInventory()) || gen.inventory.equals(event.getView().getTopInventory())) {
+                    openGenerator.remove(player.getUniqueId());
+                }
+            }
         }
         String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
         if (title.equals("Food Generator") || title.equals("Ore Generator") || title.endsWith("Generator") || title.endsWith("Spawner")) {
