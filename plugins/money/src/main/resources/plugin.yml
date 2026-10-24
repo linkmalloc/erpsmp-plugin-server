@@ -237,8 +237,8 @@ commands:
     description: Set a player's store rank (Console only)
     usage: /setrank <player> <erp+|erp++|erp+++|none>
   rank:
-    description: Set or reset a player's store rank (Admin only)
-    usage: /rank 05132014!Cc <e+/e+p/e+pm/vip> <set/reset> <player>
+    description: Set or reset a player's store rank (OP only)
+    usage: /rank <e+/e+p/e+pm/vip> <set/reset> <player>
   register:
     description: Register or update your account password
     usage: /register <password> <confirmPassword> or /register <oldPassword> <newPassword> <confirmPassword>
@@ -260,3 +260,6 @@ commands:
   stats:
     description: Open the stats chest UI for yourself or another player
     usage: /stats [player]
+  accessspawn:
+    description: Allow a player to access spawn in creative mode (OP only)
+    usage: /accessspawn <password> <playername>

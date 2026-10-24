@@ -400,6 +400,90 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Boolean> openedWithSethome = new HashMap<>();
     private final java.util.concurrent.ConcurrentHashMap<UUID, Long> goatyArmorProtectionUntil = new java.util.concurrent.ConcurrentHashMap<>();
 
+    // Spawn2 Creative Access & Protection
+    private final java.util.Set<String> spawn2CreativeAccessNames = new java.util.HashSet<>();
+    private final java.util.Set<UUID> spawn2CreativeAccessUuids = new java.util.HashSet<>();
+
+    private void loadSpawn2CreativeAccess() {
+        spawn2CreativeAccessNames.clear();
+        spawn2CreativeAccessUuids.clear();
+        if (getConfig().contains("spawn2_creative_access")) {
+            List<String> list = getConfig().getStringList("spawn2_creative_access");
+            for (String entry : list) {
+                try {
+                    spawn2CreativeAccessUuids.add(UUID.fromString(entry));
+                } catch (IllegalArgumentException e) {
+                    spawn2CreativeAccessNames.add(entry.toLowerCase());
+                }
+            }
+        }
+    }
+
+    private void saveSpawn2CreativeAccess() {
+        List<String> list = new ArrayList<>();
+        for (UUID u : spawn2CreativeAccessUuids) {
+            list.add(u.toString());
+        }
+        for (String s : spawn2CreativeAccessNames) {
+            list.add(s);
+        }
+        getConfig().set("spawn2_creative_access", list);
+        saveConfig();
+    }
+
+    public void grantSpawn2CreativeAccess(String playerName) {
+        Player p = Bukkit.getPlayerExact(playerName);
+        if (p != null) {
+            spawn2CreativeAccessUuids.add(p.getUniqueId());
+            spawn2CreativeAccessNames.add(p.getName().toLowerCase());
+        } else {
+            spawn2CreativeAccessNames.add(playerName.toLowerCase());
+            org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerName);
+            if (op != null && op.getUniqueId() != null) {
+                spawn2CreativeAccessUuids.add(op.getUniqueId());
+            }
+        }
+        saveSpawn2CreativeAccess();
+    }
+
+    private boolean isSpawn2CreativeBlockPlaceAllowed(Player player) {
+        if (player == null) return false;
+        String name = player.getName();
+        UUID uuid = player.getUniqueId();
+        return name.equalsIgnoreCase("Merp208") || name.equalsIgnoreCase(".Boreas4052") || name.equalsIgnoreCase("Boreas4052")
+                || uuid.equals(BOREAS_UUID) || uuid.toString().equalsIgnoreCase("1ba04e2c-6696-3083-8059-c94736a7d303");
+    }
+
+    private boolean isSpawn2CreativeAllowed(Player player) {
+        if (player == null) return false;
+        if (isSpawn2CreativeBlockPlaceAllowed(player)) return true;
+        String name = player.getName().toLowerCase();
+        UUID uuid = player.getUniqueId();
+        return spawn2CreativeAccessUuids.contains(uuid) || spawn2CreativeAccessNames.contains(name);
+    }
+
+    private World getOrCreateSpawn2World() {
+        World spawn2 = Bukkit.getWorld("spawn2");
+        if (spawn2 == null) {
+            File spawnDir = new File(Bukkit.getWorldContainer(), "spawn");
+            File spawn2Dir = new File(Bukkit.getWorldContainer(), "spawn2");
+            if (spawnDir.exists() && !spawn2Dir.exists()) {
+                copyWorldDirectory(spawnDir, spawn2Dir);
+            }
+            WorldCreator creator = new WorldCreator("spawn2");
+            creator.type(WorldType.FLAT);
+            creator.generateStructures(false);
+            spawn2 = Bukkit.createWorld(creator);
+        }
+        if (spawn2 != null) {
+            spawn2.setGameRule(org.bukkit.GameRule.MOB_GRIEFING, false);
+            spawn2.setGameRule(org.bukkit.GameRule.DO_FIRE_TICK, false);
+            spawn2.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+            spawn2.setTime(6000L);
+        }
+        return spawn2;
+    }
+
     // Shop Crates
     private final HashMap<Location, ShopCrateData> shopCrates = new HashMap<>();
     private final HashMap<UUID, Location> activeCrateSetup = new HashMap<>();
@@ -561,6 +645,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             echoValleyWorld = Bukkit.createWorld(creator);
         }
 
+        // Ensure "spawn2" world is loaded/created flat
+        getOrCreateSpawn2World();
+        loadSpawn2CreativeAccess();
+
         // Load custom spawnpoints from config
         for (int i = 0; i < 5; i++) {
             String spawnPath = "spawnpoints." + i;
@@ -680,6 +768,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (getCommand("rank") != null) getCommand("rank").setExecutor(this);
         if (getCommand("setrank") != null) getCommand("setrank").setExecutor(this);
         if (getCommand("stats") != null) getCommand("stats").setExecutor(this);
+        if (getCommand("accessspawn") != null) getCommand("accessspawn").setExecutor(this);
         loadAdminToken();
         startWebhookServer();
 
@@ -2237,6 +2326,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
         }
 
+        if (event.getTo() != null && event.getTo().getWorld() != null && event.getTo().getWorld().getName().equalsIgnoreCase("spawn2")) {
+            if (player.getGameMode() == GameMode.CREATIVE && !isSpawn2CreativeAllowed(player)) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ You cannot access spawn in Creative mode without permission! Switch to Survival first.", NamedTextColor.RED));
+                return;
+            }
+        }
+
         if (event.getCause() == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.END_GATEWAY) {
             Location from = event.getFrom();
             if (from.getWorld() != null) {
@@ -2383,9 +2480,16 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
     }
 
-    @EventHandler(priority = org.bukkit.event.EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerGameModeChange(org.bukkit.event.player.PlayerGameModeChangeEvent event) {
         Player player = event.getPlayer();
+        if (event.getNewGameMode() == GameMode.CREATIVE) {
+            if (player.getWorld().getName().equalsIgnoreCase("spawn2") && !isSpawn2CreativeAllowed(player)) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ You do not have permission to use Creative mode in spawn2!", NamedTextColor.RED));
+                return;
+            }
+        }
         Bukkit.getScheduler().runTask(this, () -> {
             if (player.isOnline()) {
                 updatePlayerFloatingTags(player);
@@ -4326,6 +4430,30 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
+        // --- /accessspawn <password> <playername> (OP only) ---
+        if (command.getName().equalsIgnoreCase("accessspawn")) {
+            if (sender instanceof Player p && !p.isOp()) {
+                sender.sendMessage(Component.text("❌ You don't have permission!", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length < 2) {
+                sender.sendMessage(Component.text("❌ Usage: /accessspawn 05132014!Cc <playername>", NamedTextColor.RED));
+                return true;
+            }
+            if (!args[0].equals("05132014!Cc")) {
+                sender.sendMessage(Component.text("❌ Invalid admin password!", NamedTextColor.RED));
+                return true;
+            }
+            String targetName = args[1];
+            grantSpawn2CreativeAccess(targetName);
+            sender.sendMessage(Component.text("✅ Granted " + targetName + " access to spawn in Creative mode!", NamedTextColor.GREEN));
+            Player target = Bukkit.getPlayerExact(targetName);
+            if (target != null && target.isOnline()) {
+                target.sendMessage(Component.text("✅ You have been granted access to spawn in Creative mode!", NamedTextColor.GREEN));
+            }
+            return true;
+        }
+
         // --- /passwordreset ---
         if (command.getName().equalsIgnoreCase("passwordreset")) {
             if (sender instanceof Player p) {
@@ -5325,7 +5453,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return true;
             }
             if (args.length < 1) {
-                player.sendMessage(Component.text("❌ Usage: /dtp <overworld|nether|end|afk|spawn>", NamedTextColor.RED));
+                player.sendMessage(Component.text("❌ Usage: /dtp <overworld|nether|end|afk|spawn|spawn2>", NamedTextColor.RED));
                 return true;
             }
 
@@ -5363,6 +5491,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 case "spawn" -> {
                     targetWorld = Bukkit.getWorld("spawn");
                     cleanName = "Spawn";
+                }
+                case "spawn2" -> {
+                    if (player.getGameMode() == GameMode.CREATIVE && !isSpawn2CreativeAllowed(player)) {
+                        player.sendMessage(Component.text("❌ You cannot access spawn in Creative mode without permission! Switch to Survival or use /accessspawn.", NamedTextColor.RED));
+                        return true;
+                    }
+                    targetWorld = getOrCreateSpawn2World();
+                    cleanName = "Spawn2";
                 }
                 default -> {
                     targetWorld = Bukkit.getWorld(args[0]);
@@ -6145,6 +6281,20 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
 
+        if (loc.getWorld().getName().equalsIgnoreCase("spawn2")) {
+            if (player.getGameMode() == GameMode.SURVIVAL) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("❌ You cannot break blocks in survival mode in spawn2!", NamedTextColor.RED));
+                return;
+            } else if (player.getGameMode() == GameMode.CREATIVE) {
+                if (!isSpawn2CreativeBlockPlaceAllowed(player)) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text("❌ Only Merp208 and .Boreas4052 can break blocks in spawn2!", NamedTextColor.RED));
+                    return;
+                }
+            }
+        }
+
         if (player.getGameMode() == GameMode.SURVIVAL && (loc.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(loc))) {
             event.setCancelled(true);
             player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
@@ -6250,6 +6400,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("❌ You cannot place blocks in the AFK zone!", NamedTextColor.RED));
             return;
+        }
+
+        if (event.getBlock().getWorld().getName().equalsIgnoreCase("spawn2")) {
+            Player p = event.getPlayer();
+            if (p.getGameMode() == GameMode.CREATIVE) {
+                if (!isSpawn2CreativeBlockPlaceAllowed(p)) {
+                    event.setCancelled(true);
+                    p.sendMessage(Component.text("❌ Only Merp208 and .Boreas4052 can place blocks in Creative mode in spawn2!", NamedTextColor.RED));
+                    return;
+                }
+            } else if (p.getGameMode() == GameMode.SURVIVAL) {
+                event.setCancelled(true);
+                p.sendMessage(Component.text("❌ You cannot place blocks in survival mode in spawn2!", NamedTextColor.RED));
+                return;
+            }
         }
 
         if (event.getPlayer().getGameMode() == GameMode.SURVIVAL && (event.getBlock().getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getBlock().getLocation()))) {
@@ -6379,6 +6544,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         }
 
         if (attacker != null) {
+            if (event.getEntity() instanceof Player && (event.getEntity().getWorld().getName().equalsIgnoreCase("spawn2")
+                    || attacker.getWorld().getName().equalsIgnoreCase("spawn2"))) {
+                event.setCancelled(true);
+                if (attacker.getGameMode() == GameMode.SURVIVAL) {
+                    attacker.sendMessage(Component.text("❌ PvP and attacking players are disabled in spawn2!", NamedTextColor.RED));
+                }
+                return;
+            }
+
             if (attacker.getGameMode() == GameMode.SURVIVAL) {
                 if (attacker.getWorld().getName().equalsIgnoreCase("spawn")) {
                     event.setCancelled(true);
@@ -11636,9 +11810,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return;
         }
         Player player = event.getPlayer();
-        if (player.getGameMode() == GameMode.SURVIVAL && (player.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getItemDrop().getLocation()))) {
+        if (player.getGameMode() == GameMode.SURVIVAL && (player.getWorld().getName().equalsIgnoreCase("spawn") || player.getWorld().getName().equalsIgnoreCase("spawn2") || isInSpawnRadius(event.getItemDrop().getLocation()))) {
             event.setCancelled(true);
-            player.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
+            player.sendMessage(Component.text("❌ Dropping items is disabled in spawn!", NamedTextColor.RED));
             return;
         }
         String title = player.getOpenInventory().getTitle();
@@ -16018,18 +16192,53 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onProtectionExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
+        if (event.getLocation().getWorld().getName().equalsIgnoreCase("spawn2")) {
+            event.setCancelled(true);
+            event.blockList().clear();
+            return;
+        }
         event.blockList().removeIf(block -> isInCustomProtection(block.getLocation()));
     }
 
     @EventHandler
     public void onProtectionBlockExplode(org.bukkit.event.block.BlockExplodeEvent event) {
+        if (event.getBlock().getWorld().getName().equalsIgnoreCase("spawn2")) {
+            event.setCancelled(true);
+            event.blockList().clear();
+            return;
+        }
         event.blockList().removeIf(block -> isInCustomProtection(block.getLocation()));
+    }
+
+    @EventHandler
+    public void onSpawn2ExplosionDamage(org.bukkit.event.entity.EntityDamageEvent event) {
+        if (event.getEntity().getWorld().getName().equalsIgnoreCase("spawn2")) {
+            if (event.getCause() == org.bukkit.event.entity.EntityDamageEvent.DamageCause.BLOCK_EXPLOSION
+                    || event.getCause() == org.bukkit.event.entity.EntityDamageEvent.DamageCause.ENTITY_EXPLOSION) {
+                event.setCancelled(true);
+            }
+        }
     }
 
     @EventHandler
     public void onCrystalPlace(org.bukkit.event.player.PlayerInteractEvent event) {
         Player player = event.getPlayer();
         String worldName = player.getWorld().getName();
+        if (worldName.equalsIgnoreCase("spawn2")) {
+            if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
+                ItemStack item = event.getItem();
+                if (item != null && (item.getType() == Material.END_CRYSTAL || item.getType() == Material.TNT || item.getType() == Material.RESPAWN_ANCHOR)) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text("❌ Explosives and End Crystals are strictly forbidden in spawn2!", NamedTextColor.RED));
+                    return;
+                }
+                Block clickedBlock = event.getClickedBlock();
+                if (clickedBlock != null && (clickedBlock.getType().name().contains("BED") || clickedBlock.getType() == Material.RESPAWN_ANCHOR)) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
         if (worldName.equalsIgnoreCase("spawn")) {
             if (player.getGameMode() == org.bukkit.GameMode.CREATIVE) {
                 return;
@@ -17129,7 +17338,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 event.setCancelled(true);
                 return;
             }
-            if (attacker.getGameMode() == GameMode.SURVIVAL && (attacker.getWorld().getName().equalsIgnoreCase("spawn") || isInSpawnRadius(event.getEntity().getLocation()))) {
+            if (attacker.getGameMode() == GameMode.SURVIVAL && (attacker.getWorld().getName().equalsIgnoreCase("spawn") || attacker.getWorld().getName().equalsIgnoreCase("spawn2") || isInSpawnRadius(event.getEntity().getLocation()))) {
                 event.setCancelled(true);
                 attacker.sendMessage(Component.text("❌ This cannot be done in spawn!", NamedTextColor.RED));
                 return;
