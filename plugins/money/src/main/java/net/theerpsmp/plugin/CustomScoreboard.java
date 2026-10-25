@@ -480,7 +480,18 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             spawn2.setGameRule(org.bukkit.GameRule.MOB_GRIEFING, false);
             spawn2.setGameRule(org.bukkit.GameRule.DO_FIRE_TICK, false);
             spawn2.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+            spawn2.setGameRule(org.bukkit.GameRule.DO_MOB_SPAWNING, false);
+            spawn2.setGameRule(org.bukkit.GameRule.DO_PATROL_SPAWNING, false);
+            spawn2.setGameRule(org.bukkit.GameRule.DO_TRADER_SPAWNING, false);
+            spawn2.setGameRule(org.bukkit.GameRule.DO_WARDEN_SPAWNING, false);
             spawn2.setTime(6000L);
+            for (org.bukkit.entity.LivingEntity entity : spawn2.getLivingEntities()) {
+                if (entity instanceof org.bukkit.entity.Mob) {
+                    if (!entity.hasMetadata("NPC") && !entity.getPersistentDataContainer().has(new NamespacedKey(this, "is_npc"), PersistentDataType.BOOLEAN)) {
+                        entity.remove();
+                    }
+                }
+            }
         }
         return spawn2;
     }
@@ -15474,9 +15485,29 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     @EventHandler
     public void onMobSpawn(org.bukkit.event.entity.CreatureSpawnEvent event) {
         String worldName = event.getLocation().getWorld().getName();
+        if (worldName.equalsIgnoreCase("spawn2")) {
+            if (event.getEntity() instanceof org.bukkit.entity.Mob) {
+                if (event.getSpawnReason() != org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM 
+                        || (!event.getEntity().hasMetadata("NPC") && !event.getEntity().getPersistentDataContainer().has(new NamespacedKey(this, "is_npc"), PersistentDataType.BOOLEAN))) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
         if (worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone") || worldName.equalsIgnoreCase("spawn")) {
             if (event.getSpawnReason() != org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM) {
                 event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onSpawn2EntitySpawn(org.bukkit.event.entity.EntitySpawnEvent event) {
+        if (event.getEntity().getWorld().getName().equalsIgnoreCase("spawn2")) {
+            if (event.getEntity() instanceof org.bukkit.entity.Mob) {
+                if (!event.getEntity().hasMetadata("NPC") && !event.getEntity().getPersistentDataContainer().has(new NamespacedKey(this, "is_npc"), PersistentDataType.BOOLEAN)) {
+                    event.setCancelled(true);
+                }
             }
         }
     }
@@ -16323,6 +16354,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (item != null && (item.getType() == Material.END_CRYSTAL || item.getType() == Material.TNT || item.getType() == Material.RESPAWN_ANCHOR)) {
                     event.setCancelled(true);
                     player.sendMessage(Component.text("❌ Explosives and End Crystals are strictly forbidden in spawn2!", NamedTextColor.RED));
+                    return;
+                }
+                if (item != null && item.getType().name().endsWith("_SPAWN_EGG")) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text("❌ Mobs cannot be spawned in spawn2!", NamedTextColor.RED));
                     return;
                 }
                 Block clickedBlock = event.getClickedBlock();
