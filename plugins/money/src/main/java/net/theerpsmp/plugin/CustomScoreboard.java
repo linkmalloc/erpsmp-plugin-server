@@ -148,6 +148,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     private final HashMap<UUID, Long> lastHordeSpawnTime = new HashMap<>();
     private final HashMap<UUID, Integer> playerApocalypseWaveMap = new HashMap<>();
     private final HashMap<UUID, java.util.Set<UUID>> playerActiveApocalypseZombies = new HashMap<>();
+    private final HashMap<UUID, org.bukkit.scheduler.BukkitTask> activeEchoToolBreaks = new HashMap<>();
 
     // Auction variables
     private final List<AuctionListing> listings = new ArrayList<>();
@@ -2416,6 +2417,8 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         org.bukkit.scheduler.BukkitTask warpTask = pendingWarpTeleports.remove(uuid);
         if (warpTask != null) warpTask.cancel();
         pendingWarpStartLocations.remove(uuid);
+        org.bukkit.scheduler.BukkitTask echoTask = activeEchoToolBreaks.remove(uuid);
+        if (echoTask != null) echoTask.cancel();
 
         savePlayerData(player);
 
@@ -6310,35 +6313,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
         if (customItem == null) return;
 
-        if (customItem.equals("echo_pickaxe")) {
-            event.setCancelled(true);
-            breakingCustom = true;
-            try {
-                handleEchoPickaxeBreak(player, event.getBlock(), tool);
-            } finally {
-                breakingCustom = false;
-            }
-        } else if (customItem.equals("echo_shovel")) {
-            event.setCancelled(true);
-            breakingCustom = true;
-            try {
-                handleEchoShovelBreak(player, event.getBlock(), tool);
-            } finally {
-                breakingCustom = false;
-            }
-        } else if (customItem.equals("echo_axe")) {
-            Material type = event.getBlock().getType();
-            String name = type.name();
-            if (name.contains("LOG") || name.contains("WOOD")) {
-                event.setCancelled(true);
-                breakingCustom = true;
-                try {
-                    handleEchoAxeBreak(player, event.getBlock(), tool);
-                } finally {
-                    breakingCustom = false;
-                }
-            }
-        } else if (customItem.equals("pickaxe_lerp")) {
+        if (customItem.equals("pickaxe_lerp")) {
             Material type = event.getBlock().getType();
             String name = type.name();
             if (name.contains("ORE")) {
@@ -12349,11 +12324,136 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         player.openInventory(inv);
     }
 
-    private void handleEchoPickaxeBreak(Player player, Block centerBlock, ItemStack tool) {
-        Location centerLoc = centerBlock.getLocation();
-        if (isInSpawnRadius(centerLoc)) return;
+    private boolean isBlockProtectedFromEcho(Player player, Block b) {
+        if (b == null) return true;
+        Location loc = b.getLocation();
+        if (isInSpawnRadius(loc)) return true;
+        if (loc.getWorld().getName().equalsIgnoreCase("spawn2")) {
+            if (player.getGameMode() == GameMode.SURVIVAL) return true;
+            if (player.getGameMode() == GameMode.CREATIVE && !isSpawn2CreativeBlockPlaceAllowed(player)) return true;
+        }
+        if (loc.getWorld().getName().equalsIgnoreCase("spawn") && player.getGameMode() == GameMode.SURVIVAL) {
+            return true;
+        }
+        return false;
+    }
 
-        BlockFace face = player.getTargetBlockFace(6);
+    private void startEchoToolBreakAnimation(Player player, Block block, ItemStack tool, String customItem, BlockFace face) {
+        UUID uuid = player.getUniqueId();
+        if (activeEchoToolBreaks.containsKey(uuid)) return;
+
+        Location blockLoc = block.getLocation();
+        int entityId = player.getEntityId();
+
+        org.bukkit.scheduler.BukkitTask task = new org.bukkit.scheduler.BukkitRunnable() {
+            int tick = 0;
+            final int totalTicks = 8; // ~0.4s authentic break animation duration
+
+            @Override
+            public void run() {
+                // Validation checks: if player disconnected, died, changed worlds, moved too far, or block is gone
+                if (!player.isOnline() || player.isDead() || !block.getWorld().equals(player.getWorld())
+                        || player.getLocation().distanceSquared(blockLoc) > 36.0 || block.getType().isAir()) {
+                    cleanup();
+                    cancel();
+                    return;
+                }
+
+                ItemStack hand = player.getInventory().getItemInMainHand();
+                if (hand == null || !hand.hasItemMeta()) {
+                    cleanup();
+                    cancel();
+                    return;
+                }
+                String currentCustom = hand.getItemMeta().getPersistentDataContainer().get(new NamespacedKey(CustomScoreboard.this, "custom_item"), PersistentDataType.STRING);
+                if (currentCustom == null || !currentCustom.equals(customItem)) {
+                    cleanup();
+                    cancel();
+                    return;
+                }
+
+                // Calculate progress from 0.15f to 1.0f
+                float progress = Math.min(1.0f, (float) (tick + 1) / (float) totalTicks);
+
+                // Send block damage crack animation stages to player and nearby players
+                for (Player p : block.getWorld().getNearbyPlayers(blockLoc, 24)) {
+                    p.sendBlockDamage(blockLoc, progress, entityId);
+                }
+
+                // Arm swing, hit sound, and impact particles
+                if (tick % 2 == 0) {
+                    player.swingMainHand();
+                    block.getWorld().playSound(blockLoc, block.getBlockData().getSoundGroup().getHitSound(), 0.8f, 1.0f);
+                    block.getWorld().spawnParticle(Particle.BLOCK, blockLoc.clone().add(0.5, 0.5, 0.5), 4, 0.15, 0.15, 0.15, block.getBlockData());
+                }
+
+                tick++;
+
+                if (tick >= totalTicks) {
+                    cancel();
+                    activeEchoToolBreaks.remove(uuid);
+
+                    // Clear the block cracking animation
+                    for (Player p : block.getWorld().getNearbyPlayers(blockLoc, 24)) {
+                        p.sendBlockDamage(blockLoc, 0.0f, entityId);
+                    }
+
+                    if (block.getType().isAir() || isBlockProtectedFromEcho(player, block)) {
+                        return;
+                    }
+
+                    // Play authentic block break sound & break particle effect
+                    block.getWorld().playSound(blockLoc, block.getBlockData().getSoundGroup().getBreakSound(), 1.0f, 1.0f);
+                    block.getWorld().playEffect(blockLoc, org.bukkit.Effect.STEP_SOUND, block.getType());
+
+                    // Apply 1 tool durability damage (respecting unbreaking) if in survival
+                    if (player.getGameMode() != GameMode.CREATIVE) {
+                        if (hand.getItemMeta() instanceof org.bukkit.inventory.meta.Damageable toolMeta) {
+                            int unbreakingLevel = hand.getEnchantmentLevel(org.bukkit.enchantments.Enchantment.UNBREAKING);
+                            if (random.nextInt(unbreakingLevel + 1) == 0) {
+                                toolMeta.setDamage(toolMeta.getDamage() + 1);
+                                hand.setItemMeta(toolMeta);
+                                if (toolMeta.getDamage() >= hand.getType().getMaxDurability()) {
+                                    player.getInventory().setItemInMainHand(null);
+                                    player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
+                    // Execute the ability!
+                    breakingCustom = true;
+                    try {
+                        if (customItem.equals("echo_pickaxe")) {
+                            handleEchoPickaxeBreak(player, block, hand, face);
+                        } else if (customItem.equals("echo_shovel")) {
+                            handleEchoShovelBreak(player, block, hand, face);
+                        } else if (customItem.equals("echo_axe")) {
+                            handleEchoAxeBreak(player, block, hand);
+                        }
+                    } finally {
+                        breakingCustom = false;
+                    }
+                }
+            }
+
+            private void cleanup() {
+                activeEchoToolBreaks.remove(uuid);
+                for (Player p : block.getWorld().getNearbyPlayers(blockLoc, 24)) {
+                    p.sendBlockDamage(blockLoc, 0.0f, entityId);
+                }
+            }
+        }.runTaskTimer(this, 0L, 1L);
+
+        activeEchoToolBreaks.put(uuid, task);
+    }
+
+    private void handleEchoPickaxeBreak(Player player, Block centerBlock, ItemStack tool, BlockFace face) {
+        Location centerLoc = centerBlock.getLocation();
+        if (isBlockProtectedFromEcho(player, centerBlock)) return;
+
+        if (face == null) face = player.getTargetBlockFace(6);
         if (face == null) face = BlockFace.UP;
 
         List<Block> blocksToBreak = new ArrayList<>();
@@ -12383,18 +12483,22 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         for (Block b : blocksToBreak) {
             if (b.getType() == Material.AIR || b.getType() == Material.BEDROCK || b.getType() == Material.BARRIER) continue;
-            if (isInSpawnRadius(b.getLocation())) continue;
+            if (isBlockProtectedFromEcho(player, b)) continue;
             checkAndTrackMinedOre(player, b);
             b.breakNaturally(tool);
             b.getWorld().spawnParticle(Particle.SONIC_BOOM, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
         }
     }
 
-    private void handleEchoShovelBreak(Player player, Block centerBlock, ItemStack tool) {
-        Location centerLoc = centerBlock.getLocation();
-        if (isInSpawnRadius(centerLoc)) return;
+    private void handleEchoPickaxeBreak(Player player, Block centerBlock, ItemStack tool) {
+        handleEchoPickaxeBreak(player, centerBlock, tool, null);
+    }
 
-        BlockFace face = player.getTargetBlockFace(6);
+    private void handleEchoShovelBreak(Player player, Block centerBlock, ItemStack tool, BlockFace face) {
+        Location centerLoc = centerBlock.getLocation();
+        if (isBlockProtectedFromEcho(player, centerBlock)) return;
+
+        if (face == null) face = player.getTargetBlockFace(6);
         if (face == null) face = BlockFace.UP;
 
         List<Block> blocksToBreak = new ArrayList<>();
@@ -12428,14 +12532,19 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         for (Block b : blocksToBreak) {
             if (b.getType() == Material.AIR || b.getType() == Material.BEDROCK || b.getType() == Material.BARRIER) continue;
-            if (isInSpawnRadius(b.getLocation())) continue;
+            if (isBlockProtectedFromEcho(player, b)) continue;
             checkAndTrackMinedOre(player, b);
             b.breakNaturally(tool);
             b.getWorld().spawnParticle(Particle.SONIC_BOOM, b.getLocation().add(0.5, 0.5, 0.5), 1, 0, 0, 0, 0);
         }
     }
 
+    private void handleEchoShovelBreak(Player player, Block centerBlock, ItemStack tool) {
+        handleEchoShovelBreak(player, centerBlock, tool, null);
+    }
+
     private void handleEchoAxeBreak(Player player, Block startBlock, ItemStack tool) {
+        if (isBlockProtectedFromEcho(player, startBlock)) return;
         Material startType = startBlock.getType();
         List<Block> logsToBreak = new ArrayList<>();
         List<Block> queue = new ArrayList<>();
@@ -12453,7 +12562,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                         if (x == 0 && y == 0 && z == 0) continue;
                         Block relative = current.getRelative(x, y, z);
                         if (relative.getType() == startType && !logsToBreak.contains(relative)) {
-                            if (isInSpawnRadius(relative.getLocation())) continue;
+                            if (isBlockProtectedFromEcho(player, relative)) continue;
                             logsToBreak.add(relative);
                             queue.add(relative);
                         }
@@ -13208,6 +13317,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Player player = event.getPlayer();
         cleanCustomItemLore(player.getInventory().getItem(event.getNewSlot()));
         UUID uuid = player.getUniqueId();
+        org.bukkit.scheduler.BukkitTask echoTask = activeEchoToolBreaks.remove(uuid);
+        if (echoTask != null) {
+            echoTask.cancel();
+        }
         if (lastLungeTime.containsKey(uuid)) {
             long diff = System.currentTimeMillis() - lastLungeTime.get(uuid);
             if (diff <= 500) {
@@ -13368,51 +13481,31 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             }
 
             ItemStack item = event.getItem();
-            if (block != null && item != null && item.hasItemMeta()) {
+            if (block != null && item != null && item.hasItemMeta() && event.getHand() == org.bukkit.inventory.EquipmentSlot.HAND) {
                 ItemMeta meta = item.getItemMeta();
                 String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
-                if (customItem != null && customItem.equals("echo_shovel")) {
-                    Material type = block.getType();
-                    if (type == Material.GRASS_BLOCK || type == Material.DIRT || type == Material.COARSE_DIRT || type == Material.PODZOL || type == Material.ROOTED_DIRT) {
-                        Player player = event.getPlayer();
-                        Location loc = block.getLocation();
-                        if (isInSpawnRadius(loc)) return;
-                        
-                        event.setCancelled(true);
-                        boolean playSound = false;
-                        for (int dx = -1; dx <= 1; dx++) {
-                            for (int dz = -1; dz <= 1; dz++) {
-                                Block b = block.getRelative(dx, 0, dz);
-                                if (isInSpawnRadius(b.getLocation())) continue;
-                                Material bType = b.getType();
-                                if (bType == Material.GRASS_BLOCK || bType == Material.DIRT || bType == Material.COARSE_DIRT || bType == Material.PODZOL || bType == Material.ROOTED_DIRT) {
-                                    Block above = b.getRelative(BlockFace.UP);
-                                    if (above.getType().isAir() || !above.getType().isSolid()) {
-                                        b.setType(Material.DIRT_PATH);
-                                        playSound = true;
-                                    }
-                                }
-                            }
-                        }
-                        if (playSound) {
-                            block.getWorld().playSound(block.getLocation(), org.bukkit.Sound.ITEM_SHOVEL_FLATTEN, 1.0f, 1.0f);
-                            if (player.getGameMode() != GameMode.CREATIVE) {
-                                org.bukkit.inventory.meta.Damageable toolMeta = (org.bukkit.inventory.meta.Damageable) item.getItemMeta();
-                                if (toolMeta != null) {
-                                    int unbreakingLevel = item.getEnchantmentLevel(Enchantment.UNBREAKING);
-                                    if (random.nextInt(unbreakingLevel + 1) == 0) {
-                                        toolMeta.setDamage(toolMeta.getDamage() + 1);
-                                        item.setItemMeta(toolMeta);
-                                        if (toolMeta.getDamage() >= item.getType().getMaxDurability()) {
-                                            player.getInventory().setItemInMainHand(null);
-                                            player.getWorld().playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f);
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                if (customItem != null && (customItem.equals("echo_pickaxe") || customItem.equals("echo_shovel") || customItem.equals("echo_axe"))) {
+                    Player player = event.getPlayer();
+                    if (!player.isSneaking() && isInteractableBlock(block)) {
                         return;
                     }
+                    if (customItem.equals("echo_axe")) {
+                        String name = block.getType().name();
+                        if (!name.contains("LOG") && !name.contains("WOOD") && !name.contains("STEM") && !name.contains("HYPHAE")) {
+                            return;
+                        }
+                    }
+                    if (isBlockProtectedFromEcho(player, block)) {
+                        event.setCancelled(true);
+                        player.sendMessage(Component.text("❌ You cannot break blocks here!", NamedTextColor.RED));
+                        return;
+                    }
+                    if (block.getType() == Material.BEDROCK || block.getType() == Material.BARRIER || block.getType().isAir()) {
+                        return;
+                    }
+                    event.setCancelled(true);
+                    startEchoToolBreakAnimation(player, block, item, customItem, event.getBlockFace());
+                    return;
                 }
             }
         }
