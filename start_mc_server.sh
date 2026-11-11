@@ -42,7 +42,15 @@ echo -e "${YELLOW}[NOTE] Reattach with: screen -r minecraft${NC}"
 screen -dmS minecraft ./start.sh
 
 if [ -d "geyser-standalone" ]; then
+    echo -e "${BLUE}[INFO] Updating Geyser Standalone to latest build...${NC}"
+    if curl -fsSL -o geyser-standalone/Geyser.jar.tmp "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone" && [ -s geyser-standalone/Geyser.jar.tmp ]; then
+        mv geyser-standalone/Geyser.jar.tmp geyser-standalone/Geyser.jar
+        echo -e "${GREEN}[SUCCESS] Updated Geyser.jar to the latest version!${NC}"
+    else
+        rm -f geyser-standalone/Geyser.jar.tmp
+        echo -e "${YELLOW}[WARN] Could not download latest Geyser.jar, keeping existing version.${NC}"
+    fi
     echo -e "${BLUE}[INFO] Starting Geyser Standalone inside screen session 'geyser'...${NC}"
     echo -e "${YELLOW}[NOTE] Reattach with: screen -r geyser${NC}"
-    screen -dmS geyser bash -c "cd geyser-standalone && while true; do java -Xmx512M -Xms256M -jar Geyser.jar --nogui; sleep 3; done"
+    screen -dmS geyser bash -c "cd geyser-standalone && while true; do java -Xmx512M -Xms256M -DgeyserAdvertiseAddresses=18.206.179.9 -jar Geyser.jar --nogui; sleep 3; done"
 fi

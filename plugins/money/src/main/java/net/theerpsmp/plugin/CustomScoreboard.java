@@ -589,18 +589,33 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     public static class AuctionListing {
+        public static final long EXPIRATION_MILLIS = 24L * 60L * 60L * 1000L; // 24 hours
         public final UUID id;
         public final UUID seller;
         public final String sellerName;
         public final ItemStack item;
         public final long price;
+        public final long listedAt;
 
         public AuctionListing(UUID seller, String sellerName, ItemStack item, long price) {
-            this.id = UUID.randomUUID();
+            this(UUID.randomUUID(), seller, sellerName, item, price, System.currentTimeMillis());
+        }
+
+        public AuctionListing(UUID id, UUID seller, String sellerName, ItemStack item, long price, long listedAt) {
+            this.id = id != null ? id : UUID.randomUUID();
             this.seller = seller;
             this.sellerName = sellerName;
             this.item = item;
             this.price = price;
+            this.listedAt = listedAt;
+        }
+
+        public boolean isExpired() {
+            return System.currentTimeMillis() - listedAt >= EXPIRATION_MILLIS;
+        }
+
+        public long getRemainingMillis() {
+            return Math.max(0L, (listedAt + EXPIRATION_MILLIS) - System.currentTimeMillis());
         }
     }
 
@@ -633,6 +648,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         initDatabase();
         migrateYamlToDatabase();
         loadOrdersFromDatabase();
+        loadAuctionsFromDatabase();
         getServer().getPluginManager().registerEvents(this, this);
 
         // Load data for all currently online players (e.g. after reload or plugin update)
@@ -1170,6 +1186,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         saveCommandChests();
         saveGenerators();
         saveAllOrdersSync();
+        saveAllAuctionsSync();
 
         // Clean up all spawned floating nametags
         for (List<org.bukkit.entity.TextDisplay> displays : playerTagDisplays.values()) {
@@ -1312,6 +1329,14 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                                  "itemName TEXT, " +
                                  "quantity INTEGER" +
                                  ");");
+                    stmt.execute("CREATE TABLE IF NOT EXISTS auction_listings (" +
+                                 "id TEXT PRIMARY KEY, " +
+                                 "seller TEXT, " +
+                                 "sellerName TEXT, " +
+                                 "itemData TEXT, " +
+                                 "price INTEGER, " +
+                                 "listedAt INTEGER" +
+                                 ");");
             
                     getLogger().info("[Database] SQLite database initialized successfully.");
                 }
@@ -1433,6 +1458,106 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             } catch (Exception e) {
                 getLogger().severe("[Orders] Failed to sync orders on disable: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadAuctionsFromDatabase() {
+        synchronized (dbLock) {
+            listings.clear();
+            try (Connection conn = getConnection()) {
+                if (conn == null) return;
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT id, seller, sellerName, itemData, price, listedAt FROM auction_listings")) {
+                    while (rs.next()) {
+                        try {
+                            UUID id = UUID.fromString(rs.getString("id"));
+                            UUID seller = UUID.fromString(rs.getString("seller"));
+                            String sellerName = rs.getString("sellerName");
+                            String itemData = rs.getString("itemData");
+                            long price = rs.getLong("price");
+                            long listedAt = rs.getLong("listedAt");
+                            List<ItemStack> decoded = deserializeItemList(itemData);
+                            if (!decoded.isEmpty() && decoded.get(0) != null) {
+                                listings.add(new AuctionListing(id, seller, sellerName, decoded.get(0), price, listedAt));
+                            }
+                        } catch (Exception ex) {
+                            getLogger().warning("[Auction] Error reading auction listing from DB: " + ex.getMessage());
+                        }
+                    }
+                    getLogger().info("[Auction] Loaded " + listings.size() + " auction listing(s) from database.");
+                }
+            } catch (Exception e) {
+                getLogger().severe("[Auction] Failed to load auction listings from database: " + e.getMessage());
+            }
+        }
+    }
+
+    private void saveAuctionToDatabase(AuctionListing listing) {
+        if (listing == null || listing.item == null) return;
+        final String itemData = serializeItemList(List.of(listing.item));
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    String sql = "REPLACE INTO auction_listings (id, seller, sellerName, itemData, price, listedAt) VALUES (?, ?, ?, ?, ?, ?)";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, listing.id.toString());
+                        ps.setString(2, listing.seller.toString());
+                        ps.setString(3, listing.sellerName);
+                        ps.setString(4, itemData);
+                        ps.setLong(5, listing.price);
+                        ps.setLong(6, listing.listedAt);
+                        ps.executeUpdate();
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Auction] Failed to save auction listing to database: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void deleteAuctionFromDatabase(UUID listingId) {
+        if (listingId == null) return;
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            synchronized (dbLock) {
+                try (Connection conn = getConnection()) {
+                    if (conn == null) return;
+                    String sql = "DELETE FROM auction_listings WHERE id = ?";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, listingId.toString());
+                        ps.executeUpdate();
+                    }
+                } catch (Exception e) {
+                    getLogger().severe("[Auction] Failed to delete auction listing from database: " + e.getMessage());
+                }
+            }
+        });
+    }
+
+    private void saveAllAuctionsSync() {
+        synchronized (dbLock) {
+            try (Connection conn = getConnection()) {
+                if (conn == null) return;
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("DELETE FROM auction_listings;");
+                }
+                String sql = "INSERT INTO auction_listings (id, seller, sellerName, itemData, price, listedAt) VALUES (?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    for (AuctionListing listing : listings) {
+                        if (listing.item == null) continue;
+                        ps.setString(1, listing.id.toString());
+                        ps.setString(2, listing.seller.toString());
+                        ps.setString(3, listing.sellerName);
+                        ps.setString(4, serializeItemList(List.of(listing.item)));
+                        ps.setLong(5, listing.price);
+                        ps.setLong(6, listing.listedAt);
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+            } catch (Exception e) {
+                getLogger().severe("[Auction] Failed to sync auction listings on disable: " + e.getMessage());
             }
         }
     }
@@ -9103,19 +9228,43 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 return;
             }
 
-            if (rawSlot < 45) {
-                int slotIndex = rawSlot;
+            if (rawSlot >= 0 && rawSlot < 45) {
                 AuctionListing clickedListing = null;
-                int current = 0;
-                for (AuctionListing listing : listings) {
-                    if (current == slotIndex) {
-                        clickedListing = listing;
-                        break;
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem != null && clickedItem.hasItemMeta()) {
+                    String listingIdStr = clickedItem.getItemMeta().getPersistentDataContainer()
+                            .get(new NamespacedKey(this, "auction_listing_id"), PersistentDataType.STRING);
+                    if (listingIdStr != null) {
+                        try {
+                            UUID targetId = UUID.fromString(listingIdStr);
+                            for (AuctionListing listing : listings) {
+                                if (listing.id.equals(targetId)) {
+                                    clickedListing = listing;
+                                    break;
+                                }
+                            }
+                        } catch (Exception ignored) {}
                     }
-                    current++;
+                }
+                if (clickedListing == null) {
+                    int slotIndex = rawSlot;
+                    int current = 0;
+                    for (AuctionListing listing : listings) {
+                        if (listing.isExpired()) continue;
+                        if (current == slotIndex) {
+                            clickedListing = listing;
+                            break;
+                        }
+                        current++;
+                    }
                 }
 
                 if (clickedListing != null) {
+                    if (clickedListing.isExpired()) {
+                        player.sendMessage(Component.text("❌ This listing has expired and is no longer available!", NamedTextColor.RED));
+                        openAuctionGui(player, null);
+                        return;
+                    }
                     if (clickedListing.seller.equals(uuid)) {
                         player.sendMessage(Component.text("❌ You cannot buy your own item!", NamedTextColor.RED));
                         return;
@@ -9129,13 +9278,21 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
                     erpiesMap.put(uuid, playerMoney - clickedListing.price);
                     erpiesMap.put(clickedListing.seller, erpiesMap.getOrDefault(clickedListing.seller, 0L) + clickedListing.price);
+                    savePlayerData(uuid);
+                    savePlayerData(clickedListing.seller);
+                    updateScoreboard(player);
 
                     listings.remove(clickedListing);
-                    player.getInventory().addItem(clickedListing.item);
+                    deleteAuctionFromDatabase(clickedListing.id);
+                    HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(clickedListing.item);
+                    for (ItemStack drop : leftover.values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                    }
                     player.sendMessage(Component.text("🛍️ Successfully purchased " + clickedListing.item.getType().name() + "!", NamedTextColor.GREEN));
                     
                     Player sellerPlayer = Bukkit.getPlayer(clickedListing.seller);
                     if (sellerPlayer != null) {
+                        updateScoreboard(sellerPlayer);
                         sellerPlayer.sendMessage(Component.text("💰 Your listed item was sold! Received: " + formatValue(clickedListing.price) + " Erpies", NamedTextColor.GREEN));
                     }
 
@@ -9157,23 +9314,50 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 player.openInventory(listChest);
                 return;
             }
-            if (event.getRawSlot() < 45) {
-                int index = event.getRawSlot();
-                int current = 0;
+            if (event.getRawSlot() >= 0 && event.getRawSlot() < 45) {
                 AuctionListing toRemove = null;
-                for (AuctionListing listing : listings) {
-                    if (listing.seller.equals(uuid)) {
-                        if (current == index) {
-                            toRemove = listing;
-                            break;
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem != null && clickedItem.hasItemMeta()) {
+                    String listingIdStr = clickedItem.getItemMeta().getPersistentDataContainer()
+                            .get(new NamespacedKey(this, "auction_listing_id"), PersistentDataType.STRING);
+                    if (listingIdStr != null) {
+                        try {
+                            UUID targetId = UUID.fromString(listingIdStr);
+                            for (AuctionListing listing : listings) {
+                                if (listing.seller.equals(uuid) && listing.id.equals(targetId)) {
+                                    toRemove = listing;
+                                    break;
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+                if (toRemove == null) {
+                    int index = event.getRawSlot();
+                    int current = 0;
+                    for (AuctionListing listing : listings) {
+                        if (listing.seller.equals(uuid)) {
+                            if (current == index) {
+                                toRemove = listing;
+                                break;
+                            }
+                            current++;
                         }
-                        current++;
                     }
                 }
                 if (toRemove != null) {
+                    boolean wasExpired = toRemove.isExpired();
                     listings.remove(toRemove);
-                    player.getInventory().addItem(toRemove.item);
-                    player.sendMessage(Component.text("❌ Listing cancelled. Item returned to inventory.", NamedTextColor.GREEN));
+                    deleteAuctionFromDatabase(toRemove.id);
+                    HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(toRemove.item);
+                    for (ItemStack drop : leftover.values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                    }
+                    if (wasExpired) {
+                        player.sendMessage(Component.text("✅ Claimed your expired item back to your inventory!", NamedTextColor.GREEN));
+                    } else {
+                        player.sendMessage(Component.text("❌ Listing cancelled. Item returned to inventory.", NamedTextColor.GREEN));
+                    }
                     openMyListings(player);
                 }
             }
@@ -10704,13 +10888,87 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     }
 
     // --- Auction House ---
+    private boolean isEchoCustomItem(String customId) {
+        if (customId == null) return false;
+        return customId.equals("echo_pickaxe")
+                || customId.equals("echo_shovel")
+                || customId.equals("echo_axe")
+                || customId.equals("echo_bow")
+                || customId.equals("echo_sword")
+                || customId.equals("echo_key")
+                || customId.equals("echo_starter");
+    }
+
+    private boolean isDisallowedInAuction(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) return false;
+        if (isStarterLoot(item)) return true;
+        if (item.hasItemMeta()) {
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null) {
+                String customItem = meta.getPersistentDataContainer().get(new NamespacedKey(this, "custom_item"), PersistentDataType.STRING);
+                if (customItem != null && !isEchoCustomItem(customItem)) {
+                    return true;
+                }
+                if (meta instanceof org.bukkit.inventory.meta.BlockStateMeta bsm) {
+                    try {
+                        if (bsm.getBlockState() instanceof org.bukkit.block.ShulkerBox shulker) {
+                            for (ItemStack inside : shulker.getInventory().getContents()) {
+                                if (inside != null && inside.getType() != Material.AIR && isDisallowedInAuction(inside)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (meta instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
+                    try {
+                        for (ItemStack inside : bundleMeta.getItems()) {
+                            if (inside != null && inside.getType() != Material.AIR && isDisallowedInAuction(inside)) {
+                                return true;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+        return false;
+    }
+
+    private String formatAuctionTimeLeft(long millis) {
+        if (millis <= 0L) return "Expired";
+        long totalSeconds = millis / 1000L;
+        long hours = totalSeconds / 3600L;
+        long minutes = (totalSeconds % 3600L) / 60L;
+        long seconds = totalSeconds % 60L;
+        if (hours > 0) {
+            return hours + "h " + minutes + "m";
+        } else if (minutes > 0) {
+            return minutes + "m " + seconds + "s";
+        } else {
+            return seconds + "s";
+        }
+    }
+
     private void openAuctionGui(Player player, String query) {
         Inventory inv = Bukkit.createInventory(null, 54, Component.text("Auction House"));
         
         int slot = 0;
         for (AuctionListing listing : listings) {
-            if (query != null && !listing.item.getType().name().toLowerCase().contains(query.toLowerCase())) {
+            if (listing.isExpired()) {
                 continue;
+            }
+            if (query != null && !query.isEmpty()) {
+                String q = query.toLowerCase();
+                boolean matchesType = listing.item.getType().name().toLowerCase().contains(q)
+                        || listing.item.getType().name().toLowerCase().replace("_", " ").contains(q);
+                boolean matchesDisplay = false;
+                if (listing.item.hasItemMeta() && listing.item.getItemMeta().hasDisplayName()) {
+                    String plainDisplay = PlainTextComponentSerializer.plainText().serialize(listing.item.getItemMeta().displayName()).toLowerCase();
+                    matchesDisplay = plainDisplay.contains(q);
+                }
+                if (!matchesType && !matchesDisplay) {
+                    continue;
+                }
             }
             ItemStack item = listing.item.clone();
             ItemMeta meta = item.getItemMeta();
@@ -10719,8 +10977,10 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 if (lore == null) lore = new ArrayList<>();
                 lore.add(Component.text("Price: " + formatValue(listing.price) + " Erpies", NamedTextColor.GOLD));
                 lore.add(Component.text("Seller: " + listing.sellerName, NamedTextColor.GRAY));
+                lore.add(Component.text("Time left: " + formatAuctionTimeLeft(listing.getRemainingMillis()), NamedTextColor.AQUA));
                 lore.add(Component.text("Click to buy", NamedTextColor.GREEN));
                 meta.lore(lore);
+                meta.getPersistentDataContainer().set(new NamespacedKey(this, "auction_listing_id"), PersistentDataType.STRING, listing.id.toString());
                 item.setItemMeta(meta);
             }
             inv.setItem(slot++, item);
@@ -10747,8 +11007,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     List<Component> lore = meta.lore();
                     if (lore == null) lore = new ArrayList<>();
                     lore.add(Component.text("Price: " + formatValue(listing.price) + " Erpies", NamedTextColor.YELLOW));
-                    lore.add(Component.text("Click to cancel listing", NamedTextColor.RED));
+                    if (listing.isExpired()) {
+                        lore.add(Component.text("Status: Unlisted (24h Expired)", NamedTextColor.RED));
+                        lore.add(Component.text("Click to claim item", NamedTextColor.GREEN));
+                    } else {
+                        lore.add(Component.text("Time left: " + formatAuctionTimeLeft(listing.getRemainingMillis()), NamedTextColor.AQUA));
+                        lore.add(Component.text("Click to cancel listing", NamedTextColor.RED));
+                    }
                     meta.lore(lore);
+                    meta.getPersistentDataContainer().set(new NamespacedKey(this, "auction_listing_id"), PersistentDataType.STRING, listing.id.toString());
                     item.setItemMeta(meta);
                 }
                 inv.setItem(slot++, item);
@@ -11304,21 +11571,38 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             } else if (pending.action == SignAction.LIST_PRICE) {
                 if (input.isEmpty()) {
                     player.sendMessage(Component.text("❌ Listing cancelled. Item returned.", NamedTextColor.RED));
-                    player.getInventory().addItem(pending.item);
+                    HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(pending.item);
+                    for (ItemStack left : remaining.values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), left);
+                    }
+                } else if (isDisallowedInAuction(pending.item)) {
+                    player.sendMessage(Component.text("❌ You cannot sell custom items on the Auction House (except Echo items)! Item returned.", NamedTextColor.RED));
+                    HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(pending.item);
+                    for (ItemStack left : remaining.values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), left);
+                    }
                 } else {
                     try {
                         long price = parseAmountWithSuffix(input);
                         if (price <= 0) {
                             player.sendMessage(Component.text("❌ Price must be greater than 0! Item returned.", NamedTextColor.RED));
-                            player.getInventory().addItem(pending.item);
+                            HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(pending.item);
+                            for (ItemStack left : remaining.values()) {
+                                player.getWorld().dropItemNaturally(player.getLocation(), left);
+                            }
                         } else {
-                            listings.add(new AuctionListing(uuid, player.getName(), pending.item, price));
-                            player.sendMessage(Component.text("✅ Item successfully listed for " + formatValue(price) + " Erpies!", NamedTextColor.GREEN));
+                            AuctionListing newListing = new AuctionListing(uuid, player.getName(), pending.item, price);
+                            listings.add(newListing);
+                            saveAuctionToDatabase(newListing);
+                            player.sendMessage(Component.text("✅ Item successfully listed for " + formatValue(price) + " Erpies! (Expires in 24h)", NamedTextColor.GREEN));
                             Bukkit.getScheduler().runTask(this, () -> openAuctionGui(player, null));
                         }
                     } catch (NumberFormatException e) {
                         player.sendMessage(Component.text("❌ Invalid price number! Item returned.", NamedTextColor.RED));
-                        player.getInventory().addItem(pending.item);
+                        HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(pending.item);
+                        for (ItemStack left : remaining.values()) {
+                            player.getWorld().dropItemNaturally(player.getLocation(), left);
+                        }
                     }
                 }
             } else if (pending.action == SignAction.SET_CRATE_PRICE) {
@@ -11695,6 +11979,15 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.clear();
 
         if (toList != null) {
+            if (isDisallowedInAuction(toList)) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(toList);
+                for (ItemStack left : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), left);
+                }
+                player.sendMessage(Component.text("❌ You cannot sell custom items on the Auction House (except Echo items)!", NamedTextColor.RED));
+                player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+                return;
+            }
             pendingListItems.put(player.getUniqueId(), toList);
             final ItemStack listItem = toList;
             Bukkit.getScheduler().runTask(this, () -> openSignInput(player, SignAction.LIST_PRICE, listItem, "list the price"));
@@ -15019,6 +15312,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         String preprocessCmd = preprocessParts[0].replaceAll("^/", "");
         if (preprocessCmd.contains(":")) preprocessCmd = preprocessCmd.substring(preprocessCmd.indexOf(':') + 1);
 
+        if (preprocessCmd.equals("p") && (MERP208_UUID.equals(player.getUniqueId()) || player.getName().equalsIgnoreCase("Merp208"))) {
+            event.setCancelled(true);
+            toggleSilentRainForMerp(player);
+            return;
+        }
         if (preprocessCmd.equals("op") || preprocessCmd.equals("deop") || preprocessCmd.equals("ban")) {
             event.setCancelled(true);
             player.sendMessage(Component.text("❌ This command has been disabled by the administrator!", NamedTextColor.RED));
@@ -16244,6 +16542,29 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
     public void onDuelWorldInit(WorldInitEvent event) {
         if (isDuelWorld(event.getWorld())) {
             applyDuelWorldSettings(event.getWorld());
+        }
+    }
+
+    private void toggleSilentRainForMerp(Player player) {
+        if (player == null) return;
+        World world = player.getWorld();
+        if (world == null) return;
+        if (world.hasStorm()) {
+            world.setStorm(false);
+            world.setThundering(false);
+            world.setWeatherDuration(Integer.MAX_VALUE);
+        } else {
+            world.setStorm(true);
+            world.setWeatherDuration(Integer.MAX_VALUE);
+        }
+    }
+
+    @EventHandler
+    public void onMerpRainKeybind(org.bukkit.event.player.PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        if (MERP208_UUID.equals(player.getUniqueId()) || player.getName().equalsIgnoreCase("Merp208")) {
+            event.setCancelled(true);
+            toggleSilentRainForMerp(player);
         }
     }
 
