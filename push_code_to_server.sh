@@ -34,22 +34,22 @@ cd ~/theerpdevs
 chmod +x start_mc_server.sh start.sh 2>/dev/null || true
 screen -wipe >/dev/null 2>&1 || true
 
-# Locate Geyser jar(s) and config(s) on the server
-echo "[INFO] Locating Geyser installation..."
-find ~ -maxdepth 4 -iname "*geyser*.jar" 2>/dev/null || true
+# Update every Geyser jar found (Spigot plugin or Standalone)
+for JAR in $(find ~ -maxdepth 4 -iname "*geyser-spigot*.jar" 2>/dev/null); do
+    echo "[INFO] Updating Geyser Spigot plugin: $JAR"
+    curl -fsSL -o "${JAR}.tmp" "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot" && mv "${JAR}.tmp" "$JAR"
+done
 
-# Update Geyser Spigot plugin if present
-if [ -f "plugins/Geyser-Spigot.jar" ]; then
-    echo "[INFO] Updating plugins/Geyser-Spigot.jar to latest build..."
-    curl -fsSL -o plugins/Geyser-Spigot.jar.tmp "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot" && mv plugins/Geyser-Spigot.jar.tmp plugins/Geyser-Spigot.jar
-fi
+for JAR in $(find ~ -maxdepth 4 -iname "Geyser.jar" 2>/dev/null); do
+    echo "[INFO] Updating Geyser Standalone: $JAR"
+    curl -fsSL -o "${JAR}.tmp" "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone" && mv "${JAR}.tmp" "$JAR"
+done
 
-# Update any Geyser config.yml (plugin or standalone)
-for CFG in plugins/Geyser-Spigot/config.yml geyser-standalone/config.yml ~/geyser-standalone/config.yml ~/geyser/config.yml; do
-    if [ -f "$CFG" ]; then
-        echo "[INFO] Configuring NetherNet in $CFG..."
-        cp "$CFG" "${CFG}.bak"
-        python3 - "$CFG" << 'PYEOF'
+# Configure NetherNet in every Geyser config.yml found
+for CFG in $(find ~ -maxdepth 4 -path "*[Gg]eyser*/config.yml" 2>/dev/null); do
+    echo "[INFO] Configuring NetherNet in: $CFG"
+    cp "$CFG" "${CFG}.bak"
+    python3 - "$CFG" << 'PYEOF'
 import re, sys
 path = sys.argv[1]
 with open(path, "r") as f:
@@ -70,7 +70,6 @@ content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1  transport: nethernet\n', con
 with open(path, "w") as f:
     f.write(content)
 PYEOF
-    fi
 done
 
 echo "[3/4] Building ScoreboardPlugin on server..."
@@ -82,21 +81,26 @@ echo "[4/4] Restarting Minecraft & Geyser servers..."
 cd ~/theerpdevs
 ./start_mc_server.sh
 
-echo "[INFO] Waiting up to 30s for Paper (25565) and Geyser (19132) to bind ports..."
+echo "[INFO] Waiting up to 30s for Paper (25565) and Geyser TCP+UDP (19132)..."
 for i in $(seq 1 15); do
     sleep 2
-    if ss -tulpn 2>/dev/null | grep -q ":19132"; then
+    if ss -tlpn 2>/dev/null | grep -q ":19132"; then
         break
     fi
 done
 
+echo "[INFO] Ports currently listening:"
 ss -tulpn 2>/dev/null | grep -E ":(25565|19132)" || true
-if ! ss -tulpn 2>/dev/null | grep -q ":19132"; then
-    echo "[ERROR] Port 19132 is still not listening! Diagnostics:"
-    screen -ls || true
-    ps aux | grep -i java | grep -v grep || true
-    echo "--- Last 35 lines of ~/theerpdevs/logs/latest.log ---"
-    tail -n 35 ~/theerpdevs/logs/latest.log 2>/dev/null || true
+
+if ! ss -tlpn 2>/dev/null | grep -q ":19132"; then
+    echo "[ERROR] TCP 19132 is NOT listening (Geyser is still not in NetherNet mode)!"
+    for CFG in $(find ~ -maxdepth 4 -path "*[Gg]eyser*/config.yml" 2>/dev/null); do
+        echo "--- $CFG (bedrock section) ---"
+        grep -A 12 "^bedrock:" "$CFG" || true
+    done
+    echo "--- Geyser / Paper logs ---"
+    grep -i "geyser\|nethernet\|error\|exception" ~/theerpdevs/logs/latest.log 2>/dev/null | tail -n 25 || true
+    tail -n 25 ~/theerpdevs/geyser-standalone/logs/latest.log 2>/dev/null || true
     exit 1
 fi
 EOF
@@ -105,5 +109,5 @@ echo "[INFO] Verifying external TCP 19132 reachability..."
 if nc -zv -G 4 18.206.179.9 19132 >/dev/null 2>&1; then
     echo "[SUCCESS] TCP port 19132 is open and reachable on 18.206.179.9! Bedrock players can now join."
 else
-    echo "[WARN] Geyser started locally, but TCP 19132 could not be reached externally."
+    echo "[WARN] Geyser bound TCP 19132 locally, but external TCP 19132 failed."
 fi
