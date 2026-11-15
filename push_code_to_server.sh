@@ -13,7 +13,7 @@ fi
 
 echo "[1/4] Uploading plugin source and startup script to server..."
 scp -r -i "$KEY" plugins/money "$SERVER:~/theerpdevs/"
-scp -i "$KEY" start_mc_server.sh "$SERVER:~/theerpdevs/"
+scp -i "$KEY" start_mc_server.sh "$SERVER:~/mc-server/"
 
 echo "[2/4] Updating Geyser NetherNet config, dependencies, and firewall on server..."
 ssh -i "$KEY" "$SERVER" 'bash -s' << 'EOF'
@@ -30,24 +30,21 @@ if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "Status: active";
     sudo ufw allow 19132/udp >/dev/null 2>&1 || true
 fi
 
-cd ~/theerpdevs
+cd ~/mc-server
 chmod +x start_mc_server.sh start.sh 2>/dev/null || true
 screen -wipe >/dev/null 2>&1 || true
 
-# Update every Geyser jar found (Spigot plugin or Standalone)
-for JAR in $(find ~ -maxdepth 4 -iname "*geyser-spigot*.jar" 2>/dev/null); do
-    echo "[INFO] Updating Geyser Spigot plugin: $JAR"
-    curl -fsSL -o "${JAR}.tmp" "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot" && mv "${JAR}.tmp" "$JAR"
-done
+# Prevent plugins/Geyser.jar from conflicting with geyser-standalone (or failing if overwritten with standalone jar)
+if [ -d "geyser-standalone" ] && [ -f "plugins/Geyser.jar" ]; then
+    mkdir -p ~/geyser-backup
+    echo "[INFO] Moving plugins/Geyser.jar to ~/geyser-backup/ so geyser-standalone owns port 19132 cleanly..."
+    mv plugins/Geyser.jar ~/geyser-backup/Geyser.jar.plugin.$(date +%s)
+fi
 
-for JAR in $(find ~ -maxdepth 4 -iname "Geyser.jar" 2>/dev/null); do
-    echo "[INFO] Updating Geyser Standalone: $JAR"
-    curl -fsSL -o "${JAR}.tmp" "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone" && mv "${JAR}.tmp" "$JAR"
-done
-
-# Configure NetherNet in every Geyser config.yml found
-for CFG in $(find ~ -maxdepth 4 -path "*[Gg]eyser*/config.yml" 2>/dev/null); do
-    echo "[INFO] Configuring NetherNet in: $CFG"
+# Configure NetherNet in ~/mc-server/geyser-standalone/config.yml
+CFG="geyser-standalone/config.yml"
+if [ -f "$CFG" ]; then
+    echo "[INFO] Configuring NetherNet in: ~/mc-server/$CFG"
     cp "$CFG" "${CFG}.bak"
     python3 - "$CFG" << 'PYEOF'
 import re, sys
@@ -56,7 +53,6 @@ with open(path, "r") as f:
     content = f.read()
 
 for pat in [
-    r'^\s*webrtc-port:.*\n',
     r'^\s*signaling:\s*\n(?:\s+mode:\s*builtin\s*\n)?',
     r'^\s*stun-discovery:.*\n',
     r'^\s*advertise-addresses:\s*\n(?:\s+-\s*"[^"]*"\s*\n)*',
@@ -70,19 +66,19 @@ content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1  transport: nethernet\n', con
 with open(path, "w") as f:
     f.write(content)
 PYEOF
-done
+fi
 
 echo "[3/4] Building ScoreboardPlugin on server..."
 cd ~/theerpdevs/money
 mvn clean package -DskipTests
-cp target/ScoreboardPlugin-1.0-SNAPSHOT.jar ~/theerpdevs/plugins/
+cp target/ScoreboardPlugin-1.0-SNAPSHOT.jar ~/mc-server/plugins/
 
-echo "[4/4] Restarting Minecraft & Geyser servers..."
-cd ~/theerpdevs
+echo "[4/4] Restarting Minecraft & Geyser servers in ~/mc-server..."
+cd ~/mc-server
 ./start_mc_server.sh
 
-echo "[INFO] Waiting up to 30s for Paper (25565) and Geyser TCP+UDP (19132)..."
-for i in $(seq 1 15); do
+echo "[INFO] Waiting up to 35s for Paper (25565) and Geyser TCP+UDP (19132)..."
+for i in $(seq 1 18); do
     sleep 2
     if ss -tlpn 2>/dev/null | grep -q ":19132"; then
         break
@@ -93,14 +89,9 @@ echo "[INFO] Ports currently listening:"
 ss -tulpn 2>/dev/null | grep -E ":(25565|19132)" || true
 
 if ! ss -tlpn 2>/dev/null | grep -q ":19132"; then
-    echo "[ERROR] TCP 19132 is NOT listening (Geyser is still not in NetherNet mode)!"
-    for CFG in $(find ~ -maxdepth 4 -path "*[Gg]eyser*/config.yml" 2>/dev/null); do
-        echo "--- $CFG (bedrock section) ---"
-        grep -A 12 "^bedrock:" "$CFG" || true
-    done
-    echo "--- Geyser / Paper logs ---"
-    grep -i "geyser\|nethernet\|error\|exception" ~/theerpdevs/logs/latest.log 2>/dev/null | tail -n 25 || true
-    tail -n 25 ~/theerpdevs/geyser-standalone/logs/latest.log 2>/dev/null || true
+    echo "[ERROR] TCP 19132 is NOT listening!"
+    echo "--- ~/mc-server/geyser-standalone/logs/latest.log ---"
+    tail -n 35 ~/mc-server/geyser-standalone/logs/latest.log 2>/dev/null || true
     exit 1
 fi
 EOF
