@@ -34,36 +34,47 @@ cd ~/mc-server
 chmod +x start_mc_server.sh start.sh 2>/dev/null || true
 screen -wipe >/dev/null 2>&1 || true
 
-# Prevent plugins/Geyser.jar from conflicting with geyser-standalone (or failing if overwritten with standalone jar)
+# Prevent plugins/Geyser.jar from conflicting with geyser-standalone
 if [ -d "geyser-standalone" ] && [ -f "plugins/Geyser.jar" ]; then
     mkdir -p ~/geyser-backup
-    echo "[INFO] Moving plugins/Geyser.jar to ~/geyser-backup/ so geyser-standalone owns port 19132 cleanly..."
     mv plugins/Geyser.jar ~/geyser-backup/Geyser.jar.plugin.$(date +%s)
 fi
 
-# Configure NetherNet in ~/mc-server/geyser-standalone/config.yml
-CFG="geyser-standalone/config.yml"
-if [ -f "$CFG" ]; then
-    echo "[INFO] Configuring NetherNet in: ~/mc-server/$CFG"
-    cp "$CFG" "${CFG}.bak"
-    python3 - "$CFG" << 'PYEOF'
+# Regenerate a clean Geyser config.yml if current one has YAML syntax errors
+cd ~/mc-server/geyser-standalone
+AUTH_TYPE="offline"
+if [ -f "config.yml" ]; then
+    OLD_AUTH=$(grep -E '^\s*auth-type:\s*' config.yml | head -n 1 | awk '{print $2}' || true)
+    [ -n "$OLD_AUTH" ] && AUTH_TYPE="$OLD_AUTH"
+    cp config.yml config.yml.bak.$(date +%s)
+fi
+
+# Test if current config.yml parses; if not (or if missing), regenerate cleanly
+if [ ! -f "config.yml" ] || ! python3 -c 'import yaml, sys; yaml.safe_load(open(sys.argv[1]))' config.yml 2>/dev/null; then
+    echo "[INFO] Regenerating clean Geyser config.yml..."
+    rm -f config.yml
+    if [ ! -f "Geyser.jar" ]; then
+        curl -fsSL -o Geyser.jar "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone"
+    fi
+    timeout 8 java -Xmx512M -Xms256M -jar Geyser.jar --nogui >/dev/null 2>&1 || true
+fi
+
+# Safely update transport, clone-remote-port, and auth-type in config.yml
+if [ -f "config.yml" ]; then
+    python3 - "$AUTH_TYPE" << 'PYEOF'
 import re, sys
-path = sys.argv[1]
-with open(path, "r") as f:
+auth_type = sys.argv[1]
+with open("config.yml", "r") as f:
     content = f.read()
 
-for pat in [
-    r'^\s*signaling:\s*\n(?:\s+mode:\s*builtin\s*\n)?',
-    r'^\s*stun-discovery:.*\n',
-    r'^\s*advertise-addresses:\s*\n(?:\s+-\s*"[^"]*"\s*\n)*',
-    r'^\s*transport:.*\n',
-]:
-    content = re.sub(pat, '', content, flags=re.MULTILINE)
-
 content = re.sub(r'(^\s*clone-remote-port:\s*).*$', r'\g<1>false', content, flags=re.MULTILINE)
-content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1  transport: nethernet\n', content, count=1, flags=re.MULTILINE)
+content = re.sub(r'(^\s*auth-type:\s*).*$', r'\g<1>' + auth_type, content, flags=re.MULTILINE)
+if re.search(r'^\s*transport:\s*', content, flags=re.MULTILINE):
+    content = re.sub(r'(^\s*transport:\s*).*$', r'\g<1>nethernet', content, count=1, flags=re.MULTILINE)
+else:
+    content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1  transport: nethernet\n', content, count=1, flags=re.MULTILINE)
 
-with open(path, "w") as f:
+with open("config.yml", "w") as f:
     f.write(content)
 PYEOF
 fi
