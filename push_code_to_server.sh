@@ -33,24 +33,27 @@ fi
 cd ~/theerpdevs
 chmod +x start_mc_server.sh
 
-# Ensure Geyser NetherNet settings are configured in geyser-standalone/config.yml
+# Cleanly configure Geyser NetherNet in geyser-standalone/config.yml
 if [ -f "geyser-standalone/config.yml" ]; then
+    cp geyser-standalone/config.yml geyser-standalone/config.yml.bak
     python3 - << 'PYEOF'
 import re
 with open("geyser-standalone/config.yml", "r") as f:
     content = f.read()
+
+# Remove any previously injected keys that may cause UnrecognizedPropertyException
+for pat in [
+    r'^\s*webrtc-port:.*\n',
+    r'^\s*signaling:\s*\n(?:\s+mode:\s*builtin\s*\n)?',
+    r'^\s*stun-discovery:.*\n',
+    r'^\s*advertise-addresses:\s*\n(?:\s+-\s*"[^"]*"\s*\n)*',
+    r'^\s*transport:.*\n',
+]:
+    content = re.sub(pat, '', content, flags=re.MULTILINE)
+
 content = re.sub(r'(^\s*clone-remote-port:\s*).*$', r'\g<1>false', content, flags=re.MULTILINE)
-if "transport: nethernet" not in content:
-    nethernet_block = """  transport: nethernet
-  webrtc-port: 19132
-  signaling:
-    mode: builtin
-  stun-discovery: false
-  advertise-addresses:
-    - "18.206.179.9:19132"
-    - "play.theerpsmp.net:19132"
-"""
-    content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1' + nethernet_block, content, count=1, flags=re.MULTILINE)
+content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1  transport: nethernet\n', content, count=1, flags=re.MULTILINE)
+
 with open("geyser-standalone/config.yml", "w") as f:
     f.write(content)
 PYEOF
@@ -64,14 +67,23 @@ cp target/ScoreboardPlugin-1.0-SNAPSHOT.jar ~/theerpdevs/plugins/
 echo "[4/4] Restarting Minecraft & Geyser servers..."
 cd ~/theerpdevs
 ./start_mc_server.sh
+
+echo "[INFO] Waiting 8 seconds for Geyser to bind port 19132..."
+sleep 8
+if ss -tulpn 2>/dev/null | grep -q ":19132"; then
+    echo "[INFO] Geyser is listening on port 19132:"
+    ss -tulpn 2>/dev/null | grep ":19132"
+else
+    echo "[ERROR] Geyser failed to bind port 19132! Last 35 lines of Geyser log:"
+    tail -n 35 geyser-standalone/logs/latest.log 2>/dev/null || true
+    screen -S geyser -X hardcopy /tmp/geyser_screen.txt 2>/dev/null && tail -n 25 /tmp/geyser_screen.txt || true
+    exit 1
+fi
 EOF
 
-echo "[INFO] Waiting 6 seconds for Geyser NetherNet to bind port 19132..."
-sleep 6
+echo "[INFO] Verifying external TCP 19132 reachability..."
 if nc -zv -G 4 18.206.179.9 19132 >/dev/null 2>&1; then
     echo "[SUCCESS] TCP port 19132 is open and reachable on 18.206.179.9! Bedrock players can now join."
 else
-    echo "[ACTION REQUIRED] Geyser is restarted, but TCP port 19132 is still blocked externally by AWS."
-    echo "Please open your AWS EC2 Console -> Security Groups -> Inbound Rules for 18.206.179.9"
-    echo "and add: Type = Custom TCP, Port = 19132, Source = 0.0.0.0/0 (alongside UDP 19132)."
+    echo "[WARN] Geyser started locally, but TCP 19132 could not be reached externally."
 fi
