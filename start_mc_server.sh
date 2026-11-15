@@ -13,10 +13,12 @@ echo -e "${BLUE}[INFO] Stopping any existing Minecraft server instances...${NC}"
 pkill -9 -f "start.sh" > /dev/null 2>&1
 
 # 2. Terminate all screen sessions matching minecraft and geyser
+screen -wipe > /dev/null 2>&1 || true
 screen -ls | grep -E "[0-9]+\.(minecraft|geyser)" | awk '{print $1}' | while read -r s; do
     echo -e "${YELLOW}[INFO] Terminating screen session $s...${NC}"
-    screen -S "$s" -X quit
+    screen -S "$s" -X quit || true
 done
+screen -wipe > /dev/null 2>&1 || true
 sleep 2
 
 # 3. Force kill any orphaned Java processes running paper.jar or Geyser.jar

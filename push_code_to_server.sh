@@ -31,17 +31,30 @@ if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "Status: active";
 fi
 
 cd ~/theerpdevs
-chmod +x start_mc_server.sh
+chmod +x start_mc_server.sh start.sh 2>/dev/null || true
+screen -wipe >/dev/null 2>&1 || true
 
-# Cleanly configure Geyser NetherNet in geyser-standalone/config.yml
-if [ -f "geyser-standalone/config.yml" ]; then
-    cp geyser-standalone/config.yml geyser-standalone/config.yml.bak
-    python3 - << 'PYEOF'
-import re
-with open("geyser-standalone/config.yml", "r") as f:
+# Locate Geyser jar(s) and config(s) on the server
+echo "[INFO] Locating Geyser installation..."
+find ~ -maxdepth 4 -iname "*geyser*.jar" 2>/dev/null || true
+
+# Update Geyser Spigot plugin if present
+if [ -f "plugins/Geyser-Spigot.jar" ]; then
+    echo "[INFO] Updating plugins/Geyser-Spigot.jar to latest build..."
+    curl -fsSL -o plugins/Geyser-Spigot.jar.tmp "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot" && mv plugins/Geyser-Spigot.jar.tmp plugins/Geyser-Spigot.jar
+fi
+
+# Update any Geyser config.yml (plugin or standalone)
+for CFG in plugins/Geyser-Spigot/config.yml geyser-standalone/config.yml ~/geyser-standalone/config.yml ~/geyser/config.yml; do
+    if [ -f "$CFG" ]; then
+        echo "[INFO] Configuring NetherNet in $CFG..."
+        cp "$CFG" "${CFG}.bak"
+        python3 - "$CFG" << 'PYEOF'
+import re, sys
+path = sys.argv[1]
+with open(path, "r") as f:
     content = f.read()
 
-# Remove any previously injected keys that may cause UnrecognizedPropertyException
 for pat in [
     r'^\s*webrtc-port:.*\n',
     r'^\s*signaling:\s*\n(?:\s+mode:\s*builtin\s*\n)?',
@@ -54,10 +67,11 @@ for pat in [
 content = re.sub(r'(^\s*clone-remote-port:\s*).*$', r'\g<1>false', content, flags=re.MULTILINE)
 content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1  transport: nethernet\n', content, count=1, flags=re.MULTILINE)
 
-with open("geyser-standalone/config.yml", "w") as f:
+with open(path, "w") as f:
     f.write(content)
 PYEOF
-fi
+    fi
+done
 
 echo "[3/4] Building ScoreboardPlugin on server..."
 cd ~/theerpdevs/money
@@ -68,15 +82,21 @@ echo "[4/4] Restarting Minecraft & Geyser servers..."
 cd ~/theerpdevs
 ./start_mc_server.sh
 
-echo "[INFO] Waiting 8 seconds for Geyser to bind port 19132..."
-sleep 8
-if ss -tulpn 2>/dev/null | grep -q ":19132"; then
-    echo "[INFO] Geyser is listening on port 19132:"
-    ss -tulpn 2>/dev/null | grep ":19132"
-else
-    echo "[ERROR] Geyser failed to bind port 19132! Last 35 lines of Geyser log:"
-    tail -n 35 geyser-standalone/logs/latest.log 2>/dev/null || true
-    screen -S geyser -X hardcopy /tmp/geyser_screen.txt 2>/dev/null && tail -n 25 /tmp/geyser_screen.txt || true
+echo "[INFO] Waiting up to 30s for Paper (25565) and Geyser (19132) to bind ports..."
+for i in $(seq 1 15); do
+    sleep 2
+    if ss -tulpn 2>/dev/null | grep -q ":19132"; then
+        break
+    fi
+done
+
+ss -tulpn 2>/dev/null | grep -E ":(25565|19132)" || true
+if ! ss -tulpn 2>/dev/null | grep -q ":19132"; then
+    echo "[ERROR] Port 19132 is still not listening! Diagnostics:"
+    screen -ls || true
+    ps aux | grep -i java | grep -v grep || true
+    echo "--- Last 35 lines of ~/theerpdevs/logs/latest.log ---"
+    tail -n 35 ~/theerpdevs/logs/latest.log 2>/dev/null || true
     exit 1
 fi
 EOF
