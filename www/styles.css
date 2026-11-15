@@ -2,20 +2,20 @@
 
 :root {
     /* Color Palette */
-    --bg-dark: #07060f;
-    --card-bg: rgba(18, 16, 32, 0.45);
+    --bg-dark: #000000;
+    --card-bg: rgba(14, 8, 24, 0.6);
     --card-border: rgba(255, 255, 255, 0.08);
     --text-primary: #f3f4f6;
     --text-secondary: #9ca3af;
     
-    --primary: #10b981; /* Emerald/Teal */
-    --primary-glow: rgba(16, 185, 129, 0.3);
+    --primary: #a855f7; /* Purple */
+    --primary-glow: rgba(168, 85, 247, 0.3);
     
-    --accent-purple: #8b5cf6; /* Violet */
-    --accent-purple-glow: rgba(139, 92, 246, 0.3);
+    --accent-purple: #7c3aed; /* Violet */
+    --accent-purple-glow: rgba(124, 58, 237, 0.3);
     
-    --accent-gold: #f59e0b; /* Amber */
-    --accent-gold-glow: rgba(245, 158, 11, 0.3);
+    --accent-gold: #c084fc; /* Light purple */
+    --accent-gold-glow: rgba(192, 132, 252, 0.3);
     
     --red: #ef4444;
     
@@ -100,7 +100,7 @@ body {
     left: 0;
     width: 100%;
     z-index: 100;
-    background: rgba(7, 6, 15, 0.6);
+    background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -202,7 +202,7 @@ body {
 .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px 0 var(--primary-glow);
-    background-color: #0fa271;
+    background-color: #9333ea;
 }
 
 .btn-secondary {
@@ -218,7 +218,7 @@ body {
 
 .btn-glow {
     position: relative;
-    background: linear-gradient(135deg, var(--accent-gold) 0%, #d97706 100%);
+    background: linear-gradient(135deg, var(--accent-gold) 0%, #7c3aed 100%);
     color: #000;
     font-weight: 700;
     padding: 14px 28px;
@@ -281,8 +281,8 @@ body {
 }
 
 .server-badge {
-    background: rgba(16, 185, 129, 0.1);
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.2);
     color: var(--primary);
     font-weight: 600;
     font-size: 13px;
@@ -321,19 +321,19 @@ body {
 }
 
 .text-glow-gold {
-    background: linear-gradient(135deg, var(--accent-gold) 0%, #fbbf24 100%);
+    background: linear-gradient(135deg, var(--accent-gold) 0%, #e9d5ff 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .text-glow-purple {
-    background: linear-gradient(135deg, var(--accent-purple) 0%, #a78bfa 100%);
+    background: linear-gradient(135deg, var(--accent-purple) 0%, #c084fc 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .text-glow-teal {
-    background: linear-gradient(135deg, var(--primary) 0%, #34d399 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, #d8b4fe 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -403,8 +403,8 @@ body {
 }
 
 .countdown-container:hover .countdown-card {
-    border-color: rgba(245, 158, 11, 0.25);
-    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.15);
+    border-color: rgba(192, 132, 252, 0.25);
+    box-shadow: 0 4px 15px rgba(192, 132, 252, 0.15);
 }
 
 .countdown-val {
@@ -620,7 +620,7 @@ section {
 
 /* Features Grid */
 .features-section {
-    background-color: rgba(18, 16, 32, 0.2);
+    background-color: rgba(14, 8, 24, 0.2);
 }
 
 .features-grid {
@@ -657,21 +657,21 @@ section {
 }
 
 .bg-gold {
-    background: rgba(245, 158, 11, 0.1);
+    background: rgba(192, 132, 252, 0.1);
     color: var(--accent-gold);
-    border: 1px solid rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(192, 132, 252, 0.2);
 }
 
 .bg-purple {
-    background: rgba(139, 92, 246, 0.1);
+    background: rgba(124, 58, 237, 0.1);
     color: var(--accent-purple);
-    border: 1px solid rgba(139, 92, 246, 0.2);
+    border: 1px solid rgba(124, 58, 237, 0.2);
 }
 
 .bg-teal {
-    background: rgba(16, 185, 129, 0.1);
+    background: rgba(168, 85, 247, 0.1);
     color: var(--primary);
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(168, 85, 247, 0.2);
 }
 
 .feature-card h3 {
@@ -774,7 +774,7 @@ section {
 
 /* Commands List */
 .commands-section {
-    background-color: rgba(18, 16, 32, 0.2);
+    background-color: rgba(14, 8, 24, 0.2);
 }
 
 .commands-container {
@@ -797,7 +797,7 @@ section {
 
 .commands-search:focus-within {
     border-color: var(--accent-gold);
-    box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+    box-shadow: 0 0 12px rgba(192, 132, 252, 0.15);
 }
 
 .commands-search i {
@@ -897,7 +897,7 @@ section {
     border-radius: 8px;
     font-weight: 600;
     font-size: 14px;
-    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 8px 30px rgba(168, 85, 247, 0.3);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -958,7 +958,7 @@ section {
         left: 0;
         width: 100%;
         height: calc(100vh - 70px);
-        background: rgba(7, 6, 15, 0.98);
+        background: rgba(0, 0, 0, 0.98);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         flex-direction: column;
@@ -1065,4 +1065,14 @@ section {
     .commands-container {
         padding: 20px 16px;
     }
+}
+
+/* Black & Purple helper classes */
+.text-gold, .text-teal, .text-blue { color: var(--accent-gold); }
+.text-purple { color: var(--accent-purple); }
+.text-red { color: var(--red); }
+.text-glow-blue {
+    background: linear-gradient(135deg, var(--accent-purple) 0%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }

@@ -46,22 +46,22 @@
 
 /* Color Themes & Ambient Glows */
 .pass-card.bronze {
-    border-top: 4px solid #b45309;
+    border-top: 4px solid #6d28d9;
 }
 .pass-card.bronze:hover {
-    box-shadow: 0 0 30px rgba(180, 83, 9, 0.15), 0 12px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 30px rgba(109, 40, 217, 0.15), 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
 .pass-card.pro {
-    border-top: 4px solid #0066ff;
+    border-top: 4px solid #7c3aed;
 }
 .pass-card.pro.active-glow {
-    box-shadow: 0 0 24px rgba(0, 102, 255, 0.15);
-    border-color: rgba(0, 102, 255, 0.3);
+    box-shadow: 0 0 24px rgba(124, 58, 237, 0.15);
+    border-color: rgba(124, 58, 237, 0.3);
 }
 .pass-card.pro:hover {
-    box-shadow: 0 0 40px rgba(0, 102, 255, 0.3), 0 12px 40px rgba(0, 0, 0, 0.6);
-    border-color: rgba(0, 102, 255, 0.5);
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.3), 0 12px 40px rgba(0, 0, 0, 0.6);
+    border-color: rgba(124, 58, 237, 0.5);
 }
 
 .pass-card.premium {
@@ -89,10 +89,10 @@
 }
 
 .pass-badge.popular {
-    background: #0066ff;
-    border-color: #0066ff;
+    background: #7c3aed;
+    border-color: #7c3aed;
     color: #fff;
-    box-shadow: 0 0 12px rgba(0, 102, 255, 0.4);
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);
 }
 
 .pass-badge.elite {
@@ -121,8 +121,8 @@
     font-size: 24px;
 }
 
-.bronze .pass-icon { color: #f59e0b; }
-.pro .pass-icon { color: #0066ff; }
+.bronze .pass-icon { color: #c084fc; }
+.pro .pass-icon { color: #7c3aed; }
 .premium .pass-icon { color: #a855f7; }
 
 .pass-header h3 {
@@ -173,11 +173,11 @@
 .pass-features li i {
     font-size: 14px;
     margin-top: 3px;
-    color: #10b981; /* Default green check */
+    color: #a855f7; /* Default green check */
 }
 
 .pro .pass-features li i {
-    color: #3b82f6; /* Blue check for pro */
+    color: #a855f7; /* Blue check for pro */
 }
 
 .premium .pass-features li i {
@@ -194,13 +194,13 @@
 }
 
 .btn-glow-blue {
-    background: #0066ff;
-    border-color: #0066ff;
+    background: #7c3aed;
+    border-color: #7c3aed;
     color: white;
 }
 .btn-glow-blue:hover {
-    background: #0052cc;
-    box-shadow: 0 0 16px rgba(0, 102, 255, 0.4);
+    background: #6d28d9;
+    box-shadow: 0 0 16px rgba(124, 58, 237, 0.4);
 }
 
 .btn-glow-gold {
@@ -240,15 +240,15 @@
 
 /* Bronze button style */
 .pass-card.bronze button {
-    background: #b45309;
-    border-color: #b45309;
+    background: #6d28d9;
+    border-color: #6d28d9;
     color: white;
     transition: var(--transition-smooth);
 }
 
 .pass-card.bronze button:hover {
-    background: #92400e;
-    box-shadow: 0 0 16px rgba(180, 83, 9, 0.4);
+    background: #5b21b6;
+    box-shadow: 0 0 16px rgba(109, 40, 217, 0.4);
 }
 
 /* Responsive */
@@ -286,14 +286,14 @@
 }
 
 .screenshot-upload-label:hover {
-    border-color: rgba(0, 102, 255, 0.5);
-    background: rgba(0, 102, 255, 0.05);
+    border-color: rgba(124, 58, 237, 0.5);
+    background: rgba(124, 58, 237, 0.05);
     color: var(--text-primary);
 }
 
 .screenshot-upload-label i {
     font-size: 18px;
-    color: #3b82f6;
+    color: #a855f7;
     flex-shrink: 0;
 }
 
@@ -357,5 +357,5 @@
 }
 
 .success-note i {
-    color: #f59e0b;
+    color: #c084fc;
 }

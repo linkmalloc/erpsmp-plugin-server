@@ -58,7 +58,7 @@
     font-size: clamp(2.2rem, 4.5vw, 3.6rem);
     font-weight: 800;
     line-height: 1.15;
-    background: linear-gradient(135deg, #ffffff 0%, var(--primary) 60%, #a7f3d0 100%);
+    background: linear-gradient(135deg, #ffffff 0%, var(--primary) 60%, #e9d5ff 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -131,10 +131,10 @@
 }
 
 /* Subtle colour grade overlay per camera (set via JS class on viewport) */
-.stream-viewport.grade-spawn::after   { content: ''; position: absolute; inset: 0; background: rgba(16, 185, 129, 0.06); pointer-events: none; z-index: 3; }
-.stream-viewport.grade-duel::after    { content: ''; position: absolute; inset: 0; background: rgba(245, 158, 11, 0.07); pointer-events: none; z-index: 3; }
-.stream-viewport.grade-echo::after    { content: ''; position: absolute; inset: 0; background: rgba(139, 92, 246, 0.09); pointer-events: none; z-index: 3; }
-.stream-viewport.grade-afk::after     { content: ''; position: absolute; inset: 0; background: rgba(59, 130, 246, 0.06); pointer-events: none; z-index: 3; }
+.stream-viewport.grade-spawn::after   { content: ''; position: absolute; inset: 0; background: rgba(168, 85, 247, 0.06); pointer-events: none; z-index: 3; }
+.stream-viewport.grade-duel::after    { content: ''; position: absolute; inset: 0; background: rgba(192, 132, 252, 0.07); pointer-events: none; z-index: 3; }
+.stream-viewport.grade-echo::after    { content: ''; position: absolute; inset: 0; background: rgba(124, 58, 237, 0.09); pointer-events: none; z-index: 3; }
+.stream-viewport.grade-afk::after     { content: ''; position: absolute; inset: 0; background: rgba(168, 85, 247, 0.06); pointer-events: none; z-index: 3; }
 
 /* HUD Overlay */
 .stream-hud-overlay {
@@ -220,7 +220,7 @@
 }
 
 .hud-coords {
-    color: #fcd34d;
+    color: #e9d5ff;
     font-family: 'Space Grotesk', monospace;
     font-size: 0.8rem;
     font-weight: 600;
@@ -280,7 +280,7 @@
 }
 
 .cam-btn.active {
-    background: linear-gradient(135deg, var(--primary), #059669);
+    background: linear-gradient(135deg, var(--primary), #7c3aed);
     color: #000;
     border-color: transparent;
     box-shadow: 0 0 18px var(--primary-glow), 0 4px 12px rgba(0,0,0,0.3);
@@ -415,9 +415,9 @@
 }
 
 .event-icon.kill  { background: rgba(239, 68, 68, 0.18);  color: var(--red); }
-.event-icon.duel  { background: rgba(245, 158, 11, 0.18); color: var(--accent-gold); }
-.event-icon.crate { background: rgba(139, 92, 246, 0.18); color: var(--accent-purple); }
-.event-icon.join  { background: rgba(16, 185, 129, 0.18); color: var(--primary); }
+.event-icon.duel  { background: rgba(192, 132, 252, 0.18); color: var(--accent-gold); }
+.event-icon.crate { background: rgba(124, 58, 237, 0.18); color: var(--accent-purple); }
+.event-icon.join  { background: rgba(168, 85, 247, 0.18); color: var(--primary); }
 
 .event-text {
     color: var(--text-primary);
@@ -462,12 +462,12 @@
 
 .chat-input:focus {
     border-color: var(--primary);
-    background: rgba(16, 185, 129, 0.06);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+    background: rgba(168, 85, 247, 0.06);
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12);
 }
 
 .chat-send-btn {
-    background: linear-gradient(135deg, var(--primary), #059669);
+    background: linear-gradient(135deg, var(--primary), #7c3aed);
     color: #000;
     border: none;
     padding: 0 1.1rem;
@@ -521,9 +521,9 @@
     flex-shrink: 0;
 }
 
-.stat-icon.green  { background: rgba(16, 185, 129, 0.15); color: var(--primary); }
-.stat-icon.gold   { background: rgba(245, 158, 11, 0.15); color: var(--accent-gold); }
-.stat-icon.purple { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+.stat-icon.green  { background: rgba(168, 85, 247, 0.15); color: var(--primary); }
+.stat-icon.gold   { background: rgba(192, 132, 252, 0.15); color: var(--accent-gold); }
+.stat-icon.purple { background: rgba(124, 58, 237, 0.15); color: var(--accent-purple); }
 .stat-icon.red    { background: rgba(239, 68, 68, 0.15);  color: var(--red); }
 
 .stat-body { display: flex; flex-direction: column; gap: 0.1rem; }
@@ -551,8 +551,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    background: rgba(139, 92, 246, 0.12);
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: rgba(124, 58, 237, 0.12);
+    border: 1px solid rgba(124, 58, 237, 0.3);
     color: var(--accent-purple);
     padding: 0.3rem 0.85rem;
     border-radius: 20px;
@@ -641,14 +641,14 @@
     width: 54px;
     height: 54px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), #059669);
+    background: linear-gradient(135deg, var(--primary), #7c3aed);
     color: #000;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.25rem;
     padding-left: 4px;
-    box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.6);
     transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -718,7 +718,7 @@ dialog.video-modal {
     margin: auto;
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 22px;
-    background: rgba(8, 7, 18, 0.96);
+    background: rgba(5, 3, 8, 0.96);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     padding: 0;
@@ -789,7 +789,7 @@ dialog.video-modal::backdrop {
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), #059669);
+    background: linear-gradient(135deg, var(--primary), #7c3aed);
     color: #000;
     display: flex;
     align-items: center;
@@ -797,13 +797,13 @@ dialog.video-modal::backdrop {
     font-size: 2rem;
     padding-left: 6px;
     margin: 0 auto 1rem;
-    box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.5);
     animation: modalPulse 2s ease-in-out infinite;
 }
 
 @keyframes modalPulse {
-    0%, 100% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.5); }
-    50%       { box-shadow: 0 0 60px rgba(16, 185, 129, 0.8); }
+    0%, 100% { box-shadow: 0 0 40px rgba(168, 85, 247, 0.5); }
+    50%       { box-shadow: 0 0 60px rgba(168, 85, 247, 0.8); }
 }
 
 .modal-play-placeholder p {

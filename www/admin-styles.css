@@ -3,14 +3,14 @@
    ========================================== */
 
 :root {
-    --admin-bg: #0a0b0f;
+    --admin-bg: #000000;
     --admin-sidebar-width: 240px;
     --admin-surface: rgba(255, 255, 255, 0.03);
     --admin-border: rgba(255, 255, 255, 0.07);
     --admin-accent: #a855f7;
     --admin-success: #22c55e;
     --admin-danger: #ef4444;
-    --admin-warning: #f59e0b;
+    --admin-warning: #c084fc;
 }
 
 .admin-body {
@@ -29,7 +29,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.06) 0%, #0a0b0f 70%);
+    background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.06) 0%, #000000 70%);
     z-index: 9999;
 }
 
@@ -495,21 +495,21 @@
 }
 
 .method-badge.gcash {
-    background: rgba(0, 102, 255, 0.1);
-    border: 1px solid rgba(0, 102, 255, 0.25);
+    background: rgba(124, 58, 237, 0.1);
+    border: 1px solid rgba(124, 58, 237, 0.25);
     color: #60a5fa;
 }
 
 .method-badge.usdt {
     background: rgba(38, 161, 123, 0.1);
     border: 1px solid rgba(38, 161, 123, 0.25);
-    color: #34d399;
+    color: #d8b4fe;
 }
 
 .method-badge.bitcoin {
     background: rgba(247, 147, 26, 0.1);
     border: 1px solid rgba(247, 147, 26, 0.25);
-    color: #f59e0b;
+    color: #c084fc;
 }
 
 /* Ref cell */
@@ -567,8 +567,8 @@
 }
 
 .status-badge.pending {
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.25);
+    background: rgba(192, 132, 252, 0.1);
+    border: 1px solid rgba(192, 132, 252, 0.25);
     color: var(--admin-warning);
 }
 
