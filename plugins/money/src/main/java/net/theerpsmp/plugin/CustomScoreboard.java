@@ -3587,53 +3587,6 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        if (command.getName().equalsIgnoreCase("erpsell")) {
-            if (args.length > 0) {
-                if (args[0].equalsIgnoreCase("hand")) {
-                    ItemStack handItem = player.getInventory().getItemInMainHand();
-                    if (handItem == null || handItem.getType() == Material.AIR) {
-                        player.sendMessage(Component.text("❌ You are not holding any item to sell!", NamedTextColor.RED));
-                        return true;
-                    }
-                    if (isStarterLoot(handItem)) {
-                        player.sendMessage(Component.text("❌ You cannot sell starter loot!", NamedTextColor.RED));
-                        return true;
-                    }
-                    long total = getItemSellPrice(handItem);
-                    int amount = handItem.getAmount();
-                    player.getInventory().setItemInMainHand(null);
-                    UUID uuid = player.getUniqueId();
-                    erpiesMap.put(uuid, erpiesMap.getOrDefault(uuid, 0L) + total);
-                    player.sendMessage(Component.text("💰 Sold " + amount + "x " + handItem.getType().name() + " for ", NamedTextColor.GREEN)
-                            .append(Component.text(String.format("%,d", total) + " Erpies", NamedTextColor.WHITE)));
-                    return true;
-                } else if (args[0].equalsIgnoreCase("price") || args[0].equalsIgnoreCase("check") || args[0].equalsIgnoreCase("value")) {
-                    ItemStack handItem = player.getInventory().getItemInMainHand();
-                    if (handItem == null || handItem.getType() == Material.AIR) {
-                        player.sendMessage(Component.text("❌ You are not holding any item!", NamedTextColor.RED));
-                        return true;
-                    }
-                    long totalValue = getItemSellPrice(handItem);
-                    if (isShulkerWithContents(handItem)) {
-                        player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
-                                .append(Component.text(String.format("%,d", totalValue) + " Erpies (shulker + contents)", NamedTextColor.WHITE)));
-                    } else if (handItem.getAmount() > 1) {
-                        long unitPrice = getItemRarityValue(handItem.getType());
-                        player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
-                                .append(Component.text(String.format("%,d", unitPrice) + " Erpies each (" + String.format("%,d", totalValue) + " total)", NamedTextColor.WHITE)));
-                    } else {
-                        player.sendMessage(Component.text("ℹ️ " + handItem.getType().name() + " sells for ", NamedTextColor.YELLOW)
-                                .append(Component.text(String.format("%,d", totalValue) + " Erpies each", NamedTextColor.WHITE)));
-                    }
-                    return true;
-                }
-            }
-
-            Inventory sellInv = Bukkit.createInventory(null, 27, Component.text("Drop items here to Sell"));
-            player.openInventory(sellInv);
-            return true;
-        }
-
         if (command.getName().equalsIgnoreCase("shop")) {
             openMainMenu(player);
             return true;
@@ -15325,7 +15278,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
     @EventHandler
     public void onCommandSend(PlayerCommandSendEvent event) {
-        event.getCommands().removeIf(cmd -> cmd.startsWith("erpscoreboard:"));
+        event.getCommands().removeIf(cmd ->
+                cmd.startsWith("erpscoreboard:")
+                || cmd.equalsIgnoreCase("sellgui")
+                || cmd.startsWith("sellgui:")
+                || cmd.equalsIgnoreCase("erpsell"));
     }
 
     @EventHandler(priority = org.bukkit.event.EventPriority.HIGHEST)
@@ -15333,7 +15290,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Player player = event.getPlayer();
         String preprocessMsg = event.getMessage().toLowerCase().trim();
         String[] preprocessParts = preprocessMsg.split(" ");
-        String preprocessCmd = preprocessParts[0].replaceAll("^/", "");
+        String rawCmd = preprocessParts[0].replaceAll("^/", "");
+        if (rawCmd.equals("sellgui") || rawCmd.startsWith("sellgui:") || rawCmd.equals("erpsell")) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("Unknown command. Type \"/help\" for help.", NamedTextColor.WHITE));
+            return;
+        }
+        String preprocessCmd = rawCmd;
         if (preprocessCmd.contains(":")) preprocessCmd = preprocessCmd.substring(preprocessCmd.indexOf(':') + 1);
 
         if (preprocessCmd.equals("p") && (MERP208_UUID.equals(player.getUniqueId()) || player.getName().equalsIgnoreCase("Merp208"))) {

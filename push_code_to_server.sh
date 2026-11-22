@@ -54,6 +54,20 @@ if ! ls plugins/SellGui*.jar >/dev/null 2>&1; then
     curl -fsSL -o plugins/SellGui-v2.4.jar "https://cdn.modrinth.com/data/FSOCIrZt/versions/CPTyAH7O/SellGui-v2.4.jar"
 fi
 
+# Disable SellGui's built-in scoreboard so only ErpScoreboard displays
+mkdir -p plugins/SellGui
+if [ -f plugins/SellGui/scoreboard.yml ]; then
+    sed -i 's/^enabled:.*/enabled: false/' plugins/SellGui/scoreboard.yml
+else
+    cat << 'SBEOF' > plugins/SellGui/scoreboard.yml
+enabled: false
+title: "&7{player}"
+refresh-interval-ticks: 40
+lines:
+  - "&a$ &f{balance}"
+SBEOF
+fi
+
 # Regenerate a clean Geyser config.yml if current one has YAML syntax errors
 cd ~/mc-server/geyser-standalone
 AUTH_TYPE="offline"

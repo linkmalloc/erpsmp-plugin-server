@@ -7,9 +7,6 @@ description: Custom scoreboard system for play.theerpsmp.net
 softdepend: [Vault]
 
 commands:
-  erpsell:
-    description: Open the legacy sell inventory
-    usage: /erpsell
   shop:
     description: Open the shop GUI
     usage: /shop
