@@ -12632,11 +12632,32 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (b == null) return true;
         Location loc = b.getLocation();
         if (isInSpawnRadius(loc)) return true;
-        if (loc.getWorld().getName().equalsIgnoreCase("spawn2")) {
+
+        String worldName = loc.getWorld().getName();
+        if (worldName.equalsIgnoreCase("spawn2")) {
             if (player.getGameMode() == GameMode.SURVIVAL) return true;
             if (player.getGameMode() == GameMode.CREATIVE && !isSpawn2CreativeBlockPlaceAllowed(player)) return true;
         }
-        if (loc.getWorld().getName().equalsIgnoreCase("spawn") && player.getGameMode() == GameMode.SURVIVAL) {
+        if ((worldName.equalsIgnoreCase("spawn") || worldName.equalsIgnoreCase("afk_zone") || worldName.equalsIgnoreCase("afk"))
+                && player.getGameMode() == GameMode.SURVIVAL) {
+            return true;
+        }
+
+        // Respect vanilla server.properties spawn-protection radius in the main world for non-OPs
+        int vanillaSpawnRadius = Bukkit.getSpawnRadius();
+        if (vanillaSpawnRadius > 0 && !player.isOp() && !Bukkit.getWorlds().isEmpty()) {
+            World mainWorld = Bukkit.getWorlds().get(0);
+            if (loc.getWorld().equals(mainWorld)) {
+                Location worldSpawn = mainWorld.getSpawnLocation();
+                int dx = Math.abs(loc.getBlockX() - worldSpawn.getBlockX());
+                int dz = Math.abs(loc.getBlockZ() - worldSpawn.getBlockZ());
+                if (dx <= vanillaSpawnRadius && dz <= vanillaSpawnRadius) {
+                    return true;
+                }
+            }
+        }
+
+        if (generators.containsKey(loc) || commandChests.containsKey(loc) || shopCrates.containsKey(loc)) {
             return true;
         }
         return false;
@@ -13799,7 +13820,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                             return;
                         }
                     }
-                    if (isBlockProtectedFromEcho(player, block)) {
+                    if (event.useInteractedBlock() == org.bukkit.event.Event.Result.DENY || isBlockProtectedFromEcho(player, block)) {
                         event.setCancelled(true);
                         player.sendMessage(Component.text("❌ You cannot break blocks here!", NamedTextColor.RED));
                         return;
