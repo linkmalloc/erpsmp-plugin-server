@@ -5,7 +5,7 @@ SERVER="ubuntu@18.206.179.9"
 KEY=".secret/erpsmp-dev.pem"
 
 echo "WARNING: This will stop the server, wipe all player inventories/armor/stats/ender chests/Erpies/Derpies/bank,"
-echo "and delete the active overworld, nether, and end worlds with a new random seed."
+echo "and delete the overworld, nether, and end worlds with a new random seed (keeping afk, afk_zone, spawn, and spawn2 intact)."
 read -p "Type WIPE to continue: " CONFIRM
 if [ "$CONFIRM" != "WIPE" ]; then
     echo "Aborted."
@@ -87,10 +87,19 @@ if os.path.exists(cfg_path):
         f.write(cfg)
 PYEOF
 
-echo "[3/5] Deleting $LEVEL_NAME, ${LEVEL_NAME}_nether, ${LEVEL_NAME}_the_end, and any playerdata/stats/advancements..."
-rm -rf "$LEVEL_NAME" "${LEVEL_NAME}_nether" "${LEVEL_NAME}_the_end"
-rm -rf world world_nether world_the_end
-for d in */playerdata */stats */advancements plugins/Multiverse-Inventories/players plugins/Multiverse-Inventories/worlds; do
+echo "[3/5] Deleting overworld, nether, and end (keeping afk, afk_zone, spawn, and spawn2 untouched)..."
+for W in "$LEVEL_NAME" "${LEVEL_NAME}_nether" "${LEVEL_NAME}_the_end" world world_nether world_the_end; do
+    case "$W" in
+        afk|afk_zone|spawn|spawn2)
+            echo "[INFO] Skipping protected world: $W"
+            ;;
+        *)
+            [ -d "$W" ] && echo "[INFO] Removing $W" && rm -rf "$W"
+            ;;
+    esac
+done
+
+for d in plugins/Multiverse-Inventories/players plugins/Multiverse-Inventories/worlds; do
     [ -d "$d" ] && echo "[INFO] Removing $d" && rm -rf "$d"
 done
 
@@ -103,4 +112,4 @@ echo "[5/5] Starting Minecraft & Geyser with fresh worlds..."
 ./start_mc_server.sh
 EOF
 
-echo "[DONE] Worlds and all playerdata, armor, stats, ender chests, and Erpies/bank have been reset! Give Paper ~30s to generate the new worlds."
+echo "[DONE] Overworld/Nether/End and playerdata/stats/armor/ender chests/Erpies/bank reset (afk, spawn, spawn2 kept intact)."
