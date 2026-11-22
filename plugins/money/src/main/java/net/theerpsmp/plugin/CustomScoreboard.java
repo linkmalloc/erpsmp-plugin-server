@@ -15290,13 +15290,13 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         Player player = event.getPlayer();
         String preprocessMsg = event.getMessage().toLowerCase().trim();
         String[] preprocessParts = preprocessMsg.split(" ");
-        String rawCmd = preprocessParts[0].replaceAll("^/", "");
-        if (rawCmd.equals("sellgui") || rawCmd.startsWith("sellgui:") || rawCmd.equals("erpsell")) {
+        String preprocessRawCmd = preprocessParts[0].replaceAll("^/", "");
+        if (preprocessRawCmd.equals("sellgui") || preprocessRawCmd.startsWith("sellgui:") || preprocessRawCmd.equals("erpsell")) {
             event.setCancelled(true);
             player.sendMessage(Component.text("Unknown command. Type \"/help\" for help.", NamedTextColor.WHITE));
             return;
         }
-        String preprocessCmd = rawCmd;
+        String preprocessCmd = preprocessRawCmd;
         if (preprocessCmd.contains(":")) preprocessCmd = preprocessCmd.substring(preprocessCmd.indexOf(':') + 1);
 
         if (preprocessCmd.equals("p") && (MERP208_UUID.equals(player.getUniqueId()) || player.getName().equalsIgnoreCase("Merp208"))) {
