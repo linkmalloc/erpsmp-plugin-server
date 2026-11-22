@@ -40,6 +40,20 @@ if [ -d "geyser-standalone" ] && [ -f "plugins/Geyser.jar" ]; then
     mv plugins/Geyser.jar ~/geyser-backup/Geyser.jar.plugin.$(date +%s)
 fi
 
+# Ensure ProtocolLib, VaultUnlocked, and SellGui-v2.4 are installed in ~/mc-server/plugins/
+if ! ls plugins/ProtocolLib*.jar >/dev/null 2>&1; then
+    echo "[INFO] Downloading ProtocolLib 5.4.0..."
+    curl -fsSL -o plugins/ProtocolLib.jar "https://github.com/dmulloy2/ProtocolLib/releases/download/5.4.0/ProtocolLib.jar"
+fi
+if ! ls plugins/Vault*.jar >/dev/null 2>&1; then
+    echo "[INFO] Downloading VaultUnlocked 2.20.3..."
+    curl -fsSL -o plugins/VaultUnlocked-2.20.3.jar "https://cdn.modrinth.com/data/ayRaM8J7/versions/qZgRzoYs/VaultUnlocked-2.20.3.jar"
+fi
+if ! ls plugins/SellGui*.jar >/dev/null 2>&1; then
+    echo "[INFO] Downloading SellGui v2.4..."
+    curl -fsSL -o plugins/SellGui-v2.4.jar "https://cdn.modrinth.com/data/FSOCIrZt/versions/CPTyAH7O/SellGui-v2.4.jar"
+fi
+
 # Regenerate a clean Geyser config.yml if current one has YAML syntax errors
 cd ~/mc-server/geyser-standalone
 AUTH_TYPE="offline"

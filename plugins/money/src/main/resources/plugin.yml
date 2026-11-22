@@ -4,11 +4,12 @@ main: net.theerpsmp.plugin.CustomScoreboard
 api-version: '1.21'
 author: ErpieDev
 description: Custom scoreboard system for play.theerpsmp.net
+softdepend: [Vault]
 
 commands:
-  sell:
-    description: Open the sell inventory
-    usalse: /sell
+  erpsell:
+    description: Open the legacy sell inventory
+    usage: /erpsell
   shop:
     description: Open the shop GUI
     usage: /shop

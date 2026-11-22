@@ -650,6 +650,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         loadOrdersFromDatabase();
         loadAuctionsFromDatabase();
         getServer().getPluginManager().registerEvents(this, this);
+        registerVaultEconomy();
 
         // Load data for all currently online players (e.g. after reload or plugin update)
         for (Player online : Bukkit.getOnlinePlayers()) {
@@ -3586,7 +3587,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             return true;
         }
 
-        if (command.getName().equalsIgnoreCase("sell")) {
+        if (command.getName().equalsIgnoreCase("erpsell")) {
             if (args.length > 0) {
                 if (args[0].equalsIgnoreCase("hand")) {
                     ItemStack handItem = player.getInventory().getItemInMainHand();
@@ -18140,5 +18141,130 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 }
             }, 3L);
         }
+    }
+
+    private void registerVaultEconomy() {
+        if (getServer().getPluginManager().getPlugin("Vault") == null) {
+            getLogger().info("Vault not found; skipping Erpies Vault Economy registration.");
+            return;
+        }
+        getServer().getServicesManager().register(
+                net.milkbowl.vault.economy.Economy.class,
+                new ErpiesVaultEconomy(),
+                this,
+                org.bukkit.plugin.ServicePriority.Highest
+        );
+        getLogger().info("Registered Erpies as the Vault Economy provider!");
+    }
+
+    private class ErpiesVaultEconomy implements net.milkbowl.vault.economy.Economy {
+        private net.milkbowl.vault.economy.EconomyResponse ok(double amount, double balance) {
+            return new net.milkbowl.vault.economy.EconomyResponse(
+                    amount, balance, net.milkbowl.vault.economy.EconomyResponse.ResponseType.SUCCESS, null);
+        }
+
+        private net.milkbowl.vault.economy.EconomyResponse fail(String msg, double balance) {
+            return new net.milkbowl.vault.economy.EconomyResponse(
+                    0, balance, net.milkbowl.vault.economy.EconomyResponse.ResponseType.FAILURE, msg);
+        }
+
+        private net.milkbowl.vault.economy.EconomyResponse notImplemented() {
+            return new net.milkbowl.vault.economy.EconomyResponse(
+                    0, 0, net.milkbowl.vault.economy.EconomyResponse.ResponseType.NOT_IMPLEMENTED, "Banks not supported via Vault");
+        }
+
+        private UUID resolveUuid(org.bukkit.OfflinePlayer player) {
+            return player != null ? player.getUniqueId() : null;
+        }
+
+        @SuppressWarnings("deprecation")
+        private UUID resolveUuid(String name) {
+            if (name == null) return null;
+            Player online = Bukkit.getPlayerExact(name);
+            if (online != null) return online.getUniqueId();
+            return Bukkit.getOfflinePlayer(name).getUniqueId();
+        }
+
+        private long getBalanceInternal(UUID uuid) {
+            if (uuid == null) return 0L;
+            boolean loaded = erpiesMap.containsKey(uuid);
+            if (!loaded) loadPlayerData(uuid);
+            long bal = erpiesMap.getOrDefault(uuid, 0L);
+            if (!loaded && Bukkit.getPlayer(uuid) == null) unloadPlayerData(uuid);
+            return bal;
+        }
+
+        private net.milkbowl.vault.economy.EconomyResponse adjustBalance(UUID uuid, double amount, boolean deposit) {
+            if (uuid == null) return fail("Invalid player", 0);
+            if (amount < 0) return fail("Amount cannot be negative", getBalanceInternal(uuid));
+            long delta = Math.round(amount);
+            boolean wasLoaded = erpiesMap.containsKey(uuid);
+            if (!wasLoaded) loadPlayerData(uuid);
+            long current = erpiesMap.getOrDefault(uuid, 0L);
+            if (!deposit && current < delta) {
+                if (!wasLoaded && Bukkit.getPlayer(uuid) == null) unloadPlayerData(uuid);
+                return fail("Insufficient Erpies", current);
+            }
+            long updated = deposit ? current + delta : current - delta;
+            erpiesMap.put(uuid, updated);
+            Player online = Bukkit.getPlayer(uuid);
+            if (online != null && online.isOnline()) {
+                updateScoreboard(online);
+            } else {
+                savePlayerData(uuid);
+                if (!wasLoaded) unloadPlayerData(uuid);
+            }
+            return ok(delta, updated);
+        }
+
+        @Override public boolean isEnabled() { return CustomScoreboard.this.isEnabled(); }
+        @Override public String getName() { return "ErpScoreboard"; }
+        @Override public boolean hasBankSupport() { return false; }
+        @Override public int fractionalDigits() { return 0; }
+        @Override public String format(double amount) { return String.format("%,d Erpies", Math.round(amount)); }
+        @Override public String currencyNamePlural() { return "Erpies"; }
+        @Override public String currencyNameSingular() { return "Erpie"; }
+
+        @Override public boolean hasAccount(String playerName) { return true; }
+        @Override public boolean hasAccount(org.bukkit.OfflinePlayer player) { return player != null; }
+        @Override public boolean hasAccount(String playerName, String worldName) { return true; }
+        @Override public boolean hasAccount(org.bukkit.OfflinePlayer player, String worldName) { return player != null; }
+
+        @Override public double getBalance(String playerName) { return getBalanceInternal(resolveUuid(playerName)); }
+        @Override public double getBalance(org.bukkit.OfflinePlayer player) { return getBalanceInternal(resolveUuid(player)); }
+        @Override public double getBalance(String playerName, String world) { return getBalance(playerName); }
+        @Override public double getBalance(org.bukkit.OfflinePlayer player, String world) { return getBalance(player); }
+
+        @Override public boolean has(String playerName, double amount) { return getBalance(playerName) >= amount; }
+        @Override public boolean has(org.bukkit.OfflinePlayer player, double amount) { return getBalance(player) >= amount; }
+        @Override public boolean has(String playerName, String worldName, double amount) { return has(playerName, amount); }
+        @Override public boolean has(org.bukkit.OfflinePlayer player, String worldName, double amount) { return has(player, amount); }
+
+        @Override public net.milkbowl.vault.economy.EconomyResponse withdrawPlayer(String playerName, double amount) { return adjustBalance(resolveUuid(playerName), amount, false); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse withdrawPlayer(org.bukkit.OfflinePlayer player, double amount) { return adjustBalance(resolveUuid(player), amount, false); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse withdrawPlayer(String playerName, String worldName, double amount) { return withdrawPlayer(playerName, amount); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse withdrawPlayer(org.bukkit.OfflinePlayer player, String worldName, double amount) { return withdrawPlayer(player, amount); }
+
+        @Override public net.milkbowl.vault.economy.EconomyResponse depositPlayer(String playerName, double amount) { return adjustBalance(resolveUuid(playerName), amount, true); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse depositPlayer(org.bukkit.OfflinePlayer player, double amount) { return adjustBalance(resolveUuid(player), amount, true); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse depositPlayer(String playerName, String worldName, double amount) { return depositPlayer(playerName, amount); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse depositPlayer(org.bukkit.OfflinePlayer player, String worldName, double amount) { return depositPlayer(player, amount); }
+
+        @Override public net.milkbowl.vault.economy.EconomyResponse createBank(String name, String player) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse createBank(String name, org.bukkit.OfflinePlayer player) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse deleteBank(String name) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse bankBalance(String name) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse bankHas(String name, double amount) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse bankWithdraw(String name, double amount) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse bankDeposit(String name, double amount) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse isBankOwner(String name, String playerName) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse isBankOwner(String name, org.bukkit.OfflinePlayer player) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse isBankMember(String name, String playerName) { return notImplemented(); }
+        @Override public net.milkbowl.vault.economy.EconomyResponse isBankMember(String name, org.bukkit.OfflinePlayer player) { return notImplemented(); }
+        @Override public java.util.List<String> getBanks() { return java.util.Collections.emptyList(); }
+        @Override public boolean createPlayerAccount(String playerName) { return true; }
+        @Override public boolean createPlayerAccount(org.bukkit.OfflinePlayer player) { return true; }
+        @Override public boolean createPlayerAccount(String playerName, String worldName) { return true; }
+        @Override public boolean createPlayerAccount(org.bukkit.OfflinePlayer player, String worldName) { return true; }
     }
 }
