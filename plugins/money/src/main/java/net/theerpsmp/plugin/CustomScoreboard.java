@@ -9692,6 +9692,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         inv.setItem(14, createGuiItem(Material.GOLDEN_APPLE, "Golden Apple", NamedTextColor.GOLD, "Cost: 500 Erpies"));
         inv.setItem(15, createGuiItem(Material.RESPAWN_ANCHOR, "Respawn Anchor", NamedTextColor.DARK_PURPLE, "Cost: 500 Erpies"));
         inv.setItem(16, createGuiItem(Material.GLOWSTONE, "Glowstone", NamedTextColor.YELLOW, "Cost: 100 Erpies"));
+        inv.setItem(20, createGuiItem(Material.EXPERIENCE_BOTTLE, "Bottle o' Enchanting", NamedTextColor.GREEN, "Cost: 750 Erpies"));
         inv.setItem(22, createGuiItem(Material.ARROW, "Back to Shop", NamedTextColor.YELLOW, "Click to return to main page"));
         player.openInventory(inv);
     }
@@ -9720,6 +9721,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
             if (material == Material.GOLDEN_APPLE) return 500;
             if (material == Material.RESPAWN_ANCHOR) return 500;
             if (material == Material.GLOWSTONE) return 100;
+            if (material == Material.EXPERIENCE_BOTTLE) return 750;
         } else if (title.contains("Food")) {
             if (material == Material.COOKED_BEEF) return 100;
             if (material == Material.COOKED_PORKCHOP) return 50;
