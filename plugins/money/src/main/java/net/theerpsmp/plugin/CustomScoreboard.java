@@ -2354,6 +2354,7 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         // Play custom spawn/afk music only for the joining player
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (player.isOnline()) {
+                updateAfkInvisibility(player);
                 String worldName = player.getWorld().getName();
                 if (worldName.equalsIgnoreCase("spawn") || worldName.equalsIgnoreCase("afk") || worldName.equalsIgnoreCase("afk_zone")) {
                     playLobbyMusic(player);
@@ -2526,7 +2527,51 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
         if (fromWorld.equalsIgnoreCase("apocalypse")) {
             endApocalypseRun(player);
         }
+        updateAfkInvisibility(player);
         updatePlayerFloatingTags(player);
+    }
+
+    private final java.util.Set<UUID> afkInvisiblePlayers = new java.util.HashSet<>();
+
+    private boolean isAfkZoneWorld(World world) {
+        if (world == null) return false;
+        String name = world.getName();
+        return name.equalsIgnoreCase("afk") || name.equalsIgnoreCase("afk_zone");
+    }
+
+    private void updateAfkInvisibility(Player player) {
+        if (player == null || !player.isOnline()) return;
+        UUID uuid = player.getUniqueId();
+        if (isAfkZoneWorld(player.getWorld())) {
+            afkInvisiblePlayers.add(uuid);
+            if (!player.isInvisible()) {
+                player.setInvisible(true);
+            }
+        } else if (afkInvisiblePlayers.remove(uuid) || player.isInvisible()) {
+            if (!player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
+                player.setInvisible(false);
+            }
+        }
+    }
+
+    private static void suppressEndGatewayBeam(Block b) {
+        if (b != null && b.getState() instanceof org.bukkit.block.EndGateway gw) {
+            if (gw.getAge() < 200L) {
+                gw.setAge(200L);
+                gw.update(true, false);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onAfkChunkLoad(org.bukkit.event.world.ChunkLoadEvent event) {
+        if (!isAfkZoneWorld(event.getWorld())) return;
+        for (org.bukkit.block.BlockState state : event.getChunk().getTileEntities()) {
+            if (state instanceof org.bukkit.block.EndGateway gw && gw.getAge() < 200L) {
+                gw.setAge(200L);
+                gw.update(true, false);
+            }
+        }
     }
 
     @EventHandler
@@ -2537,6 +2582,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
 
         if (player.getWorld().getName().equalsIgnoreCase("apocalypse")) {
             endApocalypseRun(player);
+        }
+        if (afkInvisiblePlayers.remove(uuid)) {
+            player.setInvisible(false);
         }
 
         // Clean up spawned displays
@@ -6524,7 +6572,11 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                 } else if (customItem.equals("end_gateway")) {
                     Location loc = event.getBlock().getLocation();
                     Bukkit.getScheduler().runTask(this, () -> {
-                        loc.getBlock().setType(Material.END_GATEWAY);
+                        Block gwBlock = loc.getBlock();
+                        gwBlock.setType(Material.END_GATEWAY);
+                        if (isAfkZoneWorld(gwBlock.getWorld())) {
+                            suppressEndGatewayBeam(gwBlock);
+                        }
                     });
                     event.getPlayer().sendMessage(Component.text("🌌 You placed an End Gateway portal!", NamedTextColor.LIGHT_PURPLE));
                 } else if (customItem.equals("command_chest")) {
@@ -14596,6 +14648,9 @@ public class CustomScoreboard extends JavaPlugin implements Listener, CommandExe
                     }
                     if (b.getType().isAir() || !b.getType().isSolid()) {
                         b.setType(Material.END_GATEWAY);
+                        if (world.getName().equalsIgnoreCase("afk") || world.getName().equalsIgnoreCase("afk_zone")) {
+                            suppressEndGatewayBeam(b);
+                        }
                     }
                 }
             }
