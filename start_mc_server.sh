@@ -52,7 +52,9 @@ if [ -d "geyser-standalone" ]; then
         rm -f geyser-standalone/Geyser.jar.tmp
         echo -e "${YELLOW}[WARN] Could not download latest Geyser.jar, keeping existing version.${NC}"
     fi
-    echo -e "${BLUE}[INFO] Starting Geyser Standalone inside screen session 'geyser'...${NC}"
+    PUBLIC_IP=$(curl -fsSL --max-time 3 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]' || true)
+    [ -z "$PUBLIC_IP" ] && PUBLIC_IP="52.201.251.127"
+    echo -e "${BLUE}[INFO] Starting Geyser Standalone inside screen session 'geyser' (advertising $PUBLIC_IP)...${NC}"
     echo -e "${YELLOW}[NOTE] Reattach with: screen -r geyser${NC}"
-    screen -dmS geyser bash -c "cd geyser-standalone && while true; do java -Xmx512M -Xms256M -DgeyserAdvertiseAddresses=18.206.179.9 -jar Geyser.jar --nogui; sleep 3; done"
+    screen -dmS geyser bash -c "cd geyser-standalone && while true; do java -Xmx512M -Xms256M -DgeyserAdvertiseAddresses=$PUBLIC_IP -jar Geyser.jar --nogui; sleep 3; done"
 fi

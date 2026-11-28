@@ -94,7 +94,7 @@ exports.handler = async (event) => {
 
         // Webhook to Minecraft server for instant delivery
         if (status === 'approved') {
-            const mcWebhookUrl = process.env.MC_WEBHOOK_URL || 'http://18.206.179.9:8081/webhook';
+            const mcWebhookUrl = process.env.MC_WEBHOOK_URL || 'http://52.201.251.127:8081/webhook';
             try {
                 await fetch(mcWebhookUrl, {
                     method: 'POST',

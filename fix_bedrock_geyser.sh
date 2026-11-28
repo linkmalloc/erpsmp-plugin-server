@@ -3,7 +3,7 @@
 
 set -e
 
-SERVER="ubuntu@18.206.179.9"
+SERVER="ubuntu@52.201.251.127"
 KEY=".secret/erpsmp-dev.pem"
 
 echo "[1/2] Uploading updated start_mc_server.sh to server..."
@@ -62,7 +62,7 @@ if "transport: nethernet" not in content:
   stun-discovery: false
   advertise-addresses:
     - "play.theerpsmp.net:19132"
-    - "18.206.179.9:19132"
+    - "52.201.251.127:19132"
 """
     content = re.sub(r'(^\s*port:\s*19132\s*\n)', r'\1' + nethernet_block, content, count=1, flags=re.MULTILINE)
 
@@ -83,7 +83,7 @@ if pgrep -f "Geyser.jar" > /dev/null; then
     sleep 1
 fi
 
-screen -dmS geyser bash -c "while true; do java -Xmx512M -Xms256M -DgeyserAdvertiseAddresses=18.206.179.9 -jar Geyser.jar --nogui; sleep 3; done"
+screen -dmS geyser bash -c "while true; do java -Xmx512M -Xms256M -DgeyserAdvertiseAddresses=52.201.251.127 -jar Geyser.jar --nogui; sleep 3; done"
 sleep 3
 screen -ls
 echo "[SUCCESS] Geyser Standalone restarted!"

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVER="ubuntu@18.206.179.9"
+SERVER="ubuntu@52.201.251.127"
 KEY=".secret/erpsmp-dev.pem"
 CS_FILE="plugins/money/src/main/java/net/theerpsmp/plugin/CustomScoreboard.java"
 
@@ -136,8 +136,8 @@ fi
 EOF
 
 echo "[INFO] Verifying external TCP 19132 reachability..."
-if nc -zv -G 4 18.206.179.9 19132 >/dev/null 2>&1; then
-    echo "[SUCCESS] TCP port 19132 is open and reachable on 18.206.179.9! Bedrock players can now join."
+if nc -zv -G 4 52.201.251.127 19132 >/dev/null 2>&1; then
+    echo "[SUCCESS] TCP port 19132 is open and reachable on 52.201.251.127! Bedrock players can now join."
 else
     echo "[WARN] Geyser bound TCP 19132 locally, but external TCP 19132 failed."
 fi

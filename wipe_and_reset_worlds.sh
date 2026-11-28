@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVER="ubuntu@18.206.179.9"
+SERVER="ubuntu@52.201.251.127"
 KEY=".secret/erpsmp-dev.pem"
 
 echo "WARNING: This will stop the server, wipe all player inventories/armor/stats/ender chests/Erpies/Derpies/bank,"

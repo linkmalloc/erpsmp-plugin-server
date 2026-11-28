@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVER="ubuntu@18.206.179.9"
+SERVER="ubuntu@52.201.251.127"
 KEY=".secret/erpsmp-dev.pem"
 
 ssh -i "$KEY" "$SERVER" 'bash -s' << 'EOF'
@@ -34,3 +34,4 @@ ls -ld ~/mc-server-backup* 2>/dev/null || echo "[WARN] No ~/mc-server-backup* fo
 
 ./start_mc_server.sh
 EOF
+

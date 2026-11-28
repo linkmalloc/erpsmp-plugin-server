@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SERVER="ubuntu@18.206.179.9"
+SERVER="ubuntu@52.201.251.127"
 KEY=".secret/erpsmp-dev.pem"
 
 echo "WARNING: This will clear everyone's custom Ender Chest EXCEPT Merp208 and restart the server."
@@ -63,3 +63,4 @@ echo "[4/4] Restarting Minecraft & Geyser..."
 EOF
 
 echo "[DONE] Cleared everyone's custom Ender Chest except Merp208!"
+
